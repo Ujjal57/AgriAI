@@ -1,0 +1,8 @@
+/* Hide horizontal scrollbar globally */
+body {
+  overflow-x: hidden !important;
+}
+
+html {
+  overflow-x: hidden !important;
+}

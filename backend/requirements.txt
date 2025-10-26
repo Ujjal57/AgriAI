@@ -1,0 +1,8 @@
+Flask>=1.1.2
+flask-cors
+requests
+openpyxl
+mysql-connector-python
+python-dotenv
+PyMySQL
+bcrypt

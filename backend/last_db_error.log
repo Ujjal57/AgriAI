@@ -1,0 +1,132 @@
+2025-10-21T05:28:50.948204 - MySQL insert crops error:
+Traceback (most recent call last):
+  File "C:\Users\Ujjal Kumar Dey\Desktop\Major Project\my-assistant\backend\app.py", line 1172, in add_crop_listing
+    cur.execute(insert_sql, (seller_id, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, quantity_kg, price_per_kg))
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\cursor.py", line 416, in execute
+    self._connection.cmd_query(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 984, in cmd_query
+    result = self._handle_result(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 745, in _handle_result
+    raise get_exception(packet)
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'seller_id' in 'field list'
+
+2025-10-21T06:20:57.057257 - MySQL insert crops error (strict mode):
+Traceback (most recent call last):
+  File "C:\Users\Ujjal Kumar Dey\Desktop\Major Project\my-assistant\backend\app.py", line 1170, in add_crop_listing
+    cur.execute(insert_sql, (seller_id, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, quantity_kg, price_per_kg))
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\cursor.py", line 416, in execute
+    self._connection.cmd_query(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 984, in cmd_query
+    result = self._handle_result(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 745, in _handle_result
+    raise get_exception(packet)
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'seller_id' in 'field list'
+
+2025-10-21T06:24:13.255094 - MySQL insert crops error (strict mode):
+Traceback (most recent call last):
+  File "C:\Users\Ujjal Kumar Dey\Desktop\Major Project\my-assistant\backend\app.py", line 1170, in add_crop_listing
+    cur.execute(insert_sql, (seller_id, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, quantity_kg, price_per_kg))
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\cursor.py", line 416, in execute
+    self._connection.cmd_query(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 984, in cmd_query
+    result = self._handle_result(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 745, in _handle_result
+    raise get_exception(packet)
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'seller_id' in 'field list'
+
+2025-10-21T06:34:38.396183 - MySQL insert crops error (strict mode):
+Traceback (most recent call last):
+  File "C:\Users\Ujjal Kumar Dey\Desktop\Major Project\my-assistant\backend\app.py", line 1171, in add_crop_listing
+    cur.execute(insert_sql, (seller_id, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, quantity_kg, price_per_kg))
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\cursor.py", line 416, in execute
+    self._connection.cmd_query(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 984, in cmd_query
+    result = self._handle_result(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 745, in _handle_result
+    raise get_exception(packet)
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'seller_id' in 'field list'
+
+2025-10-21T06:36:19.900727 - MySQL insert crops error (strict mode):
+Traceback (most recent call last):
+  File "C:\Users\Ujjal Kumar Dey\Desktop\Major Project\my-assistant\backend\app.py", line 1171, in add_crop_listing
+    cur.execute(insert_sql, (seller_id, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, quantity_kg, price_per_kg))
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\cursor.py", line 416, in execute
+    self._connection.cmd_query(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 984, in cmd_query
+    result = self._handle_result(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 745, in _handle_result
+    raise get_exception(packet)
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'seller_id' in 'field list'
+
+2025-10-21T06:39:04.026643 - MySQL insert crops error (strict mode):
+Traceback (most recent call last):
+  File "C:\Users\Ujjal Kumar Dey\Desktop\Major Project\my-assistant\backend\app.py", line 1171, in add_crop_listing
+    cur.execute(insert_sql, (seller_id, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, quantity_kg, price_per_kg))
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\cursor.py", line 416, in execute
+    self._connection.cmd_query(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 984, in cmd_query
+    result = self._handle_result(
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\Ujjal Kumar Dey\AppData\Roaming\Python\Python310\site-packages\mysql\connector\connection.py", line 745, in _handle_result
+    raise get_exception(packet)
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'seller_id' in 'field list'
+
