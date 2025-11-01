@@ -15,6 +15,7 @@ import AdminDashboard from './AdminDashboard';
 import ProfileUpdate from './ProfileUpdate';
 import Market from './farmer/Market';
 import History from './History';
+import FarmerHistory from './farmer/FarmerHistory';
 import MyCrops from './farmer/MyCrops';
 import Cart from './Cart';
 import FarmerCart from './farmer/FarmerCart';
@@ -37,6 +38,7 @@ root.render(
   <Route path="/profile" element={<ProfileUpdate />} />
   <Route path="/login" element={<LoginProfile />} />
   <Route path="/history" element={<History />} />
+  <Route path="/farmer/history" element={<FarmerHistory />} />
   <Route path="/market" element={<Market />} />
   <Route path="/my-deals" element={<MyDeals />} />
   <Route path="/my-crops" element={<MyCrops />} />

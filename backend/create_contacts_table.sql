@@ -125,6 +125,7 @@ CREATE TABLE `deals` (
   `crop_name` VARCHAR(255) NOT NULL,
   `quantity_kg` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
   `image_path` VARCHAR(255) DEFAULT NULL,
+  `delivery_date` DATE DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX `idx_deals_buyer_id` (`buyer_id`),
@@ -135,6 +136,26 @@ CREATE TABLE `deals` (
 -- Example insert into deals (for testing)
 INSERT INTO `deals` (`buyer_id`,`buyer_name`,`buyer_phone`,`region`,`state`,`crop_name`,`quantity_kg`,`image_path`) VALUES
  (NULL,'Sample Buyer','9111111111','North','Punjab','Wheat',5.000,NULL);
+
+-- ========== Buyer Orders table ==========
+-- Stores finalized buyer orders placed at checkout, including payment details.
+DROP TABLE IF EXISTS `buyer_orders`;
+CREATE TABLE `buyer_orders` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `invoice_id` VARCHAR(64) NOT NULL,
+  `farmer_id` BIGINT UNSIGNED NOT NULL,
+  `buyer_id` BIGINT UNSIGNED DEFAULT NULL,
+  `crop_name` VARCHAR(255) NOT NULL,
+  `quantity_kg` DECIMAL(12,3) NOT NULL,
+  `price_per_kg` DECIMAL(12,2) NOT NULL,
+  `total` DECIMAL(12,2) NOT NULL,
+  `payment_method` VARCHAR(16) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_invoice_id` (`invoice_id`),
+  INDEX `idx_farmer_id` (`farmer_id`),
+  INDEX `idx_buyer_id` (`buyer_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Import this file in phpMyAdmin: go to the 'Import' tab, choose this file, and click 'Go'.
 -- Or use the mysql CLI: mysql -u root -p < create_contacts_table.sql

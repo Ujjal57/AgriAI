@@ -1046,6 +1046,51 @@ def send_thankyou_email(to_email, first, last):
         print('send_thankyou_email error:', e)
 
 
+def send_buyer_deal_uploaded_email(to_email, buyer_name, crop_name, smtp_host=None, smtp_port=None, smtp_user=None, smtp_password=None):
+    """Send a buyer-specific notification email when a deal is uploaded.
+    Uses agriai.team7@gmail.com by default and supports env SMTP_* overrides.
+    """
+    def _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr):
+        import smtplib, ssl
+        subj = "Your deal was uploaded successfully – Agri AI"
+        # Bilingual concise content tailored for buyer deal upload
+        body = (
+            f"Dear {buyer_name},\n\n"
+            "Namaste! 🙏\n\n"
+            f"We are happy to inform you that your deal for {crop_name} has been successfully uploaded on Agri AI.\n"
+            "Your crop is now visible to interested farmers across the platform.\n\n"
+            "Thank you for using Agri AI — empowering farmers with digital innovation for a smarter future in agriculture!\n\n"
+            "If you have any questions or need help, feel free to reach us at agriai.team7@gmail.com.\n\n"
+            "Warm regards,\n"
+            "Team Agri AI\n"
+            "AI-Enhanced Contract Farming and Farmer Advisory System🌱\n"
+        )
+        msg = EmailMessage()
+        msg['Subject'] = subj
+        msg['From'] = from_addr
+        msg['To'] = to_email
+        msg.set_content(body)
+        context = ssl.create_default_context()
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            if smtp_password:
+                server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+
+    try:
+        smtp_host = smtp_host or os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+        smtp_port = int(smtp_port or os.environ.get('SMTP_PORT', '587'))
+        smtp_user = smtp_user or os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
+        smtp_password = smtp_password or os.environ.get('SMTP_PASSWORD')
+        if smtp_password:
+            smtp_password = smtp_password.replace(' ', '')
+        from_addr = os.environ.get('SMTP_FROM', smtp_user)
+        _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr)
+    except Exception as e:
+        print('send_buyer_deal_uploaded_email error:', e)
+
 def send_welcome_email(to_email, first, last, smtp_host=None, smtp_port=None, smtp_user=None, smtp_password=None):
     """Send the welcome email to a newly registered user. Supports explicit SMTP params."""
     def _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr):
@@ -1108,7 +1153,7 @@ def send_crop_uploaded_email(to_email, farmer_name, crop_name, smtp_host=None, s
             f"Dear {farmer_name or ''},\n\n"
             "Namaste! 🙏\n\n"
             f"We are happy to inform you that your crop {crop_name} has been successfully uploaded on Agri AI.\n"
-            "Your crop is now visible to interested buyers and other farmers across the platform.\n\n"
+            "Your crop is now visible to interested buyers across the platform.\n\n"
             "Thank you for using Agri AI — empowering farmers with digital innovation for a smarter future in agriculture!\n\n"
             "If you have any questions or need help, feel free to reach us at agriai.team7@gmail.com.\n\n"
             "Warm regards,\n"
@@ -1254,6 +1299,72 @@ def ensure_expiry_notifications_table():
             print('ensure_expiry_notifications_table sqlite error:', e)
 
 
+def ensure_purchase_notifications_table():
+    """Create notifications table to deliver purchase alerts to farmers."""
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    if use_mysql:
+        try:
+            cfg = {
+                'host': os.environ.get('DB_HOST', 'localhost'),
+                'port': int(os.environ.get('DB_PORT', '3306')),
+                'user': os.environ.get('DB_USER', 'root'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'agri_ai'),
+            }
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS purchase_notifications ("
+                "id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
+                "farmer_id BIGINT NULL,"
+                "farmer_phone VARCHAR(32) NULL,"
+                "crop_id BIGINT NULL,"
+                "crop_name VARCHAR(255) NULL,"
+                "quantity_kg DECIMAL(12,3) NULL,"
+                "buyer_name VARCHAR(255) NULL,"
+                "buyer_email VARCHAR(255) NULL,"
+                "buyer_phone VARCHAR(32) NULL,"
+                "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                "is_read TINYINT(1) NOT NULL DEFAULT 0,"
+                "PRIMARY KEY (id)"
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            )
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception as e:
+            print('ensure_purchase_notifications_table mysql error:', e)
+    else:
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS purchase_notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    farmer_id INTEGER,
+                    farmer_phone TEXT,
+                    crop_id INTEGER,
+                    crop_name TEXT,
+                    quantity_kg REAL,
+                    buyer_name TEXT,
+                    buyer_email TEXT,
+                    buyer_phone TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_read INTEGER NOT NULL DEFAULT 0
+                )
+            ''')
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception as e:
+            print('ensure_purchase_notifications_table sqlite error:', e)
+
+
 def ensure_deals_table():
     """Create a deals table to store buyer deals. Supports MySQL and SQLite."""
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
@@ -1279,6 +1390,7 @@ def ensure_deals_table():
                 "crop_name VARCHAR(255) NOT NULL,"
                 "quantity_kg DECIMAL(12,3) NOT NULL DEFAULT 0.0,"
                 "image_path VARCHAR(255) DEFAULT NULL,"
+                "delivery_date DATE DEFAULT NULL,"
                 "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
                 "PRIMARY KEY (id)"
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
@@ -1468,6 +1580,263 @@ def notify_expired_crops_once():
         except Exception as e:
             print('notify_expired_crops_once sqlite error:', e)
 
+
+@app.route('/notifications/purchase', methods=['POST'])
+def create_purchase_notifications():
+    """Create purchase notifications for farmers from a buyer checkout.
+    Expects JSON: { buyer: {name,email,phone}, items: [ { id (crop_id), crop_name, order_quantity } ] }
+    """
+    ensure_purchase_notifications_table()
+    data = request.get_json(silent=True) or {}
+    buyer = data.get('buyer') or {}
+    items = data.get('items') or []
+    if not isinstance(items, list) or not items:
+        return jsonify({'ok': False, 'error': 'items_required'}), 400
+
+    # Resolve farmer per crop via crops table
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    inserted = 0
+    if use_mysql:
+        try:
+            cfg = {
+                'host': os.environ.get('DB_HOST', 'localhost'),
+                'port': int(os.environ.get('DB_PORT', '3306')),
+                'user': os.environ.get('DB_USER', 'root'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'agri_ai'),
+            }
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            for it in items:
+                try:
+                    crop_id = int(it.get('id')) if it.get('id') is not None else None
+                except Exception:
+                    crop_id = None
+                crop_name = (it.get('crop_name') or '').strip()
+                qty = None
+                try:
+                    qty = float(it.get('order_quantity') or 0)
+                except Exception:
+                    qty = None
+                farmer_id = None
+                farmer_phone = None
+                if crop_id:
+                    try:
+                        cur2 = conn.cursor()
+                        cur2.execute('SELECT seller_id, seller_phone FROM crops WHERE id=%s LIMIT 1', (crop_id,))
+                        r = cur2.fetchone()
+                        farmer_id = r[0] if r else None
+                        farmer_phone = r[1] if r else None
+                        try: cur2.close()
+                        except Exception: pass
+                    except Exception:
+                        farmer_id = None
+                cur.execute(
+                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, quantity_kg, buyer_name, buyer_email, buyer_phone) '
+                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',
+                    (
+                        farmer_id if farmer_id else None,
+                        farmer_phone if farmer_phone else None,
+                        crop_id if crop_id else None,
+                        crop_name if crop_name else None,
+                        qty if qty is not None else None,
+                        (buyer.get('name') or None),
+                        (buyer.get('email') or None),
+                        (buyer.get('phone') or None),
+                    )
+                )
+                inserted += 1
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': True, 'inserted': inserted}), 200
+        except Exception as e:
+            print('create_purchase_notifications mysql error:', e)
+            return jsonify({'ok': False, 'error': 'mysql_failed', 'detail': str(e)}), 500
+    else:
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            for it in items:
+                try:
+                    crop_id = int(it.get('id')) if it.get('id') is not None else None
+                except Exception:
+                    crop_id = None
+                crop_name = (it.get('crop_name') or '').strip()
+                qty = None
+                try:
+                    qty = float(it.get('order_quantity') or 0)
+                except Exception:
+                    qty = None
+                farmer_id = None
+                farmer_phone = None
+                if crop_id:
+                    try:
+                        cur2 = conn.cursor()
+                        cur2.execute('SELECT seller_id, seller_phone FROM crops WHERE id=? LIMIT 1', (crop_id,))
+                        r = cur2.fetchone()
+                        farmer_id = r[0] if r else None
+                        farmer_phone = r[1] if r else None
+                        try: cur2.close()
+                        except Exception: pass
+                    except Exception:
+                        farmer_id = None
+                cur.execute(
+                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, quantity_kg, buyer_name, buyer_email, buyer_phone) '
+                    'VALUES (?,?,?,?,?,?,?,?)',
+                    (
+                        farmer_id,
+                        farmer_phone,
+                        crop_id,
+                        crop_name if crop_name else None,
+                        qty,
+                        (buyer.get('name') or None),
+                        (buyer.get('email') or None),
+                        (buyer.get('phone') or None),
+                    )
+                )
+                inserted += 1
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': True, 'inserted': inserted}), 200
+        except Exception as e:
+            print('create_purchase_notifications sqlite error:', e)
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/notifications/list', methods=['GET'])
+def list_purchase_notifications():
+    """List notifications for a farmer. Query: farmer_id or farmer_phone; unread_only=1 to filter."""
+    ensure_purchase_notifications_table()
+    farmer_id_q = (request.args.get('farmer_id') or '').strip()
+    farmer_phone_q = (request.args.get('farmer_phone') or '').strip()
+    unread_only = (request.args.get('unread_only') or '').strip() in ('1', 'true', 'yes')
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    results = []
+    if use_mysql:
+        try:
+            cfg = {
+                'host': os.environ.get('DB_HOST', 'localhost'),
+                'port': int(os.environ.get('DB_PORT', '3306')),
+                'user': os.environ.get('DB_USER', 'root'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'agri_ai'),
+            }
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor(dictionary=True) if hasattr(mysql, 'connect') else conn.cursor()
+            where = []
+            params = []
+            if farmer_id_q:
+                where.append('farmer_id=%s'); params.append(farmer_id_q)
+            if farmer_phone_q:
+                where.append('farmer_phone=%s'); params.append(farmer_phone_q)
+            if unread_only:
+                where.append('is_read=0')
+            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, quantity_kg, buyer_name, buyer_email, buyer_phone, created_at, is_read FROM purchase_notifications'
+            if where:
+                sql += ' WHERE ' + ' AND '.join(where)
+            sql += ' ORDER BY id DESC LIMIT 100'
+            cur.execute(sql, tuple(params))
+            rows = cur.fetchall()
+            # normalize
+            for r in rows:
+                if isinstance(r, dict):
+                    results.append(r)
+                else:
+                    results.append({
+                        'id': r[0], 'farmer_id': r[1], 'farmer_phone': r[2], 'crop_id': r[3], 'crop_name': r[4], 'quantity_kg': r[5],
+                        'buyer_name': r[6], 'buyer_email': r[7], 'buyer_phone': r[8], 'created_at': r[9], 'is_read': r[10]
+                    })
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': True, 'notifications': results}), 200
+        except Exception as e:
+            print('list_purchase_notifications mysql error:', e)
+            return jsonify({'ok': False, 'error': 'mysql_failed', 'detail': str(e)}), 500
+    else:
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            where = []
+            params = []
+            if farmer_id_q:
+                where.append('farmer_id=?'); params.append(farmer_id_q)
+            if farmer_phone_q:
+                where.append('farmer_phone=?'); params.append(farmer_phone_q)
+            if unread_only:
+                where.append('is_read=0')
+            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, quantity_kg, buyer_name, buyer_email, buyer_phone, created_at, is_read FROM purchase_notifications'
+            if where:
+                sql += ' WHERE ' + ' AND '.join(where)
+            sql += ' ORDER BY id DESC LIMIT 100'
+            cur.execute(sql, tuple(params))
+            rows = cur.fetchall()
+            for r in rows:
+                results.append({
+                    'id': r[0], 'farmer_id': r[1], 'farmer_phone': r[2], 'crop_id': r[3], 'crop_name': r[4], 'quantity_kg': r[5],
+                    'buyer_name': r[6], 'buyer_email': r[7], 'buyer_phone': r[8], 'created_at': r[9], 'is_read': r[10]
+                })
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': True, 'notifications': results}), 200
+        except Exception as e:
+            print('list_purchase_notifications sqlite error:', e)
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/notifications/mark-read', methods=['POST'])
+def mark_notifications_read():
+    """Mark notifications as read. JSON: { ids: [ ... ] }"""
+    ensure_purchase_notifications_table()
+    data = request.get_json(silent=True) or {}
+    ids = data.get('ids') or []
+    if not isinstance(ids, list) or not ids:
+        return jsonify({'ok': False, 'error': 'ids_required'}), 400
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    try:
+        if use_mysql:
+            cfg = {
+                'host': os.environ.get('DB_HOST', 'localhost'),
+                'port': int(os.environ.get('DB_PORT', '3306')),
+                'user': os.environ.get('DB_USER', 'root'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'agri_ai'),
+            }
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            in_clause = ','.join(['%s'] * len(ids))
+            cur.execute(f'UPDATE purchase_notifications SET is_read=1 WHERE id IN ({in_clause})', tuple(ids))
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        else:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            in_clause = ','.join(['?'] * len(ids))
+            cur.execute(f'UPDATE purchase_notifications SET is_read=1 WHERE id IN ({in_clause})', tuple(ids))
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        print('mark_notifications_read error:', e)
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 def expiry_notifier_loop(interval_minutes=60):
     """Background loop to periodically run the notifier. interval_minutes is configurable via ENV EXPIRY_CHECK_INTERVAL_MINUTES."""
@@ -2013,6 +2382,16 @@ def add_deal():
         except Exception:
             image_path_val = None
 
+    # Parse delivery_date (optional)
+    delivery_date_val = None
+    try:
+        dd_raw = (data.get('delivery_date') or '').strip()
+        if dd_raw:
+            # Accept YYYY-MM-DD; pass-through to MySQL DATE
+            delivery_date_val = dd_raw
+    except Exception:
+        delivery_date_val = None
+
     # Insert into MySQL deals table
     try:
         cfg = {
@@ -2024,14 +2403,27 @@ def add_deal():
         }
         conn = mysql.connect(**cfg)
         cur = conn.cursor()
-        insert_sql = ("INSERT INTO deals (buyer_id,buyer_name,buyer_phone,region,state,crop_name,quantity_kg,image_path) "
-                      "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)")
-        cur.execute(insert_sql, (buyer_id if buyer_id else None, buyer_name, buyer_phone if buyer_phone else None, region if region else None, state if state else None, crop_name, quantity_kg, image_path_val if image_path_val else None))
+        insert_sql = ("INSERT INTO deals (buyer_id,buyer_name,buyer_phone,region,state,crop_name,quantity_kg,image_path,delivery_date) "
+                      "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)")
+        cur.execute(
+            insert_sql,
+            (
+                buyer_id if buyer_id else None,
+                buyer_name,
+                buyer_phone if buyer_phone else None,
+                region if region else None,
+                state if state else None,
+                crop_name,
+                quantity_kg,
+                image_path_val if image_path_val else None,
+                delivery_date_val
+            )
+        )
         conn.commit()
-        # After successful insert, send crop-uploaded notification email to buyer if an email was provided
+        # After successful insert, send buyer deal-uploaded notification email if an email was provided
         try:
             if buyer_email:
-                threading.Thread(target=send_crop_uploaded_email, args=(buyer_email, buyer_name, crop_name), daemon=True).start()
+                threading.Thread(target=send_buyer_deal_uploaded_email, args=(buyer_email, buyer_name, crop_name), daemon=True).start()
         except Exception:
             # don't fail the request if email send scheduling fails
             pass
@@ -2095,7 +2487,7 @@ def list_deals():
             elif buyer_phone_q:
                 where.append('buyer_phone=%s'); params.append(buyer_phone_q)
 
-            sql = 'SELECT id,buyer_id,buyer_name,buyer_phone,region,state,crop_name,quantity_kg,image_path,created_at FROM deals'
+            sql = 'SELECT id,buyer_id,buyer_name,buyer_phone,region,state,crop_name,quantity_kg,image_path,delivery_date,created_at FROM deals'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY created_at DESC LIMIT 200'
@@ -2109,10 +2501,25 @@ def list_deals():
                         image_url = request.host_url.rstrip('/') + '/images/' + str(r[8])
                 except Exception:
                     image_url = None
+                # attempt to resolve buyer address from buyer table if buyer_id present
+                buyer_address = None
+                try:
+                    if r[1]:
+                        try:
+                            cur2 = conn.cursor()
+                            cur2.execute('SELECT address FROM buyer WHERE id=%s LIMIT 1', (r[1],))
+                            rr = cur2.fetchone()
+                            buyer_address = rr[0] if rr else None
+                            try: cur2.close()
+                            except Exception: pass
+                        except Exception:
+                            buyer_address = None
+                except Exception:
+                    buyer_address = None
                 result.append({
                     'id': r[0], 'buyer_id': r[1], 'buyer_name': r[2], 'buyer_phone': r[3],
                     'region': r[4], 'state': r[5], 'crop_name': r[6], 'quantity_kg': float(r[7]) if r[7] is not None else None,
-                    'image_url': image_url, 'created_at': str(r[9])
+                    'image_url': image_url, 'delivery_date': str(r[9]) if r[9] is not None else None, 'created_at': str(r[10]), 'address': buyer_address
                 })
             try:
                 cur.close()
@@ -2140,7 +2547,7 @@ def list_deals():
         db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
         sqlite_conn = sqlite3.connect(db_path)
         sqlite_cur = sqlite_conn.cursor()
-        sql = 'SELECT id,buyer_id,buyer_name,buyer_phone,region,state,crop_name,quantity_kg,image_path,created_at FROM deals'
+        sql = 'SELECT id,buyer_id,buyer_name,buyer_phone,region,state,crop_name,quantity_kg,image_path,delivery_date,created_at FROM deals'
         where = []
         params = []
         if region:
@@ -2169,7 +2576,19 @@ def list_deals():
                     image_url = request.host_url.rstrip('/') + '/images/' + str(r[8])
             except Exception:
                 image_url = None
-            result.append({'id': r[0], 'buyer_id': r[1], 'buyer_name': r[2], 'buyer_phone': r[3], 'region': r[4], 'state': r[5], 'crop_name': r[6], 'quantity_kg': float(r[7]) if r[7] is not None else None, 'image_url': image_url, 'created_at': str(r[9])})
+            # resolve buyer address from buyer table when possible
+            buyer_address = None
+            try:
+                if r[1] is not None:
+                    cur2 = sqlite_conn.cursor()
+                    cur2.execute('SELECT address FROM buyer WHERE id=? LIMIT 1', (r[1],))
+                    rr = cur2.fetchone()
+                    buyer_address = rr[0] if rr else None
+                    try: cur2.close()
+                    except Exception: pass
+            except Exception:
+                buyer_address = None
+            result.append({'id': r[0], 'buyer_id': r[1], 'buyer_name': r[2], 'buyer_phone': r[3], 'region': r[4], 'state': r[5], 'crop_name': r[6], 'quantity_kg': float(r[7]) if r[7] is not None else None, 'image_url': image_url, 'delivery_date': str(r[9]) if r[9] is not None else None, 'created_at': str(r[10]), 'address': buyer_address})
         try:
             sqlite_cur.close()
         except Exception:
@@ -2183,23 +2602,154 @@ def list_deals():
         print('SQLite list deals error:', e)
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+@app.route('/buyer-orders', methods=['POST'])
+def add_buyer_order():
+    """Accept new buyer orders and insert into the MySQL buyer_orders table."""
+    if os.environ.get('DB_USE', 'mysql').lower() != 'mysql' or mysql is None:
+        return jsonify({'ok': False, 'error': 'mysql_required'}), 500
 
+    # Ensure table exists (idempotent)
+    try:
+        cfg = {
+            'host': os.environ.get('DB_HOST', 'localhost'),
+            'port': int(os.environ.get('DB_PORT', '3306')),
+            'user': os.environ.get('DB_USER', 'root'),
+            'password': os.environ.get('DB_PASSWORD', ''),
+            'database': os.environ.get('DB_NAME', 'agri_ai'),
+        }
+        _conn = mysql.connect(**cfg)
+        _cur = _conn.cursor()
+        _cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS buyer_orders (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                invoice_id VARCHAR(64) NOT NULL,
+                farmer_id BIGINT NOT NULL,
+                buyer_id BIGINT NULL,
+                crop_name VARCHAR(255) NOT NULL,
+                quantity_kg DECIMAL(12,3) NOT NULL,
+                price_per_kg DECIMAL(12,2) NOT NULL,
+                total DECIMAL(12,2) NOT NULL,
+                payment_method VARCHAR(16) NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                INDEX idx_invoice_id (invoice_id),
+                INDEX idx_farmer_id (farmer_id),
+                INDEX idx_buyer_id (buyer_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+        _conn.commit()
+        try:
+            _cur.close()
+        except Exception:
+            pass
+        try:
+            _conn.close()
+        except Exception:
+            pass
+    except Exception as e:
+        # If table creation fails, continue to attempt insert; error will be surfaced then
+        try:
+            print('ensure buyer_orders table error:', e)
+        except Exception:
+            pass
+
+    data = request.get_json(silent=True) or {}
+    orders = data.get('orders')
+    if not orders or not isinstance(orders, list):
+        return jsonify({'ok': False, 'error': 'orders_required'}), 400
+
+    try:
+        cfg = {
+            'host': os.environ.get('DB_HOST', 'localhost'),
+            'port': int(os.environ.get('DB_PORT', '3306')),
+            'user': os.environ.get('DB_USER', 'root'),
+            'password': os.environ.get('DB_PASSWORD', ''),
+            'database': os.environ.get('DB_NAME', 'agri_ai'),
+        }
+        conn = mysql.connect(**cfg)
+        cur = conn.cursor()
+        insert_sql = (
+            "INSERT INTO buyer_orders (invoice_id, farmer_id, buyer_id, crop_name, quantity_kg, price_per_kg, total, payment_method) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+        )
+        # derive farmer_id if missing using crop_id -> crops.seller_id
+        for od in orders:
+            farmer_id = od.get('farmer_id')
+            if farmer_id is None:
+                crop_id = od.get('crop_id')
+                if crop_id is not None:
+                    try:
+                        cur.execute('SELECT seller_id FROM crops WHERE id=%s LIMIT 1', (crop_id,))
+                        row = cur.fetchone()
+                        if row:
+                            farmer_id = row[0]
+                    except Exception:
+                        farmer_id = None
+            if farmer_id is None:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                return jsonify({'ok': False, 'error': 'farmer_id_required'}), 400
+            cur.execute(insert_sql, (
+                od.get('invoice_id'),
+                farmer_id,
+                od.get('buyer_id'),
+                od.get('crop_name'),
+                od.get('quantity_kg'),
+                od.get('price_per_kg'),
+                od.get('total'),
+                od.get('payment_method'),
+            ))
+        conn.commit()
+        try: cur.close()
+        except: pass
+        try: conn.close()
+        except: pass
+        return jsonify({'ok': True, 'inserted': len(orders)}), 200
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 @app.route('/deals/<int:deal_id>', methods=['PATCH'])
 def update_deal(deal_id):
-    """Update fields of a deal. Allowed update: quantity_kg. Accepts buyer_id/buyer_phone in JSON body or query params for ownership verification."""
+    """Update fields of a deal. Allowed updates: quantity_kg, delivery_date (only to a later date).
+    Accepts buyer_id/buyer_phone in JSON body or query params for ownership verification.
+    """
     data = request.get_json(silent=True) or {}
     # allow passing quantity via JSON body or querystring
     new_qty = data.get('quantity_kg') if 'quantity_kg' in data else request.args.get('quantity_kg')
+    # allow passing delivery_date (YYYY-MM-DD)
+    new_delivery_date = (data.get('delivery_date') or request.args.get('delivery_date') or '').strip()
     buyer_id_body = data.get('buyer_id') or request.args.get('buyer_id') or None
     buyer_phone_body = (data.get('buyer_phone') or request.args.get('buyer_phone') or '').strip()
 
-    try:
-        if new_qty is None:
-            return jsonify({'ok': False, 'error': 'no_fields'}), 400
-        new_qty_val = float(new_qty)
-    except Exception:
-        return jsonify({'ok': False, 'error': 'invalid_quantity'}), 400
+    # validate presence of at least one field
+    if new_qty is None and not new_delivery_date:
+        return jsonify({'ok': False, 'error': 'no_fields'}), 400
+
+    # validate quantity if provided
+    new_qty_val = None
+    if new_qty is not None:
+        try:
+            new_qty_val = float(new_qty)
+        except Exception:
+            return jsonify({'ok': False, 'error': 'invalid_quantity'}), 400
+
+    # validate delivery_date format if provided
+    new_dd_val = None
+    if new_delivery_date:
+        try:
+            # basic validation: YYYY-MM-DD
+            datetime.datetime.strptime(new_delivery_date, '%Y-%m-%d')
+            new_dd_val = new_delivery_date
+        except Exception:
+            return jsonify({'ok': False, 'error': 'invalid_delivery_date'}), 400
 
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
     if use_mysql:
@@ -2213,8 +2763,8 @@ def update_deal(deal_id):
             }
             conn = mysql.connect(**cfg)
             cur = conn.cursor()
-            # fetch existing owner
-            cur.execute('SELECT buyer_id,buyer_phone FROM deals WHERE id=%s', (deal_id,))
+            # fetch existing owner and current delivery_date
+            cur.execute('SELECT buyer_id,buyer_phone,delivery_date FROM deals WHERE id=%s', (deal_id,))
             row = cur.fetchone()
             if not row:
                 try: cur.close()
@@ -2222,7 +2772,9 @@ def update_deal(deal_id):
                 try: conn.close()
                 except Exception: pass
                 return jsonify({'ok': False, 'error': 'not_found'}), 404
-            existing_buyer_id, existing_buyer_phone = row[0], (row[1] if len(row) > 1 else None)
+            existing_buyer_id = row[0]
+            existing_buyer_phone = (row[1] if len(row) > 1 else None)
+            existing_delivery_date = row[2] if len(row) > 2 else None
 
             # verify ownership if provided
             if buyer_id_body:
@@ -2247,7 +2799,36 @@ def update_deal(deal_id):
                     except Exception: pass
                     return jsonify({'ok': False, 'error': 'not_authorized'}), 403
 
-            cur.execute('UPDATE deals SET quantity_kg=%s WHERE id=%s', (new_qty_val, deal_id))
+            # if delivery_date is requested, ensure it is not in the past relative to today
+            if new_dd_val is not None:
+                try:
+                    today = datetime.date.today()
+                    new_dt = datetime.datetime.strptime(new_dd_val, '%Y-%m-%d').date()
+                    if new_dt < today:
+                        try: cur.close()
+                        except Exception: pass
+                        try: conn.close()
+                        except Exception: pass
+                        return jsonify({'ok': False, 'error': 'delivery_date_past_disallowed'}), 400
+                except Exception:
+                    pass
+
+            # build dynamic update
+            sets = []
+            params = []
+            if new_qty_val is not None:
+                sets.append('quantity_kg=%s'); params.append(new_qty_val)
+            if new_dd_val is not None:
+                sets.append('delivery_date=%s'); params.append(new_dd_val)
+            if not sets:
+                try: cur.close()
+                except Exception: pass
+                try: conn.close()
+                except Exception: pass
+                return jsonify({'ok': False, 'error': 'no_fields'}), 400
+            params.append(deal_id)
+            sql = 'UPDATE deals SET ' + ','.join(sets) + ' WHERE id=%s'
+            cur.execute(sql, tuple(params))
             conn.commit()
             try: cur.close()
             except Exception: pass
@@ -2267,7 +2848,7 @@ def update_deal(deal_id):
         db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
         sqlite_conn = sqlite3.connect(db_path)
         sqlite_cur = sqlite_conn.cursor()
-        sqlite_cur.execute('SELECT buyer_id,buyer_phone FROM deals WHERE id=?', (deal_id,))
+        sqlite_cur.execute('SELECT buyer_id,buyer_phone,delivery_date FROM deals WHERE id=?', (deal_id,))
         row = sqlite_cur.fetchone()
         if not row:
             try: sqlite_cur.close()
@@ -2276,6 +2857,7 @@ def update_deal(deal_id):
             except Exception: pass
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         existing_buyer_id, existing_buyer_phone = row[0], (row[1] if len(row) > 1 else None)
+        existing_delivery_date = row[2] if len(row) > 2 else None
 
         if buyer_id_body:
             try:
@@ -2299,7 +2881,35 @@ def update_deal(deal_id):
                 except Exception: pass
                 return jsonify({'ok': False, 'error': 'not_authorized'}), 403
 
-        sqlite_cur.execute('UPDATE deals SET quantity_kg=? WHERE id=?', (new_qty_val, deal_id))
+        # delivery_date not in past relative to today
+        if new_dd_val is not None:
+            try:
+                today = datetime.date.today()
+                new_dt = datetime.datetime.strptime(new_dd_val, '%Y-%m-%d').date()
+                if new_dt < today:
+                    try: sqlite_cur.close()
+                    except Exception: pass
+                    try: sqlite_conn.close()
+                    except Exception: pass
+                    return jsonify({'ok': False, 'error': 'delivery_date_past_disallowed'}), 400
+            except Exception:
+                pass
+
+        sets = []
+        params = []
+        if new_qty_val is not None:
+            sets.append('quantity_kg=?'); params.append(new_qty_val)
+        if new_dd_val is not None:
+            sets.append('delivery_date=?'); params.append(new_dd_val)
+        if not sets:
+            try: sqlite_cur.close()
+            except Exception: pass
+            try: sqlite_conn.close()
+            except Exception: pass
+            return jsonify({'ok': False, 'error': 'no_fields'}), 400
+        params.append(deal_id)
+        sql = 'UPDATE deals SET ' + ','.join(sets) + ' WHERE id=?'
+        sqlite_cur.execute(sql, tuple(params))
         sqlite_conn.commit()
         try: sqlite_cur.close()
         except Exception: pass
@@ -2988,38 +3598,63 @@ def update_crop(crop_id):
             return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+# ---- Load Groq API key ----
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "your_groq_api_key_here")
+# ---- Groq AI Chat Route ----
 @app.route('/ai/groq', methods=['POST'])
-def ai_groq():
-    data = request.get_json() or {}
-    q = (data.get('q') or '').strip()
-    if not q:
-        return jsonify({'error': 'query_required'}), 400
-
-    # Configuration: either full endpoint or project+dataset
-    groq_endpoint = os.environ.get('GROQ_ENDPOINT')
-    groq_project = os.environ.get('GROQ_PROJECT')
-    groq_dataset = os.environ.get('GROQ_DATASET')
-    groq_key = os.environ.get('GROQ_API_KEY')
-
-    if groq_endpoint:
-        url = groq_endpoint.rstrip('/') + '?query=' + urllib.parse.quote(q)
-    elif groq_project and groq_dataset:
-        url = f"https://{groq_project}.api.sanity.io/v1/data/query/{groq_dataset}?query=" + urllib.parse.quote(q)
-    else:
-        return jsonify({'error': 'no_groq_config'}), 400
-
-    headers = {'Accept': 'application/json'}
-    if groq_key:
-        headers['Authorization'] = f'Bearer {groq_key}'
-
+def agri_ai_chat():
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        resp.raise_for_status()
-        # Return the raw JSON from GROQ provider under 'result' key
-        return jsonify({'result': resp.json()}), 200
+        data = request.get_json(silent=True) or {}
+        query = (data.get('q') or '').strip()
+
+        if not query:
+            return jsonify({"error": "Empty query"}), 400
+
+        # Call Groq API with basic system instruction
+        system_instr = (
+            "You are AgriAI, an intelligent Indian farming assistant that provides clear, "
+            "friendly answers to farmers' questions in simple English."
+        )
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [
+                    {"role": "system", "content": system_instr},
+                    {"role": "user", "content": query}
+                ]
+            },
+            timeout=20
+        )
+
+        if response.status_code != 200:
+            print("⚠️ [AgriAI] Groq API returned error:", response.status_code)
+            return jsonify({"error": "Groq API error"}), 500
+
+        groq_reply = response.json()
+        answer = groq_reply["choices"][0]["message"]["content"]
+        # Ensure result is a string
+        if not isinstance(answer, str):
+            try:
+                answer = str(answer)
+            except Exception:
+                answer = json.dumps(answer, ensure_ascii=False)
+
+        # ✅ Clean, branded log output
+        print(f"🌾 [AgriAI] Q: {query} → Reply sent successfully.")
+
+        return jsonify({
+            "reply_by": "AgriAI",
+            "result": answer
+        })
+
     except Exception as e:
-        print('ai_groq error:', e)
-        return jsonify({'error': 'groq_query_failed', 'detail': str(e)}), 500
+        print("❌ [AgriAI] Error:", e)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/email/send-test', methods=['POST'])
@@ -3718,6 +4353,7 @@ def profile_update():
 
 
 if __name__ == '__main__':
+    print("GROQ_API_KEY loaded:", os.getenv("GROQ_API_KEY"))  
     init_contact_excel()
     init_register_excel()
     # Try to ensure MySQL schema if possible (useful when XAMPP is available)
@@ -3735,6 +4371,11 @@ if __name__ == '__main__':
         ensure_deals_table()
     except Exception as e:
         print('ensure_deals_table error:', e)
+    # Ensure purchase notifications table exists
+    try:
+        ensure_purchase_notifications_table()
+    except Exception as e:
+        print('ensure_purchase_notifications_table bootstrap error:', e)
     # Ensure expiry notifications table exists and start background notifier
     try:
         ensure_expiry_notifications_table()
@@ -3743,3 +4384,5 @@ if __name__ == '__main__':
     except Exception as e:
         print('Failed to start expiry notifier:', e)
     app.run(debug=True)
+
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)

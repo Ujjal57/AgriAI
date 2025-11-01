@@ -1,5 +1,6 @@
 import React from 'react';
 import Navbar from './Navbar';
+import logo from './assets/logo192.png'; // ✅ Import logo image
 
 const Cart = () => {
   const [items, setItems] = React.useState([]);
@@ -7,6 +8,8 @@ const Cart = () => {
   const [editVal, setEditVal] = React.useState('');
   const [paymentMethod, setPaymentMethod] = React.useState('');
   const [paymentError, setPaymentError] = React.useState('');
+
+  const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
 
   // Example seller details (you can fetch from localStorage or API)
   const sellerInfo = {
@@ -18,7 +21,7 @@ const Cart = () => {
 
   React.useEffect(() => {
     try {
-      const raw = localStorage.getItem('agriai_cart');
+      const raw = localStorage.getItem('agriai_cart_buyer');
       const arr = raw ? JSON.parse(raw) : [];
       const normalized = (Array.isArray(arr) ? arr : []).map(it => {
         try {
@@ -33,12 +36,35 @@ const Cart = () => {
     }
   }, []);
 
+  const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+  const clearCart = () => {
+    try {
+      localStorage.setItem('agriai_cart_buyer', JSON.stringify([]));
+      setItems([]);
+    } catch (e) {}
+  };
+
+  const updateQuantity = (id, delta) => {
+    try {
+      const updated = items.map(it => {
+        if (it.id !== id) return it;
+        const avail = Number(it.quantity_kg || 0) || 0;
+        const current = Number(it.order_quantity || 0) || 0;
+        const next = Math.max(0, Math.min(avail, current + delta));
+        return { ...it, order_quantity: next };
+      });
+      localStorage.setItem('agriai_cart_buyer', JSON.stringify(updated));
+      setItems(updated);
+    } catch (e) {}
+  };
+
   const removeItem = (id) => {
     try {
-      const raw = localStorage.getItem('agriai_cart');
+      const raw = localStorage.getItem('agriai_cart_buyer');
       let arr = raw ? JSON.parse(raw) : [];
       arr = arr.filter(it => it && it.id !== id);
-      localStorage.setItem('agriai_cart', JSON.stringify(arr));
+      localStorage.setItem('agriai_cart_buyer', JSON.stringify(arr));
       setItems(arr);
     } catch (e) {
       console.warn(e);
@@ -67,7 +93,7 @@ const Cart = () => {
         }
         return it;
       });
-      localStorage.setItem('agriai_cart', JSON.stringify(updated));
+      localStorage.setItem('agriai_cart_buyer', JSON.stringify(updated));
       setItems(updated);
       setEditingId(null);
       setEditVal('');
@@ -85,16 +111,16 @@ const Cart = () => {
     let commissionRate = 0;
 
     if (cat.includes('masala') || cat.includes('masalas')) {
-      gstRate = 5; commissionRate = 9;
+      gstRate = 5; commissionRate = 15;
     } else if (cat.includes('fruit') || cat.includes('vegetable')) {
-      gstRate = 0; commissionRate = 8;
+      gstRate = 0; commissionRate = 12;
     } else if (cat.includes('crop') || cat.includes('crops')) {
-      gstRate = 0; commissionRate = 5;
+      gstRate = 0; commissionRate = 8;
     } else {
       const name = (item.crop_name || '').toString().toLowerCase();
-      if (name.includes('masala')) { gstRate = 5; commissionRate = 9; }
-      else if (name.includes('fruit') || name.includes('vegetable')) { gstRate = 0; commissionRate = 8; }
-      else { gstRate = 0; commissionRate = 5; }
+      if (name.includes('masala')) { gstRate = 5; commissionRate = 15; }
+      else if (name.includes('fruit') || name.includes('vegetable')) { gstRate = 0; commissionRate = 12; }
+      else { gstRate = 0; commissionRate = 8; }
     }
 
     const gstAmt = (total * gstRate) / 100;
@@ -118,10 +144,13 @@ const Cart = () => {
   const totalAvailableQty = items.reduce((s, it) => s + (Number(it.quantity_kg || 0) || 0), 0);
   const totalOrderedQty = items.reduce((s, it) => s + (Number(it.order_quantity || 0) || 0), 0);
 
-  // 🧾 Function to Generate the Invoice with logo + print/save option
+  // 🧾 Generate Invoice (with logo)
   const generateBill = () => {
     const invoiceId = 'ORD' + Date.now();
     const date = new Date().toLocaleString();
+
+    // ✅ Embed the imported logo as a data URL (for display in print)
+    const logoSrc = window.location.origin + logo;
 
     let html = `
       <html>
@@ -150,18 +179,13 @@ const Cart = () => {
           </style>
         </head>
         <body>
-         
-          <h1>Agri AI Invoice</h1>
+          <div style="text-align:center;">
+            <img src="${logoSrc}" alt="AgriAI Logo" style="width:100px;height:100px;display:block;margin:0 auto 10px auto;" />
+            <h1>Agri AI Invoice</h1>
+          </div>
           <p>
             <strong>Invoice ID:</strong> ${invoiceId}<br>
             <strong>Date:</strong> ${date}
-          </p>
-          <p>
-            <strong>Seller Name:</strong> ${sellerInfo.name}<br>
-            <strong>Address:</strong> ${sellerInfo.address}<br>
-            <strong>Address:</strong> ${sellerInfo.phone}<br>
-            <strong>State:</strong> ${sellerInfo.state}<br>
-            <strong>Region:</strong> ${sellerInfo.region}
           </p>
 
           <table>
@@ -235,7 +259,115 @@ const Cart = () => {
       return;
     }
 
-    generateBill(); // ✅ Generate and open the bill
+    // Persist order to history and send to backend
+    try {
+      const invoiceId = 'ORD' + Date.now();
+      const createdAt = new Date().toISOString();
+
+      const orderItems = items.map(it => {
+        const { gstAmt, commissionAmt, lineTotal } = calculateGstAndCommission(it);
+        return {
+          id: it.id,
+          crop_name: it.crop_name,
+          category: it.category || it.cat || '',
+          price_per_kg: Number(it.price_per_kg || 0),
+          order_quantity: Number(it.order_quantity || 0),
+          image_url: it.image_url || '',
+          subtotal: lineTotal,
+          gst: gstAmt,
+          platform_fee: commissionAmt,
+          total: lineTotal + gstAmt + commissionAmt
+        };
+      });
+
+      const summary = orderItems.reduce((acc, it) => {
+        acc.subtotal += it.subtotal;
+        acc.gst += it.gst;
+        acc.platform_fee += it.platform_fee;
+        return acc;
+      }, { subtotal: 0, gst: 0, platform_fee: 0 });
+      const grand_total = summary.subtotal + summary.gst + summary.platform_fee;
+
+      const buyer = {
+        name: localStorage.getItem('agriai_name') || '',
+        phone: localStorage.getItem('agriai_phone') || '',
+        email: localStorage.getItem('agriai_email') || ''
+      };
+
+      const orderRecord = {
+        invoice_id: invoiceId,
+        created_at: createdAt,
+        payment_method: paymentMethod,
+        buyer,
+        items: orderItems,
+        totals: { ...summary, grand_total }
+      };
+
+      const rawHist = localStorage.getItem('agriai_history');
+      const hist = rawHist ? JSON.parse(rawHist) : [];
+      const nextHist = [orderRecord, ...(Array.isArray(hist) ? hist : [])];
+      localStorage.setItem('agriai_history', JSON.stringify(nextHist));
+
+      // Attempt to decrement farmer inventory for each purchased item (best effort)
+      try {
+        const updates = orderItems
+          .filter(it => it && typeof it.id !== 'undefined')
+          .map(async (it) => {
+            const remaining = Math.max(0, Number((items.find(x => x.id === it.id) || {}).quantity_kg || 0) - Number(it.order_quantity || 0));
+            try {
+              await fetch(`${apiBase}/my-crops/${it.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quantity_kg: remaining })
+              });
+            } catch (e) { /* non-blocking */ }
+          });
+        Promise.allSettled(updates).catch(() => {});
+      } catch (e) { /* ignore */ }
+
+      // Notify farmers of this purchase intent (best-effort)
+      try {
+        fetch(`${apiBase}/notifications/purchase`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ buyer, items: orderItems.map(({ id, crop_name, order_quantity }) => ({ id, crop_name, order_quantity })) })
+        }).catch(() => {});
+      } catch (e) { /* ignore */ }
+
+      // Clear cart locally
+      localStorage.setItem('agriai_cart_buyer', JSON.stringify([]));
+      setItems([]);
+
+      // Generate bill in a new window
+      generateBill();
+
+      // Also send a normalized order list to backend MySQL buyer_orders table
+      try {
+        const buyerId = localStorage.getItem('agriai_id') || null;
+        const ordersPayload = orderItems.map(it => ({
+          invoice_id: invoiceId,
+          crop_id: it.id,
+          farmer_id: it.farmer_id || it.seller_id || it._farmer_id || null,
+          buyer_id: buyerId,
+          crop_name: it.crop_name,
+          quantity_kg: Number(it.order_quantity || 0),
+          price_per_kg: Number(it.price_per_kg || 0),
+          total: Number(it.total || 0),
+          payment_method: paymentMethod
+        }));
+        fetch(`${apiBase}/buyer-orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orders: ordersPayload })
+        }).catch(() => {});
+      } catch (e) { /* non-blocking */ }
+
+      // Navigate to history
+      setTimeout(() => { window.location.href = '/history'; }, 100);
+    } catch (e) {
+      console.error('Failed to complete purchase:', e);
+      alert('Something went wrong while completing your purchase. Please try again.');
+    }
   };
 
   return (
@@ -243,18 +375,31 @@ const Cart = () => {
       <Navbar />
       <main style={{ padding: '6rem 1rem 2rem' }}>
         <div style={{
-          maxWidth: 980,
+          maxWidth: 1100,
           margin: '0 auto',
           background: '#fff',
-          padding: '2rem',
+          padding: '1.25rem',
           borderRadius: 8,
           boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
         }}>
-          <h1 style={{ color: '#236902', textAlign: 'center' }}>My Cart</h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <h1 style={{ color: '#236902', margin: 0 }}>My Cart</h1>
+            {items.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button onClick={() => window.location.href = '/dashboard/farmer'} style={{ background: '#fff', border: '1px solid #dfeadf', color: '#236902', padding: '6px 10px', borderRadius: 6 }}>Continue Shopping</button>
+                <button onClick={clearCart} style={{ background: '#fff', border: '1px solid #f0dede', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>Clear Cart</button>
+              </div>
+            )}
+          </div>
           {items.length === 0 ? (
-            <p>Your cart is empty. Add listings from the Farmers/Crops page.</p>
+            <div style={{ textAlign: 'center', marginTop: 16 }}>
+              <div style={{ fontSize: 52, lineHeight: 1 }}>🧺</div>
+              <p style={{ marginTop: 8 }}>Your cart is empty. Add listings from the Market.</p>
+            </div>
           ) : (
-            <div>
+            <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {/* Items Column */}
+              <div style={{ flex: '1 1 620px', minWidth: 320 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
                 {items.map(it => {
                   const { gstRate, commissionRate, gstAmt, commissionAmt, lineTotal } = calculateGstAndCommission(it);
@@ -288,23 +433,29 @@ const Cart = () => {
                         )}
                       </div>
                       <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <div style={{ fontWeight: 800, color: '#236902' }}>{it.crop_name}</div>
+                          {(it.category || it.cat) && (
+                            <div style={{ background: '#eaf6ea', color: '#236902', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>{it.category || it.cat}</div>
+                          )}
+                        </div>
                         <div style={{ marginTop: 6, fontWeight: 700 }}>
-                          ₹{Number(it.price_per_kg || 0).toLocaleString('en-IN')} / kg
+                          {formatCurrency(it.price_per_kg)} / kg
                         </div>
-                        <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
-                          GST: {gstRate}% (₹{gstAmt.toLocaleString('en-IN')})
-                        </div>
-                        <div style={{ fontSize: 13, color: '#000', marginTop: 4, fontWeight: 700 }}>
-                          Item Total: ₹{(lineTotal + gstAmt + commissionAmt).toLocaleString('en-IN')}
+                        <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <div style={{ fontSize: 13, color: '#555' }}>GST: {gstRate}% ({formatCurrency(gstAmt)})</div>
+                          <div style={{ fontSize: 13, color: '#555' }}>Platform: {formatCurrency(commissionAmt)}</div>
+                          <div style={{ fontSize: 13, color: '#000', fontWeight: 700 }}>Item Total: {formatCurrency(lineTotal + gstAmt + commissionAmt)}</div>
                         </div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
+                      <div style={{ textAlign: 'right', minWidth: 220 }}>
                         <div style={{ fontWeight: 700 }}>
                           Available: {Number(it.quantity_kg || 0).toLocaleString('en-IN')} kg
                         </div>
-                        <div style={{ fontWeight: 800, marginTop: 6 }}>
-                          Order: {Number(it.order_quantity || 0).toLocaleString('en-IN')} kg
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
+                          <button onClick={() => updateQuantity(it.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>-</button>
+                          <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800 }}>{Number(it.order_quantity || 0).toLocaleString('en-IN')} kg</div>
+                          <button onClick={() => updateQuantity(it.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>+</button>
                         </div>
                         <div style={{
                           marginTop: 8,
@@ -370,35 +521,29 @@ const Cart = () => {
                     </div>
                   );
                 })}
+                </div>
               </div>
 
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginTop: 16
-              }}>
-                <div style={{ fontWeight: 800 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#236902' }}>
-                    Total available: {Number(totalAvailableQty).toLocaleString('en-IN')} kg
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#000000ff' }}>
-                    Total ordered: {Number(totalOrderedQty).toLocaleString('en-IN')} kg
-                  </div>
-                  <div>Subtotal: ₹{totals.subtotal.toLocaleString('en-IN')}</div>
-                  <div>GST Total: ₹{totals.gst.toLocaleString('en-IN')}</div>
-                  <div>Platform Fee: ₹{totals.commission.toLocaleString('en-IN')}</div>
-                  <div style={{ fontSize: 18, color: '#236902', marginTop: 6 }}>
-                    Grand Total: ₹{grandTotal.toLocaleString('en-IN')}
-                  </div>
+              {/* Summary Column */}
+              <div style={{ flex: '0 0 320px', width: 320, position: 'sticky', top: 88, alignSelf: 'flex-start' }}>
+                <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
+                  <div style={{ fontWeight: 800, color: '#236902', marginBottom: 8 }}>Order Summary</div>
+                  <div style={{ display: 'grid', gap: 6, fontWeight: 700 }}>
+                    <div>Total items: {items.length}</div>
+                    <div>Total available: {Number(totalAvailableQty).toLocaleString('en-IN')} kg</div>
+                    <div>Total ordered: {Number(totalOrderedQty).toLocaleString('en-IN')} kg</div>
+                    <div>Subtotal: {formatCurrency(totals.subtotal)}</div>
+                    <div>GST Total: {formatCurrency(totals.gst)}</div>
+                    <div>Platform Fee: {formatCurrency(totals.commission)}</div>
+                    <div style={{ fontSize: 18, color: '#236902', marginTop: 6 }}>Grand Total: {formatCurrency(grandTotal)}</div>
                 </div>
 
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ marginBottom: 8, textAlign: 'right' }}>
+                  <div style={{ marginTop: 12 }}>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>
                       Payment method <span style={{ color: 'crimson' }}>*</span>
                     </div>
-                    <label style={{ marginRight: 12 }}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
                         type="radio"
                         name="payment"
@@ -407,7 +552,7 @@ const Cart = () => {
                         onChange={() => { setPaymentMethod('online'); setPaymentError(''); }}
                       /> Online
                     </label>
-                    <label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
                         type="radio"
                         name="payment"
@@ -416,23 +561,25 @@ const Cart = () => {
                         onChange={() => { setPaymentMethod('cod'); setPaymentError(''); }}
                       /> Cash on Delivery
                     </label>
+                    </div>
                     {paymentError && <div style={{ color: 'crimson', marginTop: 6 }}>{paymentError}</div>}
                   </div>
-                  <div>
+
                     <button
                       onClick={handleBuyNow}
                       disabled={!items.length}
                       style={{
+                      marginTop: 12,
+                      width: '100%',
                         background: '#236902',
                         color: '#fff',
-                        padding: '8px 12px',
+                      padding: '10px 12px',
                         borderRadius: 6,
                         border: 'none'
                       }}
                     >
                       Buy Now
                     </button>
-                  </div>
                 </div>
               </div>
             </div>

@@ -3,6 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import './Chatbot.css';
 
 const initialMessages = [];
+const base = process.env.REACT_APP_API_BASE || 'http://127.0.0.1:5000';
+
+
+
+
 
 function getTimeGreeting() {
   const now = new Date();
@@ -186,35 +191,44 @@ const Chatbot = () => {
     setListening(true);
   };
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    const text = input.trim();
-    setMessages(prev => [...prev, { sender: 'user', text }] );
-    setInput('');
+  const handleSend = async () => {
+  if (!input.trim()) return;
 
-    // Call backend AI endpoint
-    (async () => {
-      try {
-        const base = process.env.REACT_APP_API_BASE || 'http://127.0.0.1:5000';
-        const r = await fetch(base + '/ai/groq', {
-          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({q: text})
-        });
-        if (!r.ok) throw new Error('AI backend error');
-        const j = await r.json();
-        // attempt to extract a human readable string
-        let reply = '';
-        if (j && j.result) {
-          try { reply = JSON.stringify(j.result); } catch (e) { reply = String(j.result); }
-        }
-        if (!reply) reply = (translations[language] && translations[language].demo) || translations.en.demo;
-        setMessages(prev => [...prev, { sender: 'bot', text: reply }] );
-      } catch (e) {
-        const demo = (translations[language] && translations[language].demo) || translations.en.demo;
-        setTimeout(() => setMessages(prev => [...prev, { sender: 'bot', text: demo }]), 700);
-        console.error('AI request failed', e);
-      }
-    })();
-  };
+  const userMessage = { sender: "user", text: input };
+  setMessages(prev => [...prev, userMessage]);
+  setInput("");
+
+  console.log("📤 Sending payload:", JSON.stringify({ q: input, lang: language }));
+
+    try {
+    const res = await fetch(`${base}/ai/groq`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ q: input })
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.result) {
+      // Ensure result is a string (stringify objects)
+      const resultText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
+      // Add AgriAI tag before the message
+      const taggedResponse = `🌾 AgriAI: ${resultText}`;
+      // Use sender='bot' so the existing TTS / speaker UI is available for replies
+      setMessages(prev => [...prev, { sender: 'bot', text: taggedResponse }]);
+    } else {
+      // Prefer backend-provided error text if available
+      const errMsg = (data && (data.error || data.detail)) ? `${data.error || ''} ${data.detail || ''}`.trim() : 'Backend error, please try again.';
+      setMessages(prev => [...prev, { sender: 'bot', text: `⚠️ AgriAI: ${errMsg}` }]);
+    }
+
+  } catch (err) {
+    console.error("AI request failed", err);
+    setMessages(prev => [...prev, { sender: "ai", text: "⚠️ Connection failed" }]);
+  }
+};
+
+
 
   return (
     <>

@@ -73,8 +73,13 @@ export default function ProfileUpdate() {
           if (form.name) localStorage.setItem('agriai_name', form.name);
         } catch (e) {}
         // Navigate back to dashboard
+        // Buyer navigates to farmer dashboard, farmer navigates to buyer dashboard
         const role = localStorage.getItem('agriai_role') || meta.role || 'farmer';
-        navigate(`/dashboard/${role}`);
+        if (role === 'buyer') {
+          navigate('/dashboard/farmer');
+        } else {
+          navigate('/dashboard/buyer');
+        }
       } else {
         alert(j.error || 'Update failed');
       }
@@ -106,45 +111,55 @@ export default function ProfileUpdate() {
         {loading ? (
           <div style={{color: '#fff'}}>Loading...</div>
         ) : (
-          <div style={{width: '100%', maxWidth: 540}}>
-            <div style={{background: '#fff', padding: '2rem', borderRadius: 0, boxShadow: '0 12px 30px rgba(0,0,0,0.25)', marginTop: '3rem', textAlign: 'center'}}>
-              <h2 style={{marginTop: 8, marginBottom: '1rem', color: '#236902', textAlign: 'center'}}>Update Profile</h2>
+          <div style={{width: '100%', maxWidth: 820}}>
+            <div style={{background: '#fff', padding: '2rem', borderRadius: 8, boxShadow: '0 12px 30px rgba(0,0,0,0.15)', marginTop: '3rem'}}>
+              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12}}>
+                <h2 style={{marginTop: 8, marginBottom: 0, color: '#236902'}}>Update Profile</h2>
+                {meta && meta.role ? (
+                  <div style={{display:'flex', alignItems:'center', gap:8}}>
+                    <div style={{background:'#eaf6ea', color:'#236902', padding:'4px 8px', borderRadius:999, fontWeight:700}}>{meta.role.charAt(0).toUpperCase() + meta.role.slice(1)}</div>
+                    {meta.id != null && <div style={{fontSize:12, color:'#555'}}>ID: {meta.id}</div>}
+                  </div>
+                ) : null}
+              </div>
               <form onSubmit={handleSubmit}>
-                <div style={{marginBottom: 12}}>
-                  <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Name</label>
-                  <input name='name' value={form.name} onChange={handleChange} style={{width: '100%', padding: 10, fontFamily: "'Times New Roman', Times, serif"}} />
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+                  <div>
+                    <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Name</label>
+                    <input name='name' placeholder='Full name' value={form.name} onChange={handleChange} style={{width: '100%', padding: 10, fontFamily: "'Times New Roman', Times, serif"}} />
+                  </div>
+                  <div>
+                    <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Phone</label>
+                    <input name='phone' placeholder='10-digit phone number' value={form.phone} onChange={handleChange} style={{width: '100%', padding: 10}} />
+                  </div>
+                  <div>
+                    <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Email</label>
+                    <input name='email' placeholder='you@example.com' value={form.email} onChange={handleChange} style={{width: '100%', padding: 10}} />
+                  </div>
+                  <div>
+                    <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Aadhar</label>
+                    <input name='aadhar' placeholder='12-digit Aadhar' value={form.aadhar} onChange={handleChange} style={{width: '100%', padding: 10}} />
+                  </div>
+                  <div>
+                    <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Region</label>
+                    <select name='region' value={form.region} onChange={e => setForm({...form, region: e.target.value})} style={{width: '100%', padding: 10}}>
+                      <option value=''>-- Select region --</option>
+                      <option value='North'>North</option>
+                      <option value='South'>South</option>
+                      <option value='East'>East</option>
+                      <option value='West'>West</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>State</label>
+                    <input name='state' placeholder='e.g., Karnataka' value={form.state} onChange={e => setForm({...form, state: e.target.value})} style={{width: '100%', padding: 10}} />
+                  </div>
+                  <div style={{gridColumn:'1 / -1'}}>
+                    <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Address</label>
+                    <input name='address' placeholder='House no, Street, City' value={form.address} onChange={handleChange} style={{width: '100%', padding: 10}} />
+                  </div>
                 </div>
-                <div style={{marginBottom: 12}}>
-                  <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Phone</label>
-                  <input name='phone' value={form.phone} onChange={handleChange} style={{width: '100%', padding: 10}} />
-                </div>
-                <div style={{marginBottom: 12}}>
-                  <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Email</label>
-                  <input name='email' value={form.email} onChange={handleChange} style={{width: '100%', padding: 10}} />
-                </div>
-                <div style={{marginBottom: 12}}>
-                  <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Region</label>
-                  <select name='region' value={form.region} onChange={e => setForm({...form, region: e.target.value})} style={{width: '100%', padding: 10}}>
-                    <option value=''>-- Select region --</option>
-                    <option value='North'>North</option>
-                    <option value='South'>South</option>
-                    <option value='East'>East</option>
-                    <option value='West'>West</option>
-                  </select>
-                </div>
-                <div style={{marginBottom: 12}}>
-                  <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>State</label>
-                  <input name='state' value={form.state} onChange={e => setForm({...form, state: e.target.value})} style={{width: '100%', padding: 10}} />
-                </div>
-                <div style={{marginBottom: 12}}>
-                  <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Address</label>
-                  <input name='address' value={form.address} onChange={handleChange} style={{width: '100%', padding: 10}} />
-                </div>
-                <div style={{marginBottom: 12}}>
-                  <label style={{display:'block', marginBottom:6, fontWeight:700, textAlign: 'left'}}>Aadhar</label>
-                  <input name='aadhar' value={form.aadhar} onChange={handleChange} style={{width: '100%', padding: 10}} />
-                </div>
-                <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 10}}>
+                <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 16}}>
                   {/** Save button: small scale animation on click (mouse or keyboard). Disabled while saving. */}
                   <button
                     type='submit'

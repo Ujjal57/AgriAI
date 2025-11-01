@@ -1,8 +1,8 @@
 import React from 'react';
-import Navbar from './Navbar';
-import logo from './assets/logo192.png';
+import Navbar from '../Navbar';
+import logo from '../assets/logo192.png';
 
-export default function History() {
+export default function FarmerHistory() {
   const [orders, setOrders] = React.useState([]);
   const [query, setQuery] = React.useState('');
   const [paymentFilter, setPaymentFilter] = React.useState('all');
@@ -10,7 +10,7 @@ export default function History() {
 
   React.useEffect(() => {
     try {
-      const raw = localStorage.getItem('agriai_history');
+      const raw = localStorage.getItem('agriai_history_farmer');
       const hist = raw ? JSON.parse(raw) : [];
       setOrders(Array.isArray(hist) ? hist : []);
     } catch (e) {
@@ -123,7 +123,7 @@ export default function History() {
       <Navbar />
       <main style={{ padding: '6rem 1rem 2rem' }}>
         <div style={{ maxWidth: 980, margin: '0 auto', background: '#fff', padding: '1.5rem', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
-          <h1 style={{ color: '#236902', textAlign: 'center' }}>Purchase History</h1>
+          <h1 style={{ color: '#236902', textAlign: 'center' }}>Sales History</h1>
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12, alignItems: 'center', justifyContent: 'space-between' }}>
             <input
@@ -145,7 +145,7 @@ export default function History() {
           {filtered.length === 0 ? (
             <div style={{ textAlign: 'center', marginTop: 24 }}>
               <div style={{ fontSize: 52, lineHeight: 1 }}>🧾</div>
-              <div style={{ marginTop: 8 }}>No matching purchases yet.</div>
+              <div style={{ marginTop: 8 }}>No matching sales yet.</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
@@ -205,7 +205,7 @@ export default function History() {
                           <div>GST Total: {formatCurrency(o?.totals?.gst)}</div>
                           <div>Platform Fee: {formatCurrency(o?.totals?.platform_fee)}</div>
                           <div style={{ color: '#236902', fontSize: 18 }}>Grand Total: {formatCurrency(o?.totals?.grand_total)}</div>
-      </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -218,3 +218,5 @@ export default function History() {
     </div>
   );
 }
+
+

@@ -267,8 +267,9 @@ function BuyerSearchBox() {
                           <button
                             onClick={() => {
                               try {
-                                const key = 'agriai_cart';
-                                const raw = localStorage.getItem(key);
+                                const role = (typeof window !== 'undefined' && localStorage.getItem('agriai_role')) || '';
+                                const cartKey = role === 'farmer' ? 'agriai_cart_farmer' : 'agriai_cart_buyer';
+                                const raw = localStorage.getItem(cartKey);
                                 let arr = raw ? JSON.parse(raw) : [];
                                 // add minimal item (avoid heavy blobs)
                                 const seller_addr = (c && (c._farmer_address || c.address || c.seller_address)) || '';
@@ -278,12 +279,18 @@ function BuyerSearchBox() {
                                 const item = { id: c.id, crop_name: c.crop_name, price_per_kg: c.price_per_kg, quantity_kg: c.quantity_kg, image_url: c.image_url, seller_name: c._farmer_name, seller_phone: c._farmer_phone, seller_address: seller_addr, seller_email: seller_email, seller_region: seller_region, seller_state: seller_state, category: c.category || c.cat || '' };
                                 // avoid duplicate ids
                                 if (!arr.find(x => x && x.id === item.id)) arr.push(item);
-                                localStorage.setItem(key, JSON.stringify(arr));
+                                localStorage.setItem(cartKey, JSON.stringify(arr));
                               } catch (e) {
                                 console.warn('addToCart error', e);
                               }
                               try { setAddAnimId(c.id); setTimeout(() => setAddAnimId(null), 220); } catch(e){}
-                              try { navigate('/cart'); } catch (e) {}
+                              // Redirect based on role
+                              const role = (typeof window !== 'undefined' && localStorage.getItem('agriai_role')) || '';
+                              if (role === 'buyer') {
+                                try { navigate('/cart'); } catch (e) {}
+                              } else {
+                                try { navigate('/farmer/cart'); } catch (e) {}
+                              }
                             }}
                             onMouseDown={() => { try { setAddAnimId(c.id); } catch(e){} }}
                             onMouseUp={() => { try { setAddAnimId(null); } catch(e){} }}
@@ -318,6 +325,7 @@ function BuyerSearchBox() {
 export default function FarmerDashboard() {
   const role = (typeof window !== 'undefined' && localStorage.getItem('agriai_role')) ? localStorage.getItem('agriai_role') : '';
   const isBuyer = role === 'buyer';
+  const cartKey = role === 'farmer' ? 'agriai_cart_farmer' : 'agriai_cart_buyer';
 
   return (
     <div className="min-h-screen bg-green-50 text-gray-900">

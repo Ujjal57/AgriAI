@@ -314,10 +314,10 @@ const MyCrops = () => {
         {visibleListings.length === 0 && <div style={{textAlign:'center'}}>No listings yet.</div>}
 
         {visibleListings.length > 0 && (
-          <div style={{display:'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap:12}}>
+          <div style={{display:'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap:12}}>
             {visibleListings.map(l => (
-              <div key={l.id} style={{background:'#fff', borderRadius:8, padding:12, border:'1px solid #eaeaea', boxShadow:'0 6px 18px rgba(0,0,0,0.06)'}}>
-                <div style={{width:'100%', height:140, borderRadius:8, overflow:'hidden', background:'#f6f6f6', display:'flex', alignItems:'center', justifyContent:'center'}}>
+              <div key={l.id} style={{background:'#fff', borderRadius:8, padding:'12px 12px 1px', border:'1px solid #eaeaea', boxShadow:'0 6px 18px rgba(0,0,0,0.06)', height:340, display:'flex', flexDirection:'column', justifyContent:'space-between'}}>
+                <div style={{width:'100%', height:160, borderRadius:8, overflow:'hidden', background:'#f6f6f6', display:'flex', alignItems:'center', justifyContent:'center'}}>
                   {l.image_url ? (
                     <img src={l.image_url} alt={l.crop_name} style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}} />
                   ) : (

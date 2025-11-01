@@ -14,15 +14,21 @@ const MyDeals = () => {
   const [loading, setLoading] = React.useState(false);
   const [saved, setSaved] = React.useState(null);
   const [listings, setListings] = React.useState([]);
+  const [query, setQuery] = React.useState('');
+  const [sort, setSort] = React.useState('recent');
   const [editingId, setEditingId] = React.useState(null);
   const [editQuantity, setEditQuantity] = React.useState('');
+  const [editDeliveryDate, setEditDeliveryDate] = React.useState('');
+  const [deliveryDate, setDeliveryDate] = React.useState('');
   const [lastFetchUrl, setLastFetchUrl] = React.useState('');
   const [lastFetchJson, setLastFetchJson] = React.useState(null);
+  const todayStr = React.useMemo(() => {
+    try { return new Date().toISOString().slice(0,10); } catch (e) { return ''; }
+  }, []);
 
   const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
 
   const fetchListings = React.useCallback(() => {
-    // Fetch deals from the backend deals table for the logged-in buyer only
     const sid = sellerId || localStorage.getItem('agriai_id') || '';
     const sphone = localStorage.getItem('agriai_phone') || sellerPhone || '';
     let url = `${apiBase}/deals/list`;
@@ -40,8 +46,15 @@ const MyDeals = () => {
       }).catch(e => { console.error('fetchListings error', e); setLastFetchUrl(url); setLastFetchJson(String(e)); setListings([]); });
   }, [apiBase, sellerId, sellerPhone]);
 
-  // listings are fetched server-side filtered by buyer_id/buyer_phone; show them as-is
-  const visibleListings = listings;
+  const visibleListings = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let arr = Array.isArray(listings) ? [...listings] : [];
+    if (q) arr = arr.filter(l => (l.crop_name || '').toLowerCase().includes(q));
+    if (sort === 'recent') arr.sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    if (sort === 'qty_desc') arr.sort((a,b) => Number(b.quantity_kg||0) - Number(a.quantity_kg||0));
+    if (sort === 'qty_asc') arr.sort((a,b) => Number(a.quantity_kg||0) - Number(b.quantity_kg||0));
+    return arr;
+  }, [listings, query, sort]);
 
   const formatDate = (v) => {
     if (!v) return '';
@@ -56,7 +69,6 @@ const MyDeals = () => {
 
   React.useEffect(() => { fetchListings(); }, [fetchListings]);
 
-  // Poll listings periodically to keep UI in sync (every 15s)
   React.useEffect(() => {
     const id = setInterval(() => {
       fetchListings();
@@ -64,32 +76,34 @@ const MyDeals = () => {
     return () => clearInterval(id);
   }, [fetchListings]);
 
-  // ref to focus the crop name input for the empty-state CTA
   const cropNameRef = React.useRef(null);
 
   const startEdit = (l) => {
     setEditingId(l.id);
     setEditQuantity(l.quantity_kg || '');
+    setEditDeliveryDate((l.delivery_date || '').slice(0, 10));
   };
-  const cancelEdit = () => { setEditingId(null); setEditQuantity(''); };
+  const cancelEdit = () => { setEditingId(null); setEditQuantity(''); setEditDeliveryDate(''); };
   const saveEdit = async (id) => {
     const sid = sellerId || localStorage.getItem('agriai_id') || '';
     try {
       const body = { quantity_kg: editQuantity };
+      if (editDeliveryDate) body.delivery_date = editDeliveryDate;
       if (sid) body.buyer_id = sid;
       const res = await fetch(`${apiBase}/deals/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await res.json();
       if (res.ok && j.ok) {
         setEditingId(null);
         setEditQuantity('');
+        setEditDeliveryDate('');
         fetchListings();
       } else {
         console.error('Failed to save edit', j);
-        alert('Failed to update quantity: ' + (j.error || JSON.stringify(j)));
+        alert('Failed to update: ' + (j.error || JSON.stringify(j)));
       }
     } catch (e) {
       console.error('saveEdit error', e);
-      alert('Failed to update quantity');
+      alert('Failed to update');
     }
   };
 
@@ -113,8 +127,6 @@ const MyDeals = () => {
       alert('Delete failed: ' + String(e));
     }
   };
-
-  
 
   React.useEffect(() => {
     const email = localStorage.getItem('agriai_email');
@@ -153,12 +165,12 @@ const MyDeals = () => {
       const formData = new FormData();
       formData.append('buyer_name', sellerName);
       formData.append('buyer_phone', sellerPhone);
-  if (sellerEmail) formData.append('buyer_email', sellerEmail);
+      if (sellerEmail) formData.append('buyer_email', sellerEmail);
       formData.append('region', region);
       formData.append('state', state);
       formData.append('crop_name', cropName);
       formData.append('quantity_kg', quantity);
-      // Price and expiry are intentionally omitted from this form on the My Details page
+      if (deliveryDate) formData.append('delivery_date', deliveryDate);
       if (sellerId) formData.append('buyer_id', sellerId);
       if (imageFile) {
         formData.append('image', imageFile, imageFile.name);
@@ -168,7 +180,7 @@ const MyDeals = () => {
       const j = await res.json();
       if (res.ok && j.ok) {
         setSaved({ status: 'success', stored: j.stored || 'unknown' });
-        setSellerName(''); setCropName(''); setQuantity(''); setRegion(''); setState('');
+        setSellerName(''); setCropName(''); setQuantity(''); setDeliveryDate(''); setRegion(''); setState('');
         setImageFile(null);
         fetchListings();
       } else {
@@ -184,25 +196,72 @@ const MyDeals = () => {
     <div>
       <Navbar />
       <main style={{padding: '6rem 1rem 2rem', background: '#53b635'}}>
-        <div style={{maxWidth:980,margin:'0 auto',background:'#fff',padding:'2rem',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.06)'}}>
-          <h1 style={{color:'#236902', textAlign:'center'}}>Add Crops</h1>
+        <div style={{maxWidth:1200,margin:'0 auto',background:'#fff',padding:'2rem',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.06)'}}>
+          
+          {/* Top Row: Add a New Deal + Search + Sort */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            position: 'relative'
+          }}>
+            <h2 style={{
+              color: '#236902',
+              margin: 0,
+              textAlign: 'center',
+              flex: '1 1 100%',
+              fontSize: '1.5rem'
+            }}>
+              Add a New Deal
+            </h2>
+
+            <div style={{
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              position: 'absolute',
+              right: 0,
+              top: '50%',
+              transform: 'translateY(-50%)'
+            }}>
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search crop name"
+                style={{ padding: 8, border: '1px solid #e5e5e5', borderRadius: 6 }}
+              />
+              <select
+                value={sort}
+                onChange={e => setSort(e.target.value)}
+                style={{ padding: 8, border: '1px solid #e5e5e5', borderRadius: 6 }}
+              >
+                <option value="recent">Most recent</option>
+                <option value="qty_desc">Quantity: High to Low</option>
+                <option value="qty_asc">Quantity: Low to High</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{height:8}} />
+
+          {/* Form Section */}
           <form onSubmit={handleSubmit} style={{display:'grid', gap:12}}>
             {/* First row: seller details */}
             <div style={{display:'flex', gap:12, alignItems:'flex-start', flexWrap: 'wrap'}}>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>Buyer Name</div>
                 <input placeholder="Seller name" value={sellerName} readOnly style={{width:'100%',padding:10, background:'#fafafa'}} required />
-                
               </div>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>Buyer Phone</div>
                 <input placeholder="Seller phone" value={sellerPhone} readOnly style={{width:'100%',padding:10, background:'#fafafa'}} />
-                
               </div>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>Buyer Email</div>
-                  <input placeholder="Seller email" value={sellerEmail} readOnly style={{width:'100%',padding:10, background:'#fafafa'}} />
-                </div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>Buyer Email</div>
+                <input placeholder="Seller email" value={sellerEmail} readOnly style={{width:'100%',padding:10, background:'#fafafa'}} />
+              </div>
               <div style={{flex:'0 0 180px'}}>
                 <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>Region</div>
                 <input placeholder="Region" value={region} readOnly style={{width:'100%',padding:10, background:'#fafafa'}} required />
@@ -210,10 +269,10 @@ const MyDeals = () => {
               <div style={{flex:'0 0 180px'}}>
                 <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>State</div>
                 <input placeholder="State" value={state} readOnly style={{width:'100%',padding:10, background:'#fafafa'}} required />
-                
               </div>
             </div>
-            {/* Second row: crop details, quantity and image */}
+
+            {/* Second row: crop details */}
             <div style={{display:'flex', gap:12, alignItems:'flex-start', flexWrap: 'wrap'}}>
               <div style={{flex:2}}>
                 <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>Crop name</div>
@@ -225,6 +284,12 @@ const MyDeals = () => {
                 <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>Quantity (kg)</div>
                 <input placeholder="Quantity (kg)" type="number" step="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)} style={{width:'100%',padding:10}} required />
                 <div style={{fontSize:14,color:'#000',marginTop:6}}>Total available quantity in kilograms</div>
+              </div>
+
+              <div style={{flex:'0 0 220px'}}>
+                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>Delivery Date</div>
+                <input type="date" min={todayStr} value={deliveryDate} onChange={e=>setDeliveryDate(e.target.value)} style={{width:'100%', padding:10}} />
+                <div style={{fontSize:12, color:'#000', marginTop:6, textAlign:'center'}}>Expected delivery</div>
               </div>
 
               <div style={{flex:'0.6 4 180px', textAlign:'center'}}>
@@ -259,74 +324,91 @@ const MyDeals = () => {
               </button>
             </div>
           </form>
-      <section style={{marginTop:18}}>
-        <h2 style={{marginBottom:8, textAlign:'center', color:'#236902' }}>My Deals</h2>
-  {visibleListings.length === 0 && (
-          <div style={{textAlign:'center'}}>
-            <div style={{marginBottom:8}}>No deals yet.</div>
-            <button onClick={() => { if (cropNameRef.current) { cropNameRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); cropNameRef.current.focus(); } }} style={{padding:'8px 12px', background:'#236902', color:'#fff', border:'none', borderRadius:6, cursor:'pointer'}}>Upload a deal</button>
-          </div>
-        )}
 
-        {visibleListings.length > 0 && (
-          <div style={{display:'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap:12}}>
-            {visibleListings.map(l => (
-              <div key={l.id} style={{background:'#fff', borderRadius:8, padding:'12px 12px 1px', border:'1px solid #eaeaea', boxShadow:'0 6px 18px rgba(0,0,0,0.06)', height:340, display:'flex', flexDirection:'column', justifyContent:'space-between'}}>
-                <div style={{width:'100%', height:160, borderRadius:8, overflow:'hidden', background:'#f6f6f6', display:'flex', alignItems:'center', justifyContent:'center'}}>
-                  {l.image_url ? (
-                    <img src={l.image_url} alt={l.crop_name} style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}} />
-                  ) : (
-                    <div style={{color:'#999'}}>No image</div>
-                  )}
-                </div>
-
-                <div style={{marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8}}>
-                  <div>
-                    <h3 style={{margin:0, color:'#236902', fontSize:18,textAlign:'center'}}>{l.crop_name}</h3>
-                    <div style={{marginTop:4, color:'#444', fontSize:13}}>{l.subtitle || ''}</div>
-                  </div>
-                </div>
-
-                <div style={{display:'flex', gap:8, marginTop:10, flexWrap:'wrap'}}>
-                  <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:110, flex:'1 1 120px'}}>
-                    <div style={{fontSize:12, color:'#000000ff'}}>Quantity</div>
-                    {editingId === l.id ? (
-                      <div style={{display:'flex', gap:6, alignItems:'center'}}>
-                        <input value={editQuantity} onChange={e=>setEditQuantity(e.target.value)} style={{width:120,padding:6}} />
-                        <button onClick={() => saveEdit(l.id)} style={{padding:'6px 8px', background:'#236902', color:'#fff', border:'none', borderRadius:6}}>Save</button>
-                        <button onClick={cancelEdit} style={{padding:'6px 8px', background:'#ddd', border:'none', borderRadius:6}}>Cancel</button>
-                      </div>
-                    ) : (
-                      <div style={{fontWeight:700}}>{Number(l.quantity_kg || 0).toLocaleString('en-IN')} kg</div>
-                    )}
-                  </div>
-                  <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:140, flex:'1 1 160px'}}>
-                    <div style={{fontSize:12, color:'#000000ff'}}>Uploaded</div>
-                    <div style={{fontWeight:700}}>{formatDate(l.created_at || l.createdAt || l.created)}</div>
-                  </div>
-                </div>
-
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:8, marginBottom:8}}>
-                  <div>
-                    {l.is_expired ? (
-                      <div style={{background:'#f44336', color:'#fff', padding:'6px 8px', borderRadius:6, fontWeight:700}}>Expired</div>
-                    ) : (
-                      <div style={{color:'#236902', fontWeight:700}}>{l.expiry_date ? `Expires: ${l.expiry_date}` : ''}</div>
-                    )}
-                  </div>
-
-                  <div style={{display:'flex', gap:120}}>
-                    {editingId !== l.id && (
-                      <button onClick={() => startEdit(l)} style={{padding:'5px 7px', background:'#1976d2', color:'#fff', border:'none', borderRadius:6}}>Edit</button>
-                    )}
-                    <button onClick={() => deleteDeal(l.id)} style={{padding:'5px 7px', background:'#e53935', color:'#fff', border:'none', borderRadius:6}}>Delete</button>
-                  </div>
-                </div>
+          <section style={{marginTop:18}}>
+            {visibleListings.length === 0 && (
+              <div style={{textAlign:'center'}}>
+                <div style={{marginBottom:8}}>No deals yet.</div>
+                <button onClick={() => { if (cropNameRef.current) { cropNameRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); cropNameRef.current.focus(); } }} style={{padding:'8px 12px', background:'#236902', color:'#fff', border:'none', borderRadius:6, cursor:'pointer'}}>Upload a deal</button>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            )}
+
+            {visibleListings.length > 0 && (
+              <div style={{display:'grid', gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))', gap:16}}>
+                {visibleListings.map(l => (
+                  <div key={l.id} style={{background:'#fff', borderRadius:8, padding:'12px 12px 1px', border:'1px solid #eaeaea', boxShadow:'0 6px 18px rgba(0,0,0,0.06)', minHeight:340, display:'flex', flexDirection:'column', justifyContent:'space-between'}}>
+                    <div style={{width:'100%', height:160, borderRadius:8, overflow:'hidden', background:'#f6f6f6', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                      {l.image_url ? (
+                        <img src={l.image_url} alt={l.crop_name} style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}} />
+                      ) : (
+                        <div style={{color:'#999'}}>No image</div>
+                      )}
+                    </div>
+
+                    <div style={{marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8}}>
+                      <div>
+                        <h3 style={{margin:0, color:'#236902', fontSize:18,textAlign:'center'}}>{l.crop_name}</h3>
+                        <div style={{marginTop:4, color:'#444', fontSize:13}}>{l.subtitle || ''}</div>
+                      </div>
+                    </div>
+
+                    <div style={{display:'flex', gap:8, marginTop:10, flexWrap:'wrap'}}>
+                      <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:110, flex:'1 1 120px'}}>
+                        <div style={{fontSize:12, color:'#000000ff'}}>Quantity</div>
+                        {editingId === l.id ? (
+                          <div style={{display:'flex', gap:6, alignItems:'center'}}>
+                            <input value={editQuantity} onChange={e=>setEditQuantity(e.target.value)} style={{width:120,padding:6}} />
+                          </div>
+                        ) : (
+                          <div style={{fontWeight:700}}>{Number(l.quantity_kg || 0).toLocaleString('en-IN')} kg</div>
+                        )}
+                      </div>
+                      <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:160, flex:'1 1 180px'}}>
+                        <div style={{fontSize:12, color:'#000000ff'}}>Delivery Date</div>
+                        {editingId === l.id ? (
+                          <div style={{display:'flex', gap:6, alignItems:'center'}}>
+                            <input type="date" min={todayStr} value={editDeliveryDate} onChange={e=>setEditDeliveryDate(e.target.value)} style={{width:150,padding:6}} />
+                            <button onClick={() => saveEdit(l.id)} style={{padding:'6px 8px', background:'#236902', color:'#fff', border:'none', borderRadius:6}}>Save</button>
+                            <button onClick={cancelEdit} style={{padding:'6px 8px', background:'#ddd', border:'none', borderRadius:6}}>Cancel</button>
+                          </div>
+                        ) : (
+                          <div style={{fontWeight:700}}>{l.delivery_date ? new Date(l.delivery_date).toLocaleDateString('en-GB') : '—'}</div>
+                        )}
+                      </div>
+                      <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:140, flex:'1 1 160px'}}>
+                        <div style={{fontSize:12, color:'#000000ff'}}>Uploaded</div>
+                        <div style={{fontWeight:700}}>{formatDate(l.created_at || l.createdAt || l.created)}</div>
+                      </div>
+                    </div>
+
+                    <div style={{marginTop:8, marginBottom:8, textAlign:'center'}}>
+                      {(() => {
+                        const today = new Date(); today.setHours(0,0,0,0);
+                        const dd = l.delivery_date ? new Date(l.delivery_date) : null;
+                        const isExpired = dd ? (dd < today) : false;
+                        const isToday = dd ? (dd.getFullYear() === today.getFullYear() && dd.getMonth() === today.getMonth() && dd.getDate() === today.getDate()) : false;
+                        if (isExpired) return (<div style={{background:'#f44336', color:'#fff', padding:'6px 8px', borderRadius:6, fontWeight:700}}>Expired</div>);
+                        if (isToday) return (<div style={{background:'#ffb300', color:'#000', padding:'6px 8px', borderRadius:6, fontWeight:700}}>Expires today</div>);
+                        return (
+                          <div style={{color:'#236902', fontWeight:700}}>
+                            {l.delivery_date ? `Delivery: ${new Date(l.delivery_date).toLocaleDateString('en-GB')}` : <span style={{background:'#eaf6ea', padding:'4px 6px', borderRadius:6}}>No delivery date</span>}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Buttons vertically stacked */}
+                    <div style={{display:'flex', flexDirection:'row', alignItems:'center', gap:8, marginBottom:10}}>
+                      {editingId !== l.id && (
+                        <button onClick={() => startEdit(l)} style={{padding:'6px 10px', width:'80%', background:'#1976d2', color:'#fff', border:'none', borderRadius:6}}>Edit</button>
+                      )}
+                      <button onClick={() => deleteDeal(l.id)} style={{padding:'6px 10px', width:'80%', background:'#e53935', color:'#fff', border:'none', borderRadius:6}}>Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </main>
     </div>
