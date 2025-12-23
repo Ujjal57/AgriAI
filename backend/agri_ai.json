@@ -1,0 +1,66 @@
+[
+{"type":"header","version":"5.2.1","comment":"Export to JSON plugin for PHPMyAdmin"},
+{"type":"database","name":"agri_ai"},
+{"type":"table","name":"admin","database":"agri_ai","data":
+[
+
+]
+}
+,{"type":"table","name":"buyer","database":"agri_ai","data":
+[
+{"id":"1","name":"Ujjal Kumar Dey","phone":"0123456780","email":"ujjalkumardey77@gmail.com","aadhar":"123456789124","password_hash":"$2b$12$hBIqrrEsDmEDocCIesn6X.Ak87h35MaBpKV69.t\/fDxPxX\/RU6qa2","region":"north","state":"Mumbai","created_at":"2025-10-31 08:03:07","address":"Bandra"},
+{"id":"2","name":"Akash","phone":"8884036656","email":"ujjalkumardey07@gmail.com","aadhar":"123456789456","password_hash":"$2b$12$GRyMn5297iFOAvqSg1Eb9ufjrRngxJcYYFVWwHWCLUDr9GmPqzUVm","region":"north","state":"Karnataka","created_at":"2025-10-31 16:46:34","address":"Kogilu"},
+{"id":"3","name":"Rakesh","phone":"8884066668","email":"ujjalkumardey17@gmail.com","aadhar":"789456123654","password_hash":"$2b$12$TC\/JZK7WW84VpZCqjUWLKuVC3tJIhrpo6fOW35tw\/RYeVvjopgSB2","region":"north","state":"Karnataka","created_at":"2025-10-31 16:51:02","address":"Kogilu Cross"}
+]
+}
+,{"type":"table","name":"buyer_orders","database":"agri_ai","data":
+[
+{"id":"1","invoice_id":"ORD1761878264369","farmer_id":"1","buyer_id":"1","crop_name":"Rice","quantity_kg":"8.000","price_per_kg":"20.00","total":"172.80","payment_method":"online","created_at":"2025-10-31 08:07:44"},
+{"id":"2","invoice_id":"ORD1761878679996","farmer_id":"1","buyer_id":"1","crop_name":"Rice","quantity_kg":"1.000","price_per_kg":"20.00","total":"21.60","payment_method":"cod","created_at":"2025-10-31 08:14:40"},
+{"id":"3","invoice_id":"ORD1761879030970","farmer_id":"1","buyer_id":"1","crop_name":"Rice","quantity_kg":"8.000","price_per_kg":"20.00","total":"172.80","payment_method":"cod","created_at":"2025-10-31 08:20:31"},
+{"id":"4","invoice_id":"ORD1761879093239","farmer_id":"1","buyer_id":"1","crop_name":"Rice","quantity_kg":"2.000","price_per_kg":"20.00","total":"43.20","payment_method":"cod","created_at":"2025-10-31 08:21:33"},
+{"id":"5","invoice_id":"ORD1761879196152","farmer_id":"1","buyer_id":"1","crop_name":"Rice","quantity_kg":"2.000","price_per_kg":"20.00","total":"43.20","payment_method":"cod","created_at":"2025-10-31 08:23:16"},
+{"id":"6","invoice_id":"ORD1761889147883","farmer_id":"2","buyer_id":"2","crop_name":"Rice","quantity_kg":"100.000","price_per_kg":"30.00","total":"3240.00","payment_method":"online","created_at":"2025-10-31 11:09:08"},
+{"id":"7","invoice_id":"ORD1761908973691","farmer_id":"2","buyer_id":"1","crop_name":"Rice","quantity_kg":"200.000","price_per_kg":"30.00","total":"6480.00","payment_method":"cod","created_at":"2025-10-31 16:39:33"}
+]
+}
+,{"type":"table","name":"contacts","database":"agri_ai","data":
+[
+{"id":"1","first_name":"Test","last_name":"User","phone":"9999999999","email":"test@example.com","message":"This is a test message from the Contact Us page.","source":"web","created_at":"2025-10-31 08:00:41","updated_at":null}
+]
+}
+,{"type":"table","name":"crops","database":"agri_ai","data":
+[
+{"id":"1","seller_id":null,"seller_name":"Sample Seller","seller_phone":"9000000000","region":"North","state":"Punjab","crop_name":"Wheat","category":"Food Crops","quantity_kg":"1000.000","price_per_kg":"22.500","image_blob":null,"image_mime":null,"created_at":"2025-10-31 08:00:41","image_path":null,"expiry_date":null},
+{"id":"2","seller_id":"1","seller_name":"Ujjal Kumar Dey","seller_phone":"0123456789","region":"south","state":"Karnataka","crop_name":"Rice","category":"Food Crops","quantity_kg":"77.000","price_per_kg":"20.000","image_blob":null,"image_mime":null,"created_at":"2025-10-31 08:02:23","image_path":"1761858143_5f3df42a80784e459dbe35d42330f8d0.png","expiry_date":"2025-11-03"},
+{"id":"3","seller_id":"2","seller_name":"Tharun","seller_phone":"9741666556","region":"South","state":"Karnataka","crop_name":"Rice","category":"Food Crops","quantity_kg":"700.000","price_per_kg":"30.000","image_blob":null,"image_mime":null,"created_at":"2025-10-31 11:03:54","image_path":"1761869034_649b849f60694d1cbe50764286a2b520.png","expiry_date":"2025-11-01"}
+]
+}
+,{"type":"table","name":"deals","database":"agri_ai","data":
+[
+{"id":"1","buyer_id":"1","buyer_name":"Ujjal Kumar Dey","buyer_phone":"0123456780","region":"north","state":"Mumbai","crop_name":"asd","variety":null,"quantity_kg":"234.000","image_path":"1761977925_227369f72826407e9edbfa73d4c55b3a.png","delivery_date":"2025-11-04","created_at":"2025-11-01 17:18:45"}
+]
+}
+,{"type":"table","name":"expiry_notifications","database":"agri_ai","data":
+[
+{"id":"1","crop_id":"3","notified_at":"2025-11-02 09:20:18"}
+]
+}
+,{"type":"table","name":"farmer","database":"agri_ai","data":
+[
+{"id":"1","name":"Ujjal Kumar Dey","phone":"0123456789","email":"ujjalkumardey7@gmail.com","aadhar":"123456789123","password_hash":"$2b$12$6oZiB.RdPn2SJQHcNdPsu.6Sx7YuguWZJkouPFktK.IccM.sWPxke","region":"south","state":"Karnataka","created_at":"2025-10-31 08:01:23","address":"Kogilu Cross"},
+{"id":"2","name":"Tharun","phone":"9741666556","email":"utharun515@gmail.com","aadhar":"123456987412","password_hash":"$2b$12$NJ1T.B\/qpkTflL6QbVn05uKtk2koKNvZh6QjO.cGawsYyduIwqQ3G","region":"South","state":"Karnataka","created_at":"2025-10-31 11:00:41","address":"Ramanagara"}
+]
+}
+,{"type":"table","name":"purchase_notifications","database":"agri_ai","data":
+[
+{"id":"2","farmer_id":"1","farmer_phone":"0123456789","crop_id":"2","crop_name":"Rice","quantity_kg":"8.000","buyer_name":"Ujjal Kumar Dey","buyer_email":"ujjalkumardey77@gmail.com","buyer_phone":"0123456780","created_at":"2025-10-31 08:07:44","is_read":"1"},
+{"id":"3","farmer_id":"1","farmer_phone":"0123456789","crop_id":"2","crop_name":"Rice","quantity_kg":"1.000","buyer_name":"Ujjal Kumar Dey","buyer_email":"ujjalkumardey77@gmail.com","buyer_phone":"0123456780","created_at":"2025-10-31 08:14:40","is_read":"1"},
+{"id":"4","farmer_id":"1","farmer_phone":"0123456789","crop_id":"2","crop_name":"Rice","quantity_kg":"8.000","buyer_name":"Ujjal Kumar Dey","buyer_email":"ujjalkumardey77@gmail.com","buyer_phone":"0123456780","created_at":"2025-10-31 08:20:31","is_read":"1"},
+{"id":"5","farmer_id":"1","farmer_phone":"0123456789","crop_id":"2","crop_name":"Rice","quantity_kg":"2.000","buyer_name":"Ujjal Kumar Dey","buyer_email":"ujjalkumardey77@gmail.com","buyer_phone":"0123456780","created_at":"2025-10-31 08:21:33","is_read":"1"},
+{"id":"6","farmer_id":"1","farmer_phone":"0123456789","crop_id":"2","crop_name":"Rice","quantity_kg":"2.000","buyer_name":"Ujjal Kumar Dey","buyer_email":"ujjalkumardey77@gmail.com","buyer_phone":"0123456780","created_at":"2025-10-31 08:23:16","is_read":"1"},
+{"id":"7","farmer_id":"2","farmer_phone":"9741666556","crop_id":"3","crop_name":"Rice","quantity_kg":"100.000","buyer_name":"Ujjal Kumar Dey","buyer_email":"ujjalkumardey77@gmail.com","buyer_phone":"0123456780","created_at":"2025-10-31 11:09:07","is_read":"1"},
+{"id":"8","farmer_id":"2","farmer_phone":"9741666556","crop_id":"3","crop_name":"Rice","quantity_kg":"200.000","buyer_name":"Ujjal Kumar Dey","buyer_email":"ujjalkumardey77@gmail.com","buyer_phone":"0123456780","created_at":"2025-10-31 16:39:33","is_read":"1"}
+]
+}
+]

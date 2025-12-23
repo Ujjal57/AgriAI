@@ -1,0 +1,335 @@
+/* Animated Gradient and Hover Effects */
+.homepage-getstarted {
+  background: linear-gradient(90deg, #53b635 0%, #53b635 100%);
+  background-size: 200% 200%;
+  animation: gradientMove 3s ease-in-out infinite;
+  color: #fff;
+  border: none;
+  border-radius: 2rem;
+  box-shadow: 0 2px 12px rgba(44,121,2,0.12);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.homepage-getstarted:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 24px #00ffe744;
+}
+
+.why-card {
+  background: linear-gradient(120deg, #e6f4ea 0%, #fff 100%);
+  transition: box-shadow 0.3s, transform 0.3s;
+}
+.why-card:hover {
+  box-shadow: 0 8px 32px #236902;
+  transform: translateY(-8px) scale(1.03);
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+/* Advanced Scroll Animation */
+.scroll-animate {
+  opacity: 0;
+  transform: translateY(60px) scale(0.98);
+  filter: blur(8px) brightness(0.9);
+  transition: opacity 0.8s cubic-bezier(0.23, 1, 0.32, 1),
+              transform 0.8s cubic-bezier(0.23, 1, 0.32, 1),
+              filter 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.scroll-animate.in-view {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0) brightness(1);
+}
+/* Reduce footer icon image size */
+.footer-icon img {
+  width: 2rem !important;
+  height: 1.6rem !important;
+}
+/* Footer Styles - Portfolio Inspired */
+.agriai-footer {
+  width: 100vw;
+  background: #ffffff;
+  color: #236902;
+  text-align: center;
+  font-family: 'Times New Roman', Times, serif;
+  padding: 0.1rem 0 0.1rem 0;
+  margin: 0 auto;
+  position: static;
+  left: auto;
+  bottom: auto;
+  z-index: auto;
+}
+/* Green background utility for main pages */
+.min-h-screen {
+  min-height: 100vh;
+  max-width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.footer-content {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.footer-title {
+  font-size: 1.4rem;
+  font-weight: bold;
+  margin-bottom: -1rem;
+  color: #236902;
+  font-family: 'Times New Roman', Times, serif;
+}
+.footer-title1 {
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  color: #236902;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.footer-icons {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.footer-icon {
+  font-size: 0.5rem;
+  color: #236902;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.footer-icon:hover {
+  color: #ffd600;
+}
+
+.footer-copy {
+  font-size: 1rem;
+  margin-top: 0.3rem;
+  color: #236902;
+}
+/* Why Choose AgriAI Cards Section */
+.why-choose-agriai {
+  width: 100%;
+  background: linear-gradient(120deg, #6ee7f9 0%, #647dee 100%);
+  margin: 1rem 0 3rem 0;
+  padding: 1rem 0 4rem 0;
+  text-align: center;
+}
+
+.why-choose-title {
+  color: #236902;
+  font-size: 2rem;
+  font-weight: bold;
+  font-family: 'Times New Roman', Times, serif;
+  margin-bottom: 2.5rem;
+}
+
+.why-choose-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, auto);
+  gap: 2.5rem;
+  margin: 0 auto;
+  max-width: 1200px;
+}
+
+@media (max-width: 900px) {
+  .why-choose-cards {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, auto);
+  }
+}
+
+@media (max-width: 600px) {
+  .why-choose-cards {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(6, auto);
+  }
+}
+
+.why-card {
+  background: #fff;
+  border-radius: 1.2rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  padding: 1rem 1rem 1rem 1rem;
+  width: 320px;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  font-family: 'Times New Roman', Times, serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.why-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.why-card h3 {
+  color: #236902;
+  font-size: 1.35rem;
+  margin-bottom: 0.7rem;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.why-card p {
+  color: #222;
+  font-size: 1.05rem;
+  font-family: 'Times New Roman', Times, serif;
+}
+/* Why Choose AgriAI Section Styles */
+.why-choose-agriai {
+  width: 100%;
+  background: #fff;
+  color: #236902;
+  text-align: center;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 1.1rem;
+  padding: 1rem 2rem;
+  margin: 1rem 0 19rem 0;
+  box-shadow: 0 2px 14px rgba(0,0,0,0.08);
+  color: #236902;
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  font-family: 'Times New Roman', Times, serif;
+  text-align: center;
+}
+
+
+/* About AgriAI Section Styles */
+.about-agriai {
+  width: 100%;
+  background: #ffffff;
+  margin: 1rem auto 0 auto;
+  padding: 0rem 2rem 2rem 2rem;
+  text-align: center;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.about-agriai h2 {
+  color: #236902;
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  font-family: 'Times New Roman', Times, serif;
+  text-align: center;
+}
+
+.about-agriai p {
+  color: #000000;
+  font-size: 1.1rem;
+  line-height: 1.7;
+  font-family: 'Times New Roman', Times, serif;
+  text-align: center;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* Homepage Hero Section Styles */
+.homepage-hero {
+  min-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: linear-gradient(120deg,#53b635 100%);
+}
+
+.homepage-title {
+  font-size: 3rem;
+  font-weight: bold;
+  margin-bottom: 1.2rem;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.homepage-title-orange {
+  color: #ff6a00;
+}
+
+.homepage-title-yellow {
+  color: #ffd600;
+}
+
+.homepage-subtitle {
+  font-size: 1.3rem;
+  color: #fff;
+  margin-bottom: 2.5rem;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.homepage-getstarted {
+  padding: 0.6rem 1.2rem;
+  display: inline-block;
+  font-size: 1.05rem;
+  font-family: 'Times New Roman', Times, serif;
+  color: #fff;
+  background: transparent;
+  border: 3px solid #fff;
+  border-radius: 2rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-weight: bold;
+}
+
+.homepage-getstarted:hover {
+  background: #fff;
+  color: #2575fc;
+}
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Ensure Times New Roman is available as default for app pages */
+body, .App, .agriai-root {
+  font-family: 'Times New Roman', Times, serif;
+}
+
+/* Profile update specific utility (in case inline styles are overridden) */
+.profile-update-bg {
+  background: #236902;
+  color: #000;
+}

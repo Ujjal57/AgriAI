@@ -1,0 +1,50 @@
+
+.slideshow-container {
+  width: 100%;
+  height: 85vh;
+  margin: 0 auto;
+  position: relative;
+  /* keep container as a positioned block so absolutely positioned img can fill it */
+  display: block;
+  overflow: hidden;
+}
+
+.slideshow-image {
+  /* make the image absolutely fill the container and cover while keeping aspect ratio */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+  box-shadow: none;
+  display: block;
+  background: #000;
+  margin: 0 auto;
+}
+
+.slideshow-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.dot.active {
+  background: rgba(255,255,255,0.95);
+}
+
+

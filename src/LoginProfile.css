@@ -1,0 +1,259 @@
+/* LoginProfile.css - Styles for the login form matching the attached image */
+
+.login-bg {
+  min-height: 100vh;
+  background: #53b635 !important;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Times New Roman', Times, serif !important;
+  color: #eaebea !important;
+}
+
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  margin-top: 6rem;
+}
+
+.login-card {
+  display: flex;
+  background: #fff;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  overflow: hidden;
+  width: 800px;
+  max-width: 95vw;
+  min-height: 400px;
+  font-family: 'Times New Roman', Times, serif !important;
+  color: #000000 !important;
+}
+
+.slider-parent {
+  position: relative;
+  width: 800px;
+  height: 430px;
+  display: flex;
+  background: #fff;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  overflow: hidden;
+  max-width: 95vw;
+  min-height: 400px;
+}
+
+.hello-slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: #236902;
+  color: #fff !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2.5rem 1.5rem;
+  border-top-right-radius: 7rem;
+  border-bottom-right-radius: 7rem;
+  z-index: 2;
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.hello-slider-right {
+  transform: translateX(100%);
+}
+
+.login-left {
+  background: #236902;
+  color: #000000 !important;
+  font-family: 'Times New Roman', Times, serif !important;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2.5rem 1.5rem;
+  border-top-right-radius: 7rem;
+  border-bottom-right-radius: 7rem;
+}
+
+.login-welcome {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.1rem;
+  font-family: 'Times New Roman', Times, serif !important;
+  color: #ffffff !important;
+}
+
+.login-subtext1 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  font-family: 'Times New Roman', Times, serif !important;
+  color: #ffffff !important;
+}
+.login-subtext {
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  font-family: 'Times New Roman', Times, serif !important;
+  color: #ffffff !important;
+}
+
+.login-register-btn {
+  background: #ffffff;
+  color: #236902 !important;
+  border: 2px solid #ffffff;
+  padding: 0.5rem 2rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+.login-register-btn:hover {
+  background: #236902;
+  color: #fff !important;
+}
+
+.login-right {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: #fff;
+  color: #236902 !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2.5rem 1.5rem;
+  z-index: 1;
+}
+
+.login-title {
+  font-size: 1.7rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: #236902 !important;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+
+.login-form {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  font-family: 'Times New Roman', Times, serif !important;
+  color: #236902 !important;
+}
+
+.login-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.login-input {
+  width: 100%;
+  padding: 0.7rem 2.5rem 0.7rem 1rem;
+  border: none;
+  background: #e6f4ea;
+  font-size: 1rem;
+  outline: none;
+  font-family: 'Times New Roman', Times, serif !important;
+  color: #236902 !important;
+}
+
+/* Placeholder styling for all browsers */
+.login-input::placeholder {
+  color: #236902 !important;
+  font-family: 'Times New Roman', Times, serif !important;
+  opacity: 1;
+}
+.login-input::-webkit-input-placeholder {
+  color: #236902 !important;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+.login-input:-ms-input-placeholder {
+  color: #236902 !important;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+.login-input::-ms-input-placeholder {
+  color: #236902 !important;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+
+.login-icon {
+  position: absolute;
+  right: 1rem;
+  color: #236902 !important;
+  font-size: 1.1rem;
+}
+
+.login-forgot {
+  font-size: 0.95rem;
+  color: #236902 !important;
+  text-align: right;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+
+.login-btn {
+  background: #fff;
+  color:  #236902!important;
+  border: none;
+  padding: 0.7rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+.login-btn:hover {
+  background: #fff;
+  color: #53b635 !important;
+}
+
+.login-or {
+  text-align: center;
+  color: #236902 !important;
+  font-size: 0.95rem;
+  margin: 0.5rem 0;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+
+.login-socials {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+}
+
+.login-social-btn {
+  background: #e6f4ea;
+  border: none;
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 1.2rem;
+  color: #236902 !important;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+.login-social-btn:hover {
+  background: #fff;
+  color: #236902 !important;
+}
+
+@media (max-width: 700px) {
+  .login-card {
+    flex-direction: column;
+    min-width: 90vw;
+    min-height: 0;
+  }
+  .login-left, .login-right {
+    border-radius: 0;
+    padding: 2rem 1rem;
+  }
+}

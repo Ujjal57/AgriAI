@@ -1,0 +1,49 @@
+{
+  "crops": [
+    {
+      "created_at": "2025-10-20 17:27:57",
+      "crop_name": "nkkn",
+      "id": 4,
+      "price_per_kg": 45.0,
+      "quantity_kg": 661.0,
+      "region": "North",
+      "seller_name": "Ujjal Kumar Dey",
+      "seller_phone": "9019786930",
+      "state": "bb"
+    },
+    {
+      "created_at": "2025-10-20 17:26:17",
+      "crop_name": "MigrateCrop",
+      "id": 3,
+      "price_per_kg": 42.0,
+      "quantity_kg": 5.0,
+      "region": "North",
+      "seller_name": "MigrationTest",
+      "seller_phone": "9123456789",
+      "state": "Karnataka"
+    },
+    {
+      "created_at": "2025-10-20 11:38:06",
+      "crop_name": "TestCrop",
+      "id": 2,
+      "price_per_kg": 20.0,
+      "quantity_kg": 12.5,
+      "region": "North",
+      "seller_name": "Test Seller",
+      "seller_phone": "9998887777",
+      "state": "Punjab"
+    },
+    {
+      "created_at": "2025-10-20 10:02:12",
+      "crop_name": "Wheat",
+      "id": 1,
+      "price_per_kg": 22.5,
+      "quantity_kg": 1000.0,
+      "region": "North",
+      "seller_name": "Sample Seller",
+      "seller_phone": "9000000000",
+      "state": "Punjab"
+    }
+  ],
+  "ok": true
+}
