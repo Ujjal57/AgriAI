@@ -100,6 +100,18 @@
   padding: 0;
 }
 
+/* When buyer is logged in we center main nav links in the navbar */
+.navbar-links.centered {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+  pointer-events: auto;
+}
+
 .navbar-links li a {
   color: #319701;
   text-decoration: none;

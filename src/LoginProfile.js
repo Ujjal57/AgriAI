@@ -275,7 +275,8 @@ function LoginProfile() {
           role: signupData.role,
           region: signupData.region,
           state: signupData.state,
-          address: signupData.address
+            address: signupData.address,
+            language: siteLang
         })
       });
       const result = await res.json();

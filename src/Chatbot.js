@@ -4,36 +4,39 @@ import './Chatbot.css';
 
 const initialMessages = [];
 const base = process.env.REACT_APP_API_BASE || 'http://127.0.0.1:5000';
-
 function getTimeGreeting() {
   const now = new Date();
   const hour = now.getHours();
   if (hour < 5) return 'Good early morning';
-  if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   if (hour < 21) return 'Good evening';
   return 'Good night';
 }
-
 const translations = {
   en: {
     greeting: (time) => `${time} and Namaste — Welcome to AgriAI. I am your farming assistant. How can I help you today?`,
     demo: 'Sorry, I am a demo! (You can connect me to a real AI backend.)',
-    placeholder: 'Type your message...'
+    placeholder: 'Type your message...',
+    botName: 'Farmer',
+    botSubtitle: 'Your Farming Assistant'
   },
-  hi: {
-    greeting: () => 'नमस्ते — AgriAI में आपका स्वागत है। मैं आपका कृषि सहायक। मैं आपकी कैसे मदद कर सकता हूँ?',
-    demo: 'माफ़ कीजिये, मैं एक डेमो हूँ! (आप मुझे किसी वास्तविक AI backend से कनेक्ट कर सकते हैं.)',
-    placeholder: 'अपना संदेश टाइप करें...'
-  },
-  kn: {
-    greeting: () => 'ನಮಸ್ಕಾರ — AgriAIಗೆ ಸ್ವಾಗತ. ನಾನು ಕಿಸಾನ್, ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕರಾಗಿದ್ದೇನೆ. ನಾನು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?',
-    demo: 'ಕ್ಷಮಿಸಿ, ನಾನು ಒಂದು ಡೆಮೋ! (ನೀವು ನನ್ನನ್ನು ನಿಜವಾದ AI ಬ್ಯಾಕ್‌ಎಂಡ್‌ಗೆ ಸಂಪರ್ಕಿಸಬಹುದಾಗಿದೆ.)',
-    placeholder: 'ನಿಮ್ಮ ಸಂದೇಶವನ್ನು ಟೈಪ್ ಮಾಡಿ...'
-  }
-};
+    hi: {
+      greeting: () => 'नमस्ते — AgriAI में आपका स्वागत है। मैं आपका कृषि सहायक। मैं आपकी कैसे मदद कर सकता हूँ?',
+      demo: 'माफ़ कीजिये, मैं एक डेमो हूँ! (आप मुझे किसी वास्तविक AI backend से कनेक्ट कर सकते हैं.)',
+      placeholder: 'अपना संदेश टाइप करें...',
+        botName: 'किसान',
+      botSubtitle: 'आपका कृषि सहायक'
+    },
+    kn: {
+      greeting: () => 'ನಮಸ್ಕಾರ — AgriAIಗೆ ಸ್ವಾಗತ. ನಾನು ಕಿಸಾನ್, ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕರಾಗಿದ್ದೇನೆ. ನಾನು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?',
+      demo: 'ಕ್ಷಮಿಸಿ, ನಾನು ಒಂದು ಡೆಮೋ! (ನೀವು ನನ್ನನ್ನು ನಿಜವಾದ AI ಬ್ಯಾಕ್‌ಎಂಡ್‌ಗೆ ಸಂಪರ್ಕಿಸಬಹುದಾಗಿದೆ.)',
+      placeholder: 'ನಿಮ್ಮ ಸಂದೇಶವನ್ನು ಟೈಪ್ ಮಾಡಿ...',
+        botName: 'ರೈತ',
+      botSubtitle: 'ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕ'
+    }
+  };
 
-const langMap = { en: 'en-IN', hi: 'hi-IN', kn: 'kn-IN' };
+// language mapping removed (not required)
 
 const Chatbot = () => {
   const [open, setOpen] = useState(false);
@@ -43,7 +46,7 @@ const Chatbot = () => {
   const greetingShownRef = useRef(false);
   const [speakingIndex, setSpeakingIndex] = useState(null);
   const [listening, setListening] = useState(false);
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguage] = useState(() => localStorage.getItem('agri_lang') || 'en');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -66,7 +69,19 @@ const Chatbot = () => {
       setMessages([{ sender: 'bot', text: greetingText }]);
       greetingShownRef.current = true;
     }
-  }, [open, language]);
+  }, [open, language, messages.length]);
+
+  // Keep chatbot language in sync with navbar/site language changes
+  useEffect(() => {
+    const onLangChange = (e) => {
+      try {
+        const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en');
+        setLanguage(l);
+      } catch (err) {}
+    };
+    window.addEventListener('agri:lang:change', onLangChange);
+    return () => window.removeEventListener('agri:lang:change', onLangChange);
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -82,15 +97,10 @@ const Chatbot = () => {
     };
   }, [open]);
 
-  const detectLanguageFromText = (text) => {
-    const cleanText = text.replace(/[⚠️💬🌾🤖🪴]/g, '').replace(/AgriAI:/g, '').trim();
-    if (/[\u0900-\u097F]/.test(cleanText)) return 'hi-IN';
-    if (/[\u0C80-\u0CFF]/.test(cleanText)) return 'kn-IN';
-    return 'en-IN';
-  };
+  // language auto-detection removed; we use selected `language` preference instead
 
   // ✅ Modified Speak Function – removes unwanted symbols
-  const speakText = (text, idx) => {
+  const speakText = (text, idx, langPref) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       console.warn('TTS not supported in this browser.');
       return;
@@ -104,47 +114,100 @@ const Chatbot = () => {
     }
     try { synth.cancel(); } catch (e) {}
 
-    // Clean the text before speaking
-    const cleaned = text
-      .replace(/[⚠️💬🌾🤖🪴]/g, '')       // remove emojis/symbols
-      .replace(/[^a-zA-Z0-9\u0900-\u0CFF\s.,!?]/g, '')  // remove stray symbols
-      .trim();
+    // Speak the output text verbatim (exactly as returned by the AI),
+    // only normalize repeated whitespace so TTS doesn't stutter.
+    let toSpeak = text === null || text === undefined ? '' : String(text);
+    toSpeak = toSpeak.replace(/\s+/g, ' ').trim();
+    if (!toSpeak) return;
 
-    if (!cleaned) return;
+    // Prefer explicit language preference, fall back to selected language
+    const pref = (langPref || language || 'en').toLowerCase();
+    const mapped = pref === 'hi' ? 'hi-IN' : (pref === 'kn' ? 'kn-IN' : 'en-IN');
 
-    const detectedLang = detectLanguageFromText(cleaned);
-    const utter = new SpeechSynthesisUtterance(cleaned);
-    utter.lang = detectedLang;
+    // For Hindi and Kannada TTS, strip symbols so they are not read aloud
+    // Keep letters in the target script, digits, whitespace and basic sentence punctuation
+    if (pref === 'hi') {
+      try {
+        toSpeak = toSpeak.replace(/[⚠️💬🌾🤖🪴]/g, '');
+        toSpeak = toSpeak.replace(/[^0-9\u0900-\u097F\s.,!?]/g, '');
+        toSpeak = toSpeak.replace(/\s+/g, ' ').trim();
+        if (!toSpeak) return;
+      } catch (e) {}
+    }
+    // For Kannada: strip symbols and convert digits to Kannada words for accurate TTS
+    if (pref === 'kn') {
+      try {
+        toSpeak = toSpeak.replace(/[⚠️💬🌾🤖🪴]/g, '');
+        // keep Kannada letters, digits and basic punctuation
+        toSpeak = toSpeak.replace(/[^0-9\u0C80-\u0CFF\s.,!?]/g, '');
+
+        // Convert digit sequences to Kannada words (digit-by-digit)
+        const digitMap = {
+          '0': 'ಶೂನ್ಯ', '1': 'ಒಂದು', '2': 'ಎರಡು', '3': 'ಮೂರು', '4': 'ನಾಲ್ಕು',
+          '5': 'ಐದು', '6': 'ಆರು', '7': 'ಏಳು', '8': 'ಎಂಟು', '9': 'ಒಂಬತ್ತು'
+        };
+        toSpeak = toSpeak.replace(/\d+/g, function (m) {
+          return m.split('').map(d => digitMap[d] || d).join(' ');
+        });
+
+        toSpeak = toSpeak.replace(/\s+/g, ' ').trim();
+        if (!toSpeak) return;
+      } catch (e) {}
+    }
+
+    const utter = new SpeechSynthesisUtterance(toSpeak);
+    utter.lang = mapped;
     utter.rate = 1;
     utter.pitch = 1.1;
 
     const voices = synth.getVoices();
-    let femaleVoice = voices.find(voice => {
-      const voiceLang = voice.lang.toLowerCase();
-      const targetLang = detectedLang.toLowerCase();
-      const langMatch = voiceLang === targetLang || voiceLang.startsWith(targetLang.split('-')[0]);
-      if (!langMatch) return false;
-      const nameLower = voice.name.toLowerCase();
-      return (
-        nameLower.includes('female') ||
-        nameLower.includes('woman') ||
-        nameLower.includes('zira') ||
-        nameLower.includes('kiran') ||
-        nameLower.includes('priya') ||
-        nameLower.includes('ravi') ||
-        voice.gender === 'female'
-      );
-    });
+    try { console.debug('TTS voices available:', voices.map(v => ({name: v.name, lang: v.lang}))); } catch (e) {}
 
-    if (!femaleVoice) {
-      femaleVoice = voices.find(voice => {
-        const voiceLang = voice.lang.toLowerCase();
-        const targetLang = detectedLang.toLowerCase();
-        return voiceLang === targetLang || voiceLang.startsWith(targetLang.split('-')[0]);
+    const pickVoiceForLang = (voicesList, target) => {
+      const tgt = (target || '').toLowerCase();
+      // prefer voices that exactly match or start with the language code
+      let v = voicesList.find(voice => {
+        const lv = (voice.lang || '').toLowerCase();
+        return lv === tgt || lv.startsWith(tgt.split('-')[0]);
       });
+      if (v) return v;
+      // prefer a female-like voice in the target family
+      v = voicesList.find(voice => {
+        const lv = (voice.lang || '').toLowerCase();
+        if (!(lv === tgt || lv.startsWith(tgt.split('-')[0]))) return false;
+        const nameLower = (voice.name || '').toLowerCase();
+        return nameLower.includes('female') || nameLower.includes('woman') || nameLower.includes('zira') || nameLower.includes('kiran') || nameLower.includes('priya') || nameLower.includes('ravi') || voice.gender === 'female';
+      });
+      return v || null;
+    };
+
+    const selectBestVoice = () => {
+      // Try exact target, then fallbacks: for Kannada prefer Kannada -> Hindi -> English
+      let v = pickVoiceForLang(voices, mapped);
+      if (!v && mapped.startsWith('kn')) v = pickVoiceForLang(voices, 'hi-IN') || pickVoiceForLang(voices, 'en-IN');
+      if (!v && mapped.startsWith('hi')) v = pickVoiceForLang(voices, 'en-IN');
+      if (!v) v = voices[0] || null;
+      return v;
+    };
+
+    let chosen = null;
+    if (voices.length === 0) {
+      // voices may not be loaded yet; wait for onvoiceschanged
+      synth.onvoiceschanged = () => {
+        try {
+          const loaded = synth.getVoices();
+          const v = selectBestVoice(loaded);
+          if (v) utter.voice = v;
+          try { synth.speak(utter); } catch (e) { console.warn('TTS speak failed after voiceschanged', e); }
+        } catch (e) { console.warn('voiceschanged handler error', e); }
+      };
+      // do nothing further; emitter will speak when voices load
+      return;
+    } else {
+      chosen = selectBestVoice();
     }
 
-    if (femaleVoice) utter.voice = femaleVoice;
+    if (chosen) utter.voice = chosen;
     utter.onend = () => setSpeakingIndex(null);
     utter.onerror = () => setSpeakingIndex(null);
     setSpeakingIndex(idx);
@@ -211,15 +274,30 @@ const Chatbot = () => {
     console.log("📤 Sending payload:", JSON.stringify({ q: userInput, lang: language }));
 
     try {
-      const wantsDetail = /detail|explain|expand|more/i.test(userInput);
-      const query = wantsDetail
-        ? userInput
-        : `${userInput}. Give a short and clear answer (max 3 sentences).`;
+      // detect user intent for detailed or stepwise responses in multiple languages
+      const wantsDetailEn = /\b(detail|explain|expand|more|detailed|step|step-by-step)\b/i.test(userInput);
+      const wantsStepEn = /\b(step|stepwise|steps|how to|how do i)\b/i.test(userInput);
+      const wantsDetailHi = /(?:विस्तार|विस्तृत|बताइए|समझाइए|विस्तार से)/i.test(userInput);
+      const wantsStepHi = /(?:कदम|स्टेप|कैसे|कदम-दर-कदम|कदम दर कदम)/i.test(userInput);
+      const wantsDetailKn = /(?:ವಿವರ|ವಿಸ್ತಾರ|ವಿಸ್ತೃತ|ವಿವರವಾಗಿ)/i.test(userInput);
+      const wantsStepKn = /(?:ಹಂತ|ಹಂತಗಳ|ಹೆಚ್ಚಿನ ವಿವರ|ಸ್ಟೆಪ್|ಹಂತಗಳಾಗಿ)/i.test(userInput);
+
+      const langFlag = language || 'en';
+      const wantsDetail = (langFlag === 'hi' && (wantsDetailHi || wantsStepHi)) || (langFlag === 'kn' && (wantsDetailKn || wantsStepKn)) || (langFlag === 'en' && (wantsDetailEn || wantsStepEn));
+      const wantsStepwise = (langFlag === 'hi' && wantsStepHi) || (langFlag === 'kn' && wantsStepKn) || (langFlag === 'en' && wantsStepEn);
+
+      // Build user prompt; keep short if not requested
+      let userPrompt = userInput;
+      if (!wantsDetail && !wantsStepwise) {
+        userPrompt = `${userInput}. Give a short and clear answer (max 3 sentences).`;
+      }
+
+      const mode = wantsStepwise ? 'stepwise' : (wantsDetail ? 'detailed' : 'short');
 
       const res = await fetch(`${base}/ai/groq`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: query })
+        body: JSON.stringify({ q: userPrompt, lang: langFlag, mode })
       });
 
       const data = await res.json();
@@ -239,8 +317,9 @@ const Chatbot = () => {
     }
   };
 
-  const chatbotName = language === 'en' ? 'Farmer' : 'Kisaan';
-  const chatbotSubtitle = "Your Farming Assistant";
+  const t = translations[language] || translations.en;
+  const chatbotName = t.botName || 'Kisaan';
+  const chatbotSubtitle = t.botSubtitle || 'Your Farming Assistant';
 
   return (
     <>
@@ -279,7 +358,11 @@ const Chatbot = () => {
 
               <div className="chatbot-header-lang-wrapper">
                 <div className="chatbot-lang-select">
-                  <select value={language} onChange={e => setLanguage(e.target.value)} aria-label="Select language">
+                  <select value={language} onChange={e => {
+                    const l = e.target.value; setLanguage(l);
+                    try { localStorage.setItem('agri_lang', l); } catch (e) {}
+                    try { window.dispatchEvent(new CustomEvent('agri:lang:change', { detail: { lang: l } })); } catch (e) {}
+                  }} aria-label="Select language">
                     <option value="en">English</option>
                     <option value="hi">Hindi</option>
                     <option value="kn">Kannada</option>
@@ -321,9 +404,9 @@ const Chatbot = () => {
                       <span>{msg.text}</span>
                     </motion.div>
                     {msg.sender === 'bot' && (
-                      <button
+                        <button
                         className="speaker-inline-btn"
-                        onClick={() => speakText(msg.text, idx)}
+                        onClick={() => speakText(msg.text, idx, language)}
                         title={speakingIndex === idx ? 'Stop' : 'Listen'}
                       >
                         {speakingIndex === idx ? (

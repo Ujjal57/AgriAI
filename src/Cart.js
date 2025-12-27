@@ -1,6 +1,7 @@
 import React from 'react';
 import Navbar from './Navbar';
 import logo from './assets/logo192.png'; // ✅ Import logo image
+import { t } from './i18n';
 
 const Cart = () => {
   const [items, setItems] = React.useState([]);
@@ -20,6 +21,11 @@ const Cart = () => {
   };
 
   React.useEffect(() => {
+    const [siteLang, setSiteLang] = (function(){
+      // provide helper which persists across renders via closure
+      const lang = localStorage.getItem('agri_lang') || 'en';
+      return [lang, (v)=>{ try{ localStorage.setItem('agri_lang', v); }catch(e){} }];
+    })();
     // create a reusable loader so we can call it on mount and when cart updates
     const loadCart = async () => {
       try {
@@ -41,10 +47,12 @@ const Cart = () => {
                   id: r.crop_id || r.id,
                   cart_id: r.id,
                   crop_name: r.crop_name || '',
-                  quantity_kg: Number(r.quantity_kg || 0),
+                  // For buyer-backed rows: show available quantity from `total_quantity`
+                  // and use `quantity_kg` as the selected/order quantity stored in the row.
+                  quantity_kg: Number(r.total_quantity != null ? r.total_quantity : r.quantity_kg || 0),
                   price_per_kg: r.price_per_kg != null ? Number(r.price_per_kg) : 0,
                   image_url: r.image_path || r.image_url || '',
-                  order_quantity: 0,
+                  order_quantity: Number(r.quantity_kg || 0),
                   variety: r.variety || '',
                   user_type: r.user_type || userRole,
                   user_id: r.user_id || null,
@@ -92,6 +100,21 @@ const Cart = () => {
     return () => {
       try { window.removeEventListener('agriai:cart:update', handler); } catch (e) {}
     };
+  }, []);
+
+  // site language reactive helper: listen for global language changes
+  React.useEffect(() => {
+    const handler = (ev) => {
+      try {
+        const newLang = (localStorage.getItem('agri_lang') || 'en');
+        // force re-render by dispatching a small state change using window property (avoid adding state variable)
+        // We'll update a dummy custom event to notify components relying on translate calls.
+        // (Simpler: trigger a cart update so components re-render)
+        window.dispatchEvent(new Event('agriai:cart:update'));
+      } catch (e) {}
+    };
+    window.addEventListener('agri:lang:change', handler);
+    return () => { try { window.removeEventListener('agri:lang:change', handler); } catch (e) {} };
   }, []);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -220,27 +243,42 @@ const Cart = () => {
     const price = Number(item.price_per_kg || 0);
     const total = qty * price;
 
-    const cat = (item.category || item.cat || '').toString().toLowerCase();
+    const userRole = (typeof window !== 'undefined' && window.localStorage) ? (localStorage.getItem('agriai_role') || '') : '';
+    const cat = (item.category || item.cat || '') .toString().toLowerCase();
+
     let gstRate = 0;
     let commissionRate = 0;
 
-    if (cat.includes('masala') || cat.includes('masalas')) {
-      gstRate = 5; commissionRate = 15;
-    } else if (cat.includes('fruit') || cat.includes('vegetable')) {
-      gstRate = 0; commissionRate = 12;
-    } else if (cat.includes('crop') || cat.includes('crops')) {
-      gstRate = 0; commissionRate = 8;
+    // If signed in as buyer, do NOT apply item GST or platform commission in cart
+    if (userRole === 'buyer') {
+      gstRate = 0;
+      commissionRate = 0;
     } else {
-      const name = (item.crop_name || '').toString().toLowerCase();
-      if (name.includes('masala')) { gstRate = 5; commissionRate = 15; }
-      else if (name.includes('fruit') || name.includes('vegetable')) { gstRate = 0; commissionRate = 12; }
-      else { gstRate = 0; commissionRate = 8; }
+      // Farmer: apply platform fee rules
+      if (cat.includes('masala') || cat.includes('masalas') || (item.crop_name || '').toString().toLowerCase().includes('masala')) {
+        commissionRate = 12; // Masalas
+        gstRate = 5; // item GST for masalas
+      } else if (cat.includes('fruit') || cat.includes('vegetable') || (item.crop_name || '').toString().toLowerCase().includes('fruit') || (item.crop_name || '').toString().toLowerCase().includes('vegetable')) {
+        commissionRate = 9; // Fruits & Vegetables
+        gstRate = 0;
+      } else if (cat.includes('food') || cat.includes('food crop') || cat.includes('food crops') || cat.includes('crop') || cat.includes('crops')) {
+        commissionRate = 7; // Food Crops
+        gstRate = 0;
+      } else {
+        // default to food crops
+        commissionRate = 7;
+        gstRate = 0;
+      }
     }
 
-    const gstAmt = (total * gstRate) / 100;
-    const commissionAmt = (total * commissionRate) / 100;
+    // compute amounts
+    const itemGstAmt = (total * gstRate) / 100; // GST on item total
+    const commissionAmt = (total * commissionRate) / 100; // platform fee
+    const gstOnPlatformFee = commissionAmt * 0.18; // 18% GST on platform fee
 
-    return { gstRate, commissionRate, gstAmt, commissionAmt, lineTotal: total };
+    const gstAmt = itemGstAmt + gstOnPlatformFee;
+
+    return { gstRate, commissionRate, gstAmt, commissionAmt, gstOnPlatformFee, lineTotal: total };
   };
 
   const totals = items.reduce(
@@ -257,6 +295,7 @@ const Cart = () => {
   const grandTotal = totals.subtotal + totals.gst + totals.commission;
   const totalAvailableQty = items.reduce((s, it) => s + (Number(it.quantity_kg || 0) || 0), 0);
   const totalOrderedQty = items.reduce((s, it) => s + (Number(it.order_quantity || 0) || 0), 0);
+  const userRole = (typeof window !== 'undefined' && window.localStorage) ? (localStorage.getItem('agriai_role') || '') : '';
 
   // 🧾 Generate Invoice (with logo)
   const generateBill = () => {
@@ -265,6 +304,9 @@ const Cart = () => {
 
     // ✅ Embed the imported logo as a data URL (for display in print)
     const logoSrc = window.location.origin + logo;
+
+    const userRoleForBill = (typeof window !== 'undefined' && window.localStorage) ? (localStorage.getItem('agriai_role') || '') : '';
+    const includeFeesInBill = userRoleForBill !== 'buyer';
 
     let html = `
       <html>
@@ -310,9 +352,7 @@ const Cart = () => {
                 <th>Variety</th>
                 <th>Quantity (kg)</th>
                 <th>Price/kg</th>
-                <th>Subtotal</th>
-                <th>GST</th>
-                <th>Platform Fee</th>
+                ${includeFeesInBill ? '<th>GST</th><th>Platform Fee</th>' : ''}
                 <th>Total</th>
               </tr>
             </thead>
@@ -329,9 +369,7 @@ const Cart = () => {
           <td>${it.variety || ''}</td>
           <td>${it.order_quantity}</td>
           <td>₹${it.price_per_kg}</td>
-          <td>₹${lineTotal.toFixed(2)}</td>
-          <td>₹${gstAmt.toFixed(2)}</td>
-          <td>₹${commissionAmt.toFixed(2)}</td>
+          ${includeFeesInBill ? `<td>₹${gstAmt.toFixed(2)}</td><td>₹${commissionAmt.toFixed(2)}</td>` : ''}
           <td>₹${itemTotal.toFixed(2)}</td>
         </tr>
       `;
@@ -341,9 +379,7 @@ const Cart = () => {
         </tbody>
       </table>
       <h3 style="text-align:right;margin-top:10px;">
-        Subtotal: ₹${totals.subtotal.toFixed(2)}<br>
-        GST Total: ₹${totals.gst.toFixed(2)}<br>
-        Platform Fee: ₹${totals.commission.toFixed(2)}<br>
+        ${includeFeesInBill ? `GST Total: ₹${totals.gst.toFixed(2)}<br>Platform Fee: ₹${totals.commission.toFixed(2)}<br>` : ''}
         <span style="color:#236902;">Grand Total: ₹${grandTotal.toFixed(2)}</span>
       </h3>
 
@@ -365,13 +401,13 @@ const Cart = () => {
   const handleBuyNow = () => {
     setPaymentError('');
     if (!paymentMethod) {
-      setPaymentError('Please select a payment method (Online or Cash on Delivery).');
+      setPaymentError(t('selectPaymentMethod', (localStorage.getItem('agri_lang') || 'en')));
       return;
     }
 
     const invalid = items.some(it => !it.order_quantity || Number(it.order_quantity) <= 0);
     if (invalid) {
-      alert('Please edit each item and enter the order quantity before proceeding.');
+      alert(t('editEnterOrderQty', (localStorage.getItem('agri_lang') || 'en')));
       return;
     }
 
@@ -386,6 +422,7 @@ const Cart = () => {
           id: it.id,
           crop_name: it.crop_name,
           variety: it.variety || it.Variety || '',
+          farmer_id: it.user_id || it.seller_id || it._farmer_id || null,
           category: it.category || it.cat || '',
           price_per_kg: Number(it.price_per_kg || 0),
           order_quantity: Number(it.order_quantity || 0),
@@ -446,16 +483,52 @@ const Cart = () => {
 
       // Notify farmers of this purchase intent (best-effort)
       try {
+        const siteLang = localStorage.getItem('agri_lang') || 'en';
         fetch(`${apiBase}/notifications/purchase`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ buyer, items: orderItems.map(({ id, crop_name, order_quantity, variety }) => ({ id, crop_name, order_quantity, variety })) })
+          headers: { 'Content-Type': 'application/json', 'Agri-Lang': siteLang },
+          body: JSON.stringify({ invoice_id: invoiceId, lang: siteLang, buyer, items: orderItems.map(({ id, crop_name, order_quantity, variety, farmer_id }) => ({ id, crop_name, order_quantity, variety, farmer_id })) })
         }).catch(() => {});
+      
+        // Also add local notifications so farmers see the invoice/details immediately
+        try {
+          const localKey = 'agriai_notifications';
+          const rawLocal = localStorage.getItem(localKey);
+          const localArr = rawLocal ? JSON.parse(rawLocal) : [];
+          const byFarmer = {};
+          orderItems.forEach(it => {
+            const fid = it.farmer_id || 'unknown';
+            if (!byFarmer[fid]) byFarmer[fid] = [];
+            byFarmer[fid].push(it);
+          });
+          Object.keys(byFarmer).forEach((fid, idx) => {
+            const group = byFarmer[fid];
+            const qty = group.reduce((s, x) => s + (Number(x.order_quantity||0)||0), 0);
+            const subtotal = group.reduce((s, x) => s + (Number(x.subtotal||0)||0), 0);
+            const notif = {
+              id: `N${Date.now()}${idx}`,
+              invoice_id: invoiceId,
+              created_at: createdAt,
+              farmer_id: fid === 'unknown' ? null : fid,
+              buyer_name: buyer.name || '',
+              buyer_id: buyer.id || null,
+              items: group,
+              quantity_kg: qty,
+              _subtotal: subtotal,
+              crop_name: group[0] ? group[0].crop_name : 'Order'
+            };
+            localArr.unshift(notif);
+          });
+          try { localStorage.setItem(localKey, JSON.stringify(localArr)); } catch (e) {}
+          try { window.dispatchEvent(new Event('agriai:notifications:local:update')); } catch (e) {}
+        } catch (e) { /* ignore */ }
       } catch (e) { /* ignore */ }
 
       // Clear cart locally
       localStorage.setItem('agriai_cart_buyer', JSON.stringify([]));
       setItems([]);
+      // Clear server-side cart for buyer as well (if signed in)
+      try { clearCart(); } catch (e) { console.warn('clearCart call failed', e); }
 
       // Generate bill in a new window
       generateBill();
@@ -485,12 +558,12 @@ const Cart = () => {
       setTimeout(() => { window.location.href = '/history'; }, 100);
     } catch (e) {
       console.error('Failed to complete purchase:', e);
-      alert('Something went wrong while completing your purchase. Please try again.');
+      alert(t('purchaseFailed', (localStorage.getItem('agri_lang') || 'en')));
     }
   };
 
   return (
-    <div style={{ fontFamily: 'Times New Roman, serif' }}>
+    <div style={{ fontFamily: 'Times New Roman, serif', background: '#53b635', minHeight: '100vh' }}>
       <Navbar />
       <main style={{ padding: '6rem 1rem 2rem' }}>
         <div style={{
@@ -498,22 +571,21 @@ const Cart = () => {
           margin: '0 auto',
           background: '#fff',
           padding: '1.25rem',
-          borderRadius: 8,
           boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <h1 style={{ color: '#236902', margin: 0 }}>My Cart</h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 60, flexWrap: 'wrap', position: 'relative', padding: '2px 0 10px', minHeight: 64 }}>
+            <h1 style={{ color: '#236902', margin: 0, position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>{t('cartTitle', (localStorage.getItem('agri_lang') || 'en'))}</h1>
             {items.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={() => window.location.href = '/dashboard/farmer'} style={{ background: '#fff', border: '1px solid #dfeadf', color: '#236902', padding: '6px 10px', borderRadius: 6 }}>Continue Shopping</button>
-                <button onClick={clearCart} style={{ background: '#fff', border: '1px solid #f0dede', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>Clear Cart</button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto', zIndex: 2 }}>
+                <button onClick={() => window.location.href = '/dashboard/farmer'} style={{ background: '#fff', border: '1px solid #dfeadf', color: '#236902', padding: '6px 10px', borderRadius: 6 }}>{t('continueShopping', (localStorage.getItem('agri_lang') || 'en'))}</button>
+                <button onClick={clearCart} style={{ background: '#fff', border: '1px solid #f0dede', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>{t('clearCart', (localStorage.getItem('agri_lang') || 'en'))}</button>
               </div>
             )}
           </div>
           {items.length === 0 ? (
             <div style={{ textAlign: 'center', marginTop: 16 }}>
               <div style={{ fontSize: 52, lineHeight: 1 }}>🧺</div>
-              <p style={{ marginTop: 8 }}>Your cart is empty. Add listings from the Market.</p>
+              <p style={{ marginTop: 8 }}>{t('cartEmptyMessage', (localStorage.getItem('agri_lang') || 'en'))}</p>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -548,7 +620,7 @@ const Cart = () => {
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         ) : (
-                          <div style={{ color: '#999' }}>No image</div>
+                          <div style={{ color: '#999' }}>{t('noImage', (localStorage.getItem('agri_lang') || 'en'))}</div>
                         )}
                       </div>
                       <div style={{ flex: 1 }}>
@@ -564,21 +636,25 @@ const Cart = () => {
                           )}
                         </div>
                         <div style={{ marginTop: 6, fontWeight: 700 }}>
-                          {formatCurrency(it.price_per_kg)} / kg
+                          {formatCurrency(it.price_per_kg)} / {t('kg', (localStorage.getItem('agri_lang') || 'en'))}
                         </div>
                         <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <div style={{ fontSize: 13, color: '#555' }}>GST: {gstRate}% ({formatCurrency(gstAmt)})</div>
-                          <div style={{ fontSize: 13, color: '#555' }}>Platform: {formatCurrency(commissionAmt)}</div>
-                          <div style={{ fontSize: 13, color: '#000', fontWeight: 700 }}>Item Total: {formatCurrency(lineTotal + gstAmt + commissionAmt)}</div>
+                          {userRole !== 'buyer' && (
+                            <>
+                              <div style={{ fontSize: 13, color: '#555' }}>{t('tableGst', (localStorage.getItem('agri_lang') || 'en'))}: {gstRate}% ({formatCurrency(gstAmt)})</div>
+                              <div style={{ fontSize: 13, color: '#555' }}>{t('tablePlatformFee', (localStorage.getItem('agri_lang') || 'en'))}: {formatCurrency(commissionAmt)}</div>
+                            </>
+                          )}
+                          <div style={{ fontSize: 13, color: '#000', fontWeight: 700 }}>{t('itemTotalLabel', (localStorage.getItem('agri_lang') || 'en'))} {formatCurrency(lineTotal + gstAmt + commissionAmt)}</div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', minWidth: 220 }}>
                         <div style={{ fontWeight: 700 }}>
-                          Available: {Number(it.quantity_kg || 0).toLocaleString('en-IN')} kg
+                          {t('availableLabel', (localStorage.getItem('agri_lang') || 'en'))} {Number(it.quantity_kg || 0).toLocaleString('en-IN')} {t('kg', (localStorage.getItem('agri_lang') || 'en'))}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
                           <button onClick={() => updateQuantity(it.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>-</button>
-                          <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800 }}>{Number(it.order_quantity || 0).toLocaleString('en-IN')} kg</div>
+                          <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800 }}>{Number(it.order_quantity || 0).toLocaleString('en-IN')} {t('kg', (localStorage.getItem('agri_lang') || 'en'))}</div>
                           <button onClick={() => updateQuantity(it.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>+</button>
                         </div>
                         <div style={{
@@ -605,7 +681,7 @@ const Cart = () => {
                                   border: 'none',
                                   borderRadius: 6
                                 }}
-                              >Save</button>
+                              >{t('saveButton', (localStorage.getItem('agri_lang') || 'en'))}</button>
                               <button
                                 onClick={cancelEdit}
                                 style={{
@@ -614,7 +690,7 @@ const Cart = () => {
                                   border: 'none',
                                   borderRadius: 6
                                 }}
-                              >Cancel</button>
+                              >{t('cancelButton', (localStorage.getItem('agri_lang') || 'en'))}</button>
                             </>
                           ) : (
                             <>
@@ -627,7 +703,7 @@ const Cart = () => {
                                   border: 'none',
                                   borderRadius: 6
                                 }}
-                              >Edit</button>
+                              >{t('editButton', (localStorage.getItem('agri_lang') || 'en'))}</button>
                               <button
                                 onClick={() => removeItem(it.id)}
                                 style={{
@@ -637,7 +713,7 @@ const Cart = () => {
                                   padding: '6px 10px',
                                   borderRadius: 6
                                 }}
-                              >Remove</button>
+                              >{t('deleteButton', (localStorage.getItem('agri_lang') || 'en'))}</button>
                             </>
                           )}
                         </div>
@@ -651,20 +727,19 @@ const Cart = () => {
               {/* Summary Column */}
               <div style={{ flex: '0 0 320px', width: 320, position: 'sticky', top: 88, alignSelf: 'flex-start' }}>
                 <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
-                  <div style={{ fontWeight: 800, color: '#236902', marginBottom: 8 }}>Order Summary</div>
+                  <div style={{ fontWeight: 800, color: '#236902', marginBottom: 8 }}>{t('orderSummary', (localStorage.getItem('agri_lang') || 'en'))}</div>
                   <div style={{ display: 'grid', gap: 6, fontWeight: 700 }}>
-                    <div>Total items: {items.length}</div>
-                    <div>Total available: {Number(totalAvailableQty).toLocaleString('en-IN')} kg</div>
-                    <div>Total ordered: {Number(totalOrderedQty).toLocaleString('en-IN')} kg</div>
-                    <div>Subtotal: {formatCurrency(totals.subtotal)}</div>
-                    <div>GST Total: {formatCurrency(totals.gst)}</div>
-                    <div>Platform Fee: {formatCurrency(totals.commission)}</div>
-                    <div style={{ fontSize: 18, color: '#236902', marginTop: 6 }}>Grand Total: {formatCurrency(grandTotal)}</div>
+                    <div>{t('totalItemsLabel', (localStorage.getItem('agri_lang') || 'en'))} {items.length}</div>
+                    <div>{t('totalAvailableLabel', (localStorage.getItem('agri_lang') || 'en'))} {Number(totalAvailableQty).toLocaleString('en-IN')} {t('kg', (localStorage.getItem('agri_lang') || 'en'))}</div>
+                    <div>{t('totalOrderedLabel', (localStorage.getItem('agri_lang') || 'en'))} {Number(totalOrderedQty).toLocaleString('en-IN')} {t('kg', (localStorage.getItem('agri_lang') || 'en'))}</div>
+                    {userRole !== 'buyer' && <div>{t('gstTotalLabel', (localStorage.getItem('agri_lang') || 'en'))} {formatCurrency(totals.gst)}</div>}
+                    {userRole !== 'buyer' && <div>{t('platformFeeLabel', (localStorage.getItem('agri_lang') || 'en'))} {formatCurrency(totals.commission)}</div>}
+                    <div style={{ fontSize: 18, color: '#236902', marginTop: 6 }}>{t('grandTotalLabel', (localStorage.getItem('agri_lang') || 'en'))} {formatCurrency(grandTotal)}</div>
                 </div>
 
                   <div style={{ marginTop: 12 }}>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                      Payment method <span style={{ color: 'crimson' }}>*</span>
+                      {t('paymentMethod', (localStorage.getItem('agri_lang') || 'en'))} <span style={{ color: 'crimson' }}>*</span>
                     </div>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -674,7 +749,7 @@ const Cart = () => {
                         value="online"
                         checked={paymentMethod === 'online'}
                         onChange={() => { setPaymentMethod('online'); setPaymentError(''); }}
-                      /> Online
+                      /> {t('online', (localStorage.getItem('agri_lang') || 'en'))}
                     </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
@@ -683,7 +758,7 @@ const Cart = () => {
                         value="cod"
                         checked={paymentMethod === 'cod'}
                         onChange={() => { setPaymentMethod('cod'); setPaymentError(''); }}
-                      /> Cash on Delivery
+                      /> {t('cashOnDelivery', (localStorage.getItem('agri_lang') || 'en'))}
                     </label>
                     </div>
                     {paymentError && <div style={{ color: 'crimson', marginTop: 6 }}>{paymentError}</div>}

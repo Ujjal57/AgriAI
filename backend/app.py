@@ -17,6 +17,256 @@ import urllib.parse
 import uuid
 import mimetypes
 
+
+def send_purchase_email(to_email, buyer_name, items, total_price=None, lang='en', invoice_id=None):
+    """Best-effort send purchase confirmation to buyer in requested language.
+    lang: 'en'|'hi'|'kn' (defaults to 'en')
+    """
+    try:
+        smtp_user = os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
+        smtp_pass = os.environ.get('SMTP_PASSWORD', None)
+        if not smtp_pass:
+            # if no password configured, do not attempt to send
+            print('send_purchase_email: SMTP_PASSWORD not set; skipping email')
+            return False
+
+        # build simple aggregated item info (use first item for single-item fields)
+        lines = []
+        farmer_name = ''
+        for it in items:
+            try:
+                cname = it.get('crop_name') or ''
+                var = it.get('variety') or it.get('Variety') or ''
+                qty = it.get('order_quantity') or it.get('quantity') or it.get('quantity_kg') or ''
+                price = it.get('total') or (float(it.get('price_per_kg') or 0) * float(qty or 0))
+                lines.append((cname, var, qty, price, (it.get('farmer_name') or it.get('seller_name') or '')))
+                if not farmer_name and (it.get('farmer_name') or it.get('seller_name')):
+                    farmer_name = it.get('farmer_name') or it.get('seller_name')
+            except Exception:
+                continue
+
+        # aggregate totals if not provided
+        if total_price is None:
+            try:
+                total_price = sum([float(x[3] or 0) for x in lines])
+            except Exception:
+                total_price = 0
+
+        # If invoice_id provided, try to fetch authoritative order total from buyer_orders (MySQL/XAMPP)
+        try:
+            if invoice_id:
+                try:
+                    kind, dbconn = get_db_connection()
+                    if kind == 'mysql':
+                        cur = dbconn.cursor()
+                        try:
+                            cur.execute('SELECT SUM(total) FROM buyer_orders WHERE invoice_id=%s', (invoice_id,))
+                            rr = cur.fetchone()
+                            if rr and rr[0] is not None:
+                                total_price = float(rr[0])
+                        except Exception:
+                            pass
+                        try: cur.close()
+                        except Exception: pass
+                        try: dbconn.close()
+                        except Exception: pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Build multilingual message bodies (English, Hindi, Kannada)
+        en_blocks = []
+        for cname, var, qty, price, fname in lines:
+            en_blocks.append(f"* Crop Name: {cname}\n* Variety: {var}\n* Quantity Purchased: {qty}\n* Total Price: ₹{float(total_price or 0):.2f}\n")
+        en_body = f"Dear {buyer_name or ''},\n\nThank you for completing your purchase on AgriAI! 🌱\n\nWe are pleased to inform you that your purchase has been successfully confirmed. The selected crop has been purchased from the farmer, and the transaction details have been securely recorded on our platform.\n\nPurchase Details:\n\n" + ('\n'.join(en_blocks)) + f"\n\nYou can view and download the invoice from the “History” section of your account for complete transaction details.\n\nThe farmer has been notified about this purchase and will proceed with the next steps as per the agreed terms.\n\nIf you have any questions or need assistance, please feel free to reach out to us using the “Contact Us” section on the platform.\n\nThank you for choosing AgriAI – an AI-Enhanced Contract Farming and Farmer Advisory System. We appreciate your trust and look forward to supporting a smooth and successful transaction.\n\nWarm regards,\nThe AgriAI Team\nAI-Enhanced Contract Farming and Farmer Advisory System\n"
+
+        hi_blocks = []
+        for cname, var, qty, price, fname in lines:
+            hi_blocks.append(f"* फसल का नाम: {cname}\n* किस्म: {var}\n* खरीदी गई मात्रा: {qty}\n* कुल मूल्य: ₹{float(total_price or 0):.2f}\n")
+        hi_body = (
+            f"प्रिय {buyer_name or ''},\n\n"
+            "AgriAI पर अपनी खरीद पूरी करने के लिए धन्यवाद! 🌱\n\n"
+            "हमें यह बताते हुए खुशी हो रही है कि आपकी खरीद सफलतापूर्वक पुष्टि हो गई है। चयनित फसल किसान से खरीदी जा चुकी है और लेन-देन से संबंधित सभी विवरण हमारे प्लेटफ़ॉर्म पर सुरक्षित रूप से दर्ज कर लिए गए हैं।\n\n"
+            "खरीद विवरण:\n\n"
+            + ('\n'.join(hi_blocks))
+            + "\nआप अपने खाते के “History” (इतिहास) अनुभाग से पूरा लेन-देन विवरण देखने और इनवॉइस डाउनलोड करने में सक्षम हैं।\n\n"
+            "इस खरीद के बारे में किसान को सूचित कर दिया गया है और वह सहमत शर्तों के अनुसार आगे की प्रक्रिया करेगा।\n\n"
+            "यदि आपके कोई प्रश्न हों या आपको किसी सहायता की आवश्यकता हो, तो कृपया हमारे प्लेटफ़ॉर्म के “Contact Us” (संपर्क करें) अनुभाग के माध्यम से हमसे संपर्क करें।\n\n"
+            "AgriAI – एक एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली को चुनने के लिए धन्यवाद। हम आपके विश्वास की सराहना करते हैं और एक सुचारु तथा सफल लेन-देन में आपका सहयोग करने के लिए तत्पर हैं।\n\n"
+            "सादर,\nAgriAI टीम\nएआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली\n"
+        )
+
+        kn_blocks = []
+        for cname, var, qty, price, fname in lines:
+            kn_blocks.append(f"* ಬೆಳೆ ಹೆಸರು: {cname}\n* ಜಾತಿ: {var}\n* ಖರೀದಿಸಿದ ಪ್ರಮಾಣ: {qty}\n* ಒಟ್ಟು ಮೊತ್ತ: ₹{float(total_price or 0):.2f}\n")
+        kn_body = (
+            f"ಪ್ರಿಯ {buyer_name or ''},\n\n"
+            "AgriAI ನಲ್ಲಿ ನಿಮ್ಮ ಖರೀದಿಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು! 🌱\n\n"
+            "ನಿಮ್ಮ ಖರೀದಿ ಯಶಸ್ವಿಯಾಗಿ ದೃಢೀಕರಿಸಲಾಗಿದೆ ಎಂಬುದನ್ನು ತಿಳಿಸಲು ನಮಗೆ ಸಂತೋಷವಾಗಿದೆ. ಆಯ್ಕೆಮಾಡಿದ ಬೆಳೆ ರೈತನಿಂದ ಖರೀದಿಸಲ್ಪಟ್ಟಿದ್ದು, ವ್ಯವಹಾರದ ಎಲ್ಲಾ ವಿವರಗಳನ್ನು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ದಾಖಲಿಸಲಾಗಿದೆ.\n\n"
+            "ಖರೀದಿ ವಿವರಗಳು:\n\n"
+            + ('\n'.join(kn_blocks))
+            + "\nಪೂರ್ಣ ವ್ಯವಹಾರ ವಿವರಗಳಿಗಾಗಿ ನೀವು ನಿಮ್ಮ ಖಾತೆಯ “History” (ಇತಿಹಾಸ) ವಿಭಾಗದಿಂದ ಇನ್ವಾಯ್ಸ್ ಅನ್ನು ವೀಕ್ಷಿಸಿ ಹಾಗೂ ಡೌನ್‌ಲೋಡ್ ಮಾಡಬಹುದು.\n\n"
+            "ಈ ಖರೀದಿಯ ಕುರಿತು ರೈತನಿಗೆ ಈಗಾಗಲೇ ತಿಳಿಸಲಾಗಿದೆ ಮತ್ತು ಅವರು ಒಪ್ಪಿಗೆಯಾದ ಷರತ್ತುಗಳ ಪ್ರಕಾರ ಮುಂದಿನ ಕ್ರಮಗಳನ್ನು ಕೈಗೊಳ್ಳುತ್ತಾರೆ.\n\n"
+            "ನಿಮಗೆ ಯಾವುದೇ ಪ್ರಶ್ನೆಗಳಿದ್ದರೆ ಅಥವಾ ಸಹಾಯ ಬೇಕಾದರೆ, ದಯವಿಟ್ಟು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿರುವ “Contact Us” (ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ) ವಿಭಾಗದ ಮೂಲಕ ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ.\n\n"
+            "AgriAI – ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ ಅನ್ನು ಆಯ್ಕೆ ಮಾಡಿಕೊಂಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಸುಗಮ ಮತ್ತು ಯಶಸ್ವಿ ವ್ಯವಹಾರಕ್ಕೆ ನಿಮ್ಮನ್ನು ಬೆಂಬಲಿಸಲು ನಾವು ಎದುರುನೋಡುತ್ತಿದ್ದೇವೆ.\n\n"
+            "ಹೃತ್ಪೂರ್ವಕ ವಂದನೆಗಳೊಂದಿಗೆ,\nAgriAI ತಂಡ\nಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ\n"
+        )
+
+        # Compose EmailMessage choosing single-language body according to `lang`
+        msg = EmailMessage()
+        # localized subject
+        subj_map = {'en': 'Crop Purchase Confirmation – AgriAI', 'hi': 'फसल खरीद की पुष्टि – AgriAI', 'kn': 'ಬೆಳೆ ಖರೀದಿ ದೃಢೀಕರಣ – AgriAI'}
+        subject = subj_map.get((lang or 'en').lower()[:2], 'AgriAI Purchase Confirmation')
+        msg['Subject'] = subject
+        msg['From'] = f"AgriAI Team <{smtp_user}>"
+        msg['To'] = to_email
+        chosen = (lang or 'en').lower()[:2]
+        if chosen == 'hi':
+            body = hi_body
+        elif chosen == 'kn':
+            body = kn_body
+        else:
+            body = en_body
+        # No additional order-total append; each item block already shows the Order Total above.
+        msg.set_content(body)
+
+        # send via Gmail SMTP (STARTTLS)
+        context = ssl.create_default_context()
+        try:
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.ehlo()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+            print('send_purchase_email: sent to', to_email)
+            return True
+        except Exception as e:
+            print('send_purchase_email error:', e)
+            return False
+    except Exception as e:
+        print('send_purchase_email outer error:', e)
+        return False
+
+
+def send_farmer_purchase_email(to_email, farmer_name, crop_name, variety, quantity, total_price, buyer_name, lang='en'):
+    """Send purchase notification email to farmer in their language (en/hi/kn)."""
+    try:
+        smtp_user = os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
+        smtp_pass = os.environ.get('SMTP_PASSWORD', None)
+        if not smtp_pass:
+            print('send_farmer_purchase_email: SMTP_PASSWORD not set; skipping email')
+            return False
+
+        # Build localized bodies exactly as requested
+        en_body = f"""
+Dear {farmer_name},
+
+Congratulations! 🎉
+
+We are pleased to inform you that your crop has been successfully purchased by a buyer on AgriAI. The transaction has been confirmed, and the details have been securely recorded on our platform.
+
+**Sale Details:**
+
+* Crop Name: {crop_name}
+* Variety: {variety}
+* Quantity Sold: {quantity}
+* Buyer Name: {buyer_name}
+
+The buyer has completed the purchase, and you may now proceed with the next steps as per the agreed terms. You can view complete transaction details and records from the “Notification” section of your account.
+
+If any coordination, verification, or support is required, our team will reach out to you.
+For any questions or assistance, please feel free to reach out to us using the “Contact Us” section on the platform.
+
+Thank you for choosing AgriAI – an AI-Enhanced Contract Farming and Farmer Advisory System. We are proud to support you in connecting with buyers and ensuring smooth, transparent transactions.
+
+Warm regards,
+The AgriAI Team
+AI-Enhanced Contract Farming and Farmer Advisory System
+"""
+
+        hi_body = f"""
+प्रिय {farmer_name},
+
+बधाई हो! 🎉
+
+हमें यह बताते हुए खुशी हो रही है कि आपकी फसल को AgriAI पर एक खरीदार द्वारा सफलतापूर्वक खरीदा गया है। लेन-देन की पुष्टि हो चुकी है और उससे संबंधित सभी विवरण हमारे प्लेटफ़ॉर्म पर सुरक्षित रूप से दर्ज कर लिए गए हैं।
+
+**बिक्री विवरण:**
+
+* फसल का नाम: {crop_name}
+* किस्म: {variety}
+* बेची गई मात्रा: {quantity}
+* खरीदार का नाम: {buyer_name}
+
+खरीदार द्वारा खरीद पूरी कर ली गई है और अब आप सहमत शर्तों के अनुसार अगले चरणों की प्रक्रिया शुरू कर सकते हैं। आप अपने खाते के “Notification” (सूचनाएँ) अनुभाग से पूरा लेन-देन विवरण और रिकॉर्ड देख सकते हैं।
+
+यदि किसी प्रकार के समन्वय, सत्यापन या सहायता की आवश्यकता होगी, तो हमारी टीम आपसे संपर्क करेगी।
+किसी भी प्रश्न या सहायता के लिए, कृपया हमारे प्लेटफ़ॉर्म के “Contact Us” (संपर्क करें) अनुभाग के माध्यम से हमसे संपर्क करें।
+
+AgriAI – एक एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली को चुनने के लिए धन्यवाद। हमें आपको खरीदारों से जोड़ने और सुचारु व पारदर्शी लेन-देन सुनिश्चित करने में सहयोग करने पर गर्व है।
+
+सादर,
+AgriAI टीम
+एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली
+"""
+
+        kn_body = f"""
+ಪ್ರಿಯ {farmer_name},
+
+ಅಭಿನಂದನೆಗಳು! 🎉
+
+ನಿಮ್ಮ ಬೆಳೆಯನ್ನು AgriAI ನಲ್ಲಿ ಖರೀದಿದಾರರು ಯಶಸ್ವಿಯಾಗಿ ಖರೀದಿಸಿದ್ದಾರೆ ಎಂಬುದನ್ನು ತಿಳಿಸಲು ನಮಗೆ ಸಂತೋಷವಾಗಿದೆ. ಈ ವ್ಯವಹಾರವನ್ನು ದೃಢೀಕರಿಸಲಾಗಿದ್ದು, ಸಂಬಂಧಿಸಿದ ಎಲ್ಲಾ ವಿವರಗಳನ್ನು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ದಾಖಲಿಸಲಾಗಿದೆ.
+
+**ಮಾರಾಟದ ವಿವರಗಳು:**
+
+* ಬೆಳೆ ಹೆಸರು: {crop_name}
+* ಜಾತಿ: {variety}
+* ಮಾರಾಟವಾದ ಪ್ರಮಾಣ: {quantity}
+* ಖರೀದಿದಾರರ ಹೆಸರು: {buyer_name}
+
+ಖರೀದಿದಾರರು ಖರೀದಿಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಿದ್ದು, ನೀವು ಒಪ್ಪಿಗೆಯಾದ ಷರತ್ತುಗಳ ಪ್ರಕಾರ ಮುಂದಿನ ಕ್ರಮಗಳನ್ನು ಕೈಗೊಳ್ಳಬಹುದು. ನಿಮ್ಮ ಖಾತೆಯ "Notification" (ಅಧಿಸೂಚನೆಗಳು) ವಿಭಾಗದಿಂದ ಸಂಪೂರ್ಣ ವ್ಯವಹಾರ ವಿವರಗಳು ಮತ್ತು ದಾಖಲೆಗಳನ್ನು ವೀಕ್ಷಿಸಬಹುದು.
+ಯಾವುದೇ ಸಮನ್ವಯ, ಪರಿಶೀಲನೆ ಅಥವಾ ಸಹಾಯ ಅಗತ್ಯವಿದ್ದರೆ, ನಮ್ಮ ತಂಡವು ನಿಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸುತ್ತದೆ.
+ಯಾವುದೇ ಪ್ರಶ್ನೆಗಳು ಅಥವಾ ಸಹಾಯಕ್ಕಾಗಿ, ದಯವಿಟ್ಟು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಇರುವ “Contact Us” (ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ) ವಿಭಾಗದ ಮೂಲಕ ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ.
+
+AgriAI – ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ ಅನ್ನು ಆಯ್ಕೆ ಮಾಡಿಕೊಂಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಖರೀದಿದಾರರೊಂದಿಗೆ ನಿಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ ಸುಗಮ ಹಾಗೂ ಪಾರದರ್ಶಕ ವ್ಯವಹಾರಗಳನ್ನು ಖಚಿತಪಡಿಸಲು ನಾವು ಹೆಮ್ಮೆಪಡುತ್ತೇವೆ.
+ಹೃತ್ಪೂರ್ವಕ ವಂದನೆಗಳೊಂದಿಗೆ,
+AgriAI ತಂಡ
+ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ
+"""
+
+        subj_map = {'en': 'Your Crop Has Been Successfully Sold on AgriAI', 'hi': 'AgriAI पर आपकी फसल सफलतापूर्वक खरीदी गई है', 'kn': 'AgriAI ನಲ್ಲಿ ನಿಮ್ಮ ಬೆಳೆ ಯಶಸ್ವಿಯಾಗಿ ಖರೀದಿಸಲಾಗಿದೆ'}
+        chosen = (lang or 'en').lower()[:2]
+        subject = subj_map.get(chosen, subj_map['en'])
+
+        msg = EmailMessage()
+        msg['Subject'] = subject
+        msg['From'] = smtp_user
+        msg['To'] = to_email
+        if chosen == 'hi':
+            msg.set_content(hi_body)
+        elif chosen == 'kn':
+            msg.set_content(kn_body)
+        else:
+            msg.set_content(en_body)
+
+        context = ssl.create_default_context()
+        try:
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.ehlo()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+            return True
+        except Exception as e:
+            print('send_farmer_purchase_email error:', e)
+            return False
+    except Exception as e:
+        print('send_farmer_purchase_email outer error:', e)
+        return False
+
 # Try to import a MySQL driver (mysql-connector or pymysql). If not available, fall back to sqlite.
 try:
     import mysql.connector as mysql
@@ -99,7 +349,8 @@ def ensure_user_tables():
                     "password_hash VARCHAR(255) NOT NULL,"
                     "region VARCHAR(50) DEFAULT NULL,"
                     "state VARCHAR(100) DEFAULT NULL," 
-                    "address VARCHAR(255) DEFAULT NULL," 
+                    "address VARCHAR(255) DEFAULT NULL,"
+                    "lang VARCHAR(10) DEFAULT 'en',"
                     "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
                     "PRIMARY KEY (id)"
                     ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
@@ -119,6 +370,7 @@ def ensure_user_tables():
                         region TEXT,
                         state TEXT,
                         address TEXT,
+                        lang TEXT DEFAULT 'en',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
@@ -274,15 +526,15 @@ def identifier_exists(phone=None, aadhar=None, email=None):
     return False
 
 
-def insert_user(role, name, phone, email, aadhar, password_hash, region=None, state=None, address=None):
-    """Insert user into the given role table including optional region/state."""
+def insert_user(role, name, phone, email, aadhar, password_hash, region=None, state=None, address=None, lang=None):
+    """Insert user into the given role table including optional region/state and language."""
     kind, conn = get_db_connection()
     try:
         cur = get_cursor(kind, conn)
         if kind == 'mysql':
             cur.execute(
-                f"INSERT INTO {role} (name, phone, email, aadhar, password_hash, region, state, address) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (name, phone, email if email else None, aadhar, password_hash, region if region else None, state if state else None, address if address else None)
+                f"INSERT INTO {role} (name, phone, email, aadhar, password_hash, region, state, address, lang) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (name, phone, email if email else None, aadhar, password_hash, region if region else None, state if state else None, address if address else None, lang if lang else None)
             )
             conn.commit()
             try:
@@ -291,8 +543,8 @@ def insert_user(role, name, phone, email, aadhar, password_hash, region=None, st
                 pass
         else:
             cur.execute(
-                f"INSERT INTO {role} (name, phone, email, aadhar, password_hash, region, state, address) VALUES (?,?,?,?,?,?,?,?)",
-                (name, phone, email if email else None, aadhar, password_hash, region if region else None, state if state else None, address if address else None)
+                f"INSERT INTO {role} (name, phone, email, aadhar, password_hash, region, state, address, lang) VALUES (?,?,?,?,?,?,?,?,?)",
+                (name, phone, email if email else None, aadhar, password_hash, region if region else None, state if state else None, address if address else None, lang if lang else None)
             )
             conn.commit()
             try:
@@ -317,7 +569,7 @@ def insert_user(role, name, phone, email, aadhar, password_hash, region=None, st
 
 def find_user_by_email(email):
     """Return (table_name, row) for a user matching email or (None, None).
-    Row columns: id,name,phone,email,aadhar,password_hash,region,state,address
+    Row columns: id,name,phone,email,aadhar,password_hash,region,state,address,lang
     """
     kind, conn = get_db_connection()
     try:
@@ -325,9 +577,9 @@ def find_user_by_email(email):
         for tbl in ('farmer', 'buyer', 'admin'):
             try:
                 if kind == 'mysql':
-                    cur.execute(f"SELECT id,name,phone,email,aadhar,password_hash,region,state,address FROM {tbl} WHERE email=%s LIMIT 1", (email,))
+                    cur.execute(f"SELECT id,name,phone,email,aadhar,password_hash,region,state,address,lang FROM {tbl} WHERE email=%s LIMIT 1", (email,))
                 else:
-                    cur.execute(f"SELECT id,name,phone,email,aadhar,password_hash,region,state,address FROM {tbl} WHERE email=? LIMIT 1", (email,))
+                    cur.execute(f"SELECT id,name,phone,email,aadhar,password_hash,region,state,address,lang FROM {tbl} WHERE email=? LIMIT 1", (email,))
                 row = cur.fetchone()
                 if row:
                     try:
@@ -358,7 +610,7 @@ def find_user_by_email(email):
 
 def find_user_by_phone(phone):
     """Return (table_name, row) for a user matching phone or (None, None).
-    Row columns: id,name,phone,email,aadhar,password_hash,region,state,address
+    Row columns: id,name,phone,email,aadhar,password_hash,region,state,address,lang
     """
     kind, conn = get_db_connection()
     try:
@@ -366,9 +618,9 @@ def find_user_by_phone(phone):
         for tbl in ('farmer', 'buyer', 'admin'):
             try:
                 if kind == 'mysql':
-                    cur.execute(f"SELECT id,name,phone,email,aadhar,password_hash,region,state,address FROM {tbl} WHERE phone=%s LIMIT 1", (phone,))
+                    cur.execute(f"SELECT id,name,phone,email,aadhar,password_hash,region,state,address,lang FROM {tbl} WHERE phone=%s LIMIT 1", (phone,))
                 else:
-                    cur.execute(f"SELECT id,name,phone,email,aadhar,password_hash,region,state,address FROM {tbl} WHERE phone=? LIMIT 1", (phone,))
+                    cur.execute(f"SELECT id,name,phone,email,aadhar,password_hash,region,state,address,lang FROM {tbl} WHERE phone=? LIMIT 1", (phone,))
                 row = cur.fetchone()
                 if row:
                     try:
@@ -461,15 +713,15 @@ def identifier_exists_excluding(current_tbl, current_id, phone=None, aadhar=None
     return False
 
 
-def update_user(role, user_id, name, phone, email, aadhar, region=None, state=None, address=None):
-    """Update a user's basic fields by id including optional region/state."""
+def update_user(role, user_id, name, phone, email, aadhar, region=None, state=None, address=None, lang=None):
+    """Update a user's basic fields by id including optional region/state and language."""
     kind, conn = get_db_connection()
     try:
         cur = get_cursor(kind, conn)
         if kind == 'mysql':
-            cur.execute(f"UPDATE {role} SET name=%s, phone=%s, email=%s, aadhar=%s, region=%s, state=%s, address=%s WHERE id=%s", (name, phone, email if email else None, aadhar, region if region else None, state if state else None, address if address else None, user_id))
+            cur.execute(f"UPDATE {role} SET name=%s, phone=%s, email=%s, aadhar=%s, region=%s, state=%s, address=%s, lang=%s WHERE id=%s", (name, phone, email if email else None, aadhar, region if region else None, state if state else None, address if address else None, lang if lang else None, user_id))
         else:
-            cur.execute(f"UPDATE {role} SET name=?, phone=?, email=?, aadhar=?, region=?, state=?, address=? WHERE id=?", (name, phone, email if email else None, aadhar, region if region else None, state if state else None, address if address else None, user_id))
+            cur.execute(f"UPDATE {role} SET name=?, phone=?, email=?, aadhar=?, region=?, state=?, address=?, lang=? WHERE id=?", (name, phone, email if email else None, aadhar, region if region else None, state if state else None, address if address else None, lang if lang else None, user_id))
         conn.commit()
         try:
             cur.close()
@@ -645,6 +897,23 @@ def register():
     region = (data.get('region') or '').strip().lower()
     state = (data.get('state') or '').strip()
     address = (data.get('address') or '').strip()
+    # optional language preference from client (form sends 'lang')
+    lang = (data.get('lang') or data.get('language') or '').strip().lower() or None
+    if lang and lang not in ('en', 'hi', 'kn'):
+        lang = None
+    # optional language preference from client (form sends 'lang')
+    lang = (data.get('lang') or data.get('language') or '').strip().lower() or None
+    if lang and lang not in ('en', 'hi', 'kn'):
+        lang = None
+    lang = (data.get('lang') or data.get('language') or '').strip().lower() or None
+    if lang and lang not in ('en', 'hi', 'kn'):
+        lang = None
+    lang = (data.get('lang') or data.get('language') or '').strip().lower() or None
+    if lang and lang not in ('en', 'hi', 'kn'):
+        lang = None
+    lang = (data.get('lang') or data.get('language') or '').strip().lower() or None
+    if lang and lang not in ('en', 'hi', 'kn'):
+        lang = None
 
     # Required fields check: name, phone, password, role, aadhar and address are required. Email is optional.
     if not name or not phone or not password or not role or not aadhar or not address:
@@ -703,24 +972,31 @@ def register():
         return jsonify({'error': 'invalid_state'}), 400
 
     # Insert the user into the role-specific table, including region/state/address
-    ok = insert_user(role_map[role], name, phone, email, aadhar, hashed, region=region or None, state=state or None, address=address or None)
+    ok = insert_user(role_map[role], name, phone, email, aadhar, hashed, region=region or None, state=state or None, address=address or None, lang=lang)
     if not ok:
         return jsonify({'error': 'failed_to_store'}), 500
 
-    # Send welcome email if provided
+    # Send welcome email if provided, using selected language when available
     if email:
         try:
+            # Determine requested language from client (data comes from JSON body)
+            language_raw = (data.get('language') or data.get('lang') or '').strip().lower()
+            if language_raw in ('hi', 'hindi'):
+                lang_code = 'hi'
+            elif language_raw in ('kn', 'kannada'):
+                lang_code = 'kn'
+            else:
+                lang_code = 'en'
+
             # Use agriai.team7@gmail.com as sender; credentials should be in env vars
             smtp_user = os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
             smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
             smtp_port = int(os.environ.get('SMTP_PORT', '587'))
             smtp_password = os.environ.get('SMTP_PASSWORD')
             if smtp_password:
-                # send using configured SMTP
-                send_welcome_email(email, name, '', smtp_host=smtp_host, smtp_port=smtp_port, smtp_user=smtp_user, smtp_password=smtp_password)
-            else:
-                # try to send with default Gmail settings if possible (may fail without password)
-                send_welcome_email(email, name, '', smtp_host=smtp_host, smtp_port=smtp_port, smtp_user=smtp_user, smtp_password=smtp_password)
+                smtp_password = smtp_password.replace(' ', '').strip()
+            # Send using configured SMTP (if credentials missing, send_welcome_email will skip safely)
+            send_welcome_email(email, name, '', lang=lang_code, smtp_host=smtp_host, smtp_port=smtp_port, smtp_user=smtp_user, smtp_password=smtp_password)
         except Exception as e:
             print('Welcome email send error:', e)
 
@@ -781,6 +1057,7 @@ def ensure_mysql_schema():
                         "password_hash VARCHAR(255) NOT NULL,"
                         "region VARCHAR(50) DEFAULT NULL,"
                         "state VARCHAR(100) DEFAULT NULL,"
+                        "lang VARCHAR(10) DEFAULT 'en',"
                         "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
                         "PRIMARY KEY (id)"
                         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
@@ -801,6 +1078,7 @@ def ensure_mysql_schema():
                             password_hash TEXT NOT NULL,
                             region TEXT,
                             state TEXT,
+                            lang TEXT,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     ''')
@@ -870,22 +1148,22 @@ def ensure_mysql_schema():
         return False
 
 
-    def insert_user(role, name, phone, email, aadhar, password_hash, region=None, state=None):
-        """Insert user into the given role table including region/state."""
+    def insert_user(role, name, phone, email, aadhar, password_hash, region=None, state=None, address=None, lang=None):
+        """Insert user into the given role table including region/state/address/lang."""
         kind, conn = get_db_connection()
         try:
             cur = conn.cursor()
             if kind == 'mysql':
                 cur.execute(
-                    f"INSERT INTO {role} (name, phone, email, aadhar, password_hash, region, state) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                    (name, phone, email if email else None, aadhar, password_hash, region if region else None, state if state else None)
+                    f"INSERT INTO {role} (name, phone, email, aadhar, password_hash, region, state, address, lang) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (name, phone, email if email else None, aadhar, password_hash, region if region else None, state if state else None, address if address else None, lang if lang else None)
                 )
                 conn.commit()
                 cur.close()
             else:
                 cur.execute(
-                    f"INSERT INTO {role} (name, phone, email, aadhar, password_hash, region, state) VALUES (?,?,?,?,?,?,?)",
-                    (name, phone, email if email else None, aadhar, password_hash, region if region else None, state if state else None)
+                    f"INSERT INTO {role} (name, phone, email, aadhar, password_hash, region, state, address, lang) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (name, phone, email if email else None, aadhar, password_hash, region if region else None, state if state else None, address if address else None, lang if lang else None)
                 )
                 conn.commit()
                 cur.close()
@@ -1080,85 +1358,94 @@ def send_thankyou_email(to_email, first, last, language='en'):
         print('send_thankyou_email error:', e)
 
 
-def send_buyer_deal_uploaded_email(to_email, buyer_name, crop_name, smtp_host=None, smtp_port=None, smtp_user=None, smtp_password=None):
-    """Send a buyer-specific notification email when a deal is uploaded.
-    Uses agriai.team7@gmail.com by default and supports env SMTP_* overrides.
+def send_buyer_deal_uploaded_email(to_email, buyer_name, crop_name, variety=None, quantity_kg=None, delivery_date=None, lang='en', smtp_host=None, smtp_port=None, smtp_user=None, smtp_password=None):
+    """Send a localized buyer notification when a deal is uploaded.
+    Parameters: to_email, buyer_name, crop_name, optional variety, quantity_kg, delivery_date (YYYY-MM-DD), and lang ('en'|'hi'|'kn').
+    Uses SMTP env overrides if explicit smtp params are not provided.
     """
+    # Normalize language
+    code = (lang or 'en').strip().lower()
+    if code not in ('en', 'hi', 'kn'):
+        code = 'en'
+
     def _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr):
         import smtplib, ssl
-        subj = "Your deal was uploaded successfully – Agri AI"
-        # Bilingual concise content tailored for buyer deal upload
-        body = (
-            f"Dear {buyer_name},\n\n"
-            "Namaste! 🙏\n\n"
-            f"We are happy to inform you that your deal for {crop_name} has been successfully uploaded on Agri AI.\n"
-            "Your crop is now visible to interested farmers across the platform.\n\n"
-            "Thank you for using Agri AI — empowering farmers with digital innovation for a smarter future in agriculture!\n\n"
-            "If you have any questions or need help, feel free to reach us at agriai.team7@gmail.com.\n\n"
-            "Warm regards,\n"
-            "Team Agri AI\n"
-            "AI-Enhanced Contract Farming and Farmer Advisory System🌱\n"
-        )
+        display_name = (buyer_name or '').strip() or 'Friend'
+
+        # Prepare human-friendly values
+        var_txt = variety or 'N/A'
+        qty_txt = str(quantity_kg) if quantity_kg is not None and quantity_kg != '' else 'N/A'
+        dd_txt = delivery_date or 'N/A'
+
+        if code == 'hi':
+            subj = 'आपका डील सफलतापूर्वक अपलोड हो गया — AgriAI'
+            body = (
+                f"प्रिय {display_name},\n\n"
+                "AgriAI में आपका डील सफलतापूर्वक अपलोड कर दिया गया है। हमारी प्रणाली अब विवरणों को संसाधित कर रही है और यह संबंधित किसानों के लिए दिखाई देगा।\n\n"
+                "डील हाइलाइट्स:\n\n"
+                f"- फ़सल का नाम: {crop_name}\n"
+                f"- किस्म/विविधता: {var_txt}\n"
+                f"- मात्रा: {qty_txt}\n"
+                f"- डिलीवरी तिथि: {dd_txt}\n\n"
+                "यदि किसी सत्यापन या स्पष्टीकरण की आवश्यकता होगी, तो हमारी टीम शीघ्र ही आपसे संपर्क करेगी। किसी भी प्रश्न या सहायता के लिए कृपया प्लेटफ़ॉर्म पर “Contact Us” (संपर्क करें) सेक्शन का उपयोग करें।\n\n"
+                "धन्यवाद,\n"
+                "AgriAI टीम\n"
+                "एआई-समर्थित अनुबंध खेती और किसान परामर्श प्रणाली\n"
+            )
+        elif code == 'kn':
+            subj = 'ನಿಮ್ಮ ಡೀಲ್ ಯಶಸ್ವಿಯಾಗಿ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ — AgriAI'
+            body = (
+                f"ಪ್ರಿಯ {display_name},\n\n"
+                "ನಿಮ್ಮ ಡೀಲ್ AgriAI ನಲ್ಲಿ ಯಶಸ್ವಿಯಾಗಿ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ. ನಮ್ಮ ವ್ಯವಸ್ಥೆ ಈಗ ವಿವರಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತಿದೆ ಮತ್ತು ಇದು ಸಂಬಂಧಿತ ರೈತರಿಗೆ ಲಭ್ಯವಾಗಲಿದ್ದು ಪರಿಶೀಲನೆಗೆ ನೀಡಲ್ಪಡುತ್ತದೆ.\n\n"
+                "ಡೀಲ್ ಹೈಲೈಟ್ಸ್:\n\n"
+                f"- ಬೆಳೆ ಹೆಸರು: {crop_name}\n"
+                f"- ವೈವಿಧ್ಯ/ವೆರೈಟಿ: {var_txt}\n"
+                f"- ಪ್ರಮಾಣ: {qty_txt}\n"
+                f"- ವಿತರಣಾ ದಿನಾಂಕ: {dd_txt}\n\n"
+                "ಯಾವುದೇ ಪ್ರಶ್ನೆಗಳು, ನವೀಕರಣಗಳು ಅಥವಾ ಸಹಾಯಕ್ಕಾಗಿ, ದಯವಿಟ್ಟು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಇರುವ “Contact Us” (ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ) ವಿಭಾಗದ ಮೂಲಕ ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ.\n\n"
+                "AgriAI – ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ ಅನ್ನು ಆಯ್ಕೆ ಮಾಡಿಕೊಂಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ನಂಬಿಕೆಯನ್ನು ನಾವು ಮೌಲ್ಯಮಾಪನ ಮಾಡುತ್ತೇವೆ ಮತ್ತು ಯಶಸ್ವಿ ಸಹಕಾರವನ್ನು ಸುಗಮಗೊಳಿಸಲು ಎದುರುನೋಡುತ್ತಿದ್ದೇವೆ.\n\n"
+                "ಧನ್ಯವಾದಗಳು,\n"
+                "AgriAI ತಂಡ\n"
+                "ಎಐ-ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ\n"
+            )
+        else:
+            subj = 'Your deal was uploaded successfully — AgriAI'
+            body = (
+                f"Dear {display_name},\n\n"
+                "Thank you for submitting your deal on AgriAI!\n\n"
+                "We are pleased to inform you that your deal has been successfully uploaded on our platform. Our system is now processing the details, and the deal will be made available to relevant farmers for review and engagement.\n\n"
+                "Deal Highlights:\n\n"
+                f"- Crop Name: {crop_name}\n"
+                f"- Variety: {var_txt}\n"
+                f"- Quantity: {qty_txt}\n"
+                f"- Delivery Date: {dd_txt}\n\n"
+                "If any additional verification or clarification is required, our team will contact you shortly. For any questions, updates, or support, please feel free to reach out to us using the 'Contact Us' section on the platform.\n\n"
+                "Thank you for choosing AgriAI — an AI-Enhanced Contract Farming and Farmer Advisory System. We appreciate your trust and look forward to facilitating a successful collaboration.\n\n"
+                "Warm regards,\n"
+                "AgriAI Team\n"
+                "AI-Enhanced Contract Farming and Farmer Advisory System\n"
+            )
+
         msg = EmailMessage()
         msg['Subject'] = subj
         msg['From'] = from_addr
         msg['To'] = to_email
         msg.set_content(body)
         context = ssl.create_default_context()
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            if smtp_password:
-                server.login(smtp_user, smtp_password)
-            server.send_message(msg)
-
-    try:
-        smtp_host = smtp_host or os.environ.get('SMTP_HOST', 'smtp.gmail.com')
-        smtp_port = int(smtp_port or os.environ.get('SMTP_PORT', '587'))
-        smtp_user = smtp_user or os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
-        smtp_password = smtp_password or os.environ.get('SMTP_PASSWORD')
-        if smtp_password:
-            smtp_password = smtp_password.replace(' ', '')
-        from_addr = os.environ.get('SMTP_FROM', smtp_user)
-        _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr)
-    except Exception as e:
-        print('send_buyer_deal_uploaded_email error:', e)
-
-def send_welcome_email(to_email, first, last, smtp_host=None, smtp_port=None, smtp_user=None, smtp_password=None):
-    """Send the welcome email to a newly registered user. Supports explicit SMTP params."""
-    def _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr):
-        if not smtp_host or not smtp_user or not smtp_password:
-            print('SMTP not configured for welcome email; skipping send.')
-            return
-        subj = 'Welcome to AgriAI!🌱'
-        display_name = first.strip() or 'Friend'
-        support_email = os.environ.get('SUPPORT_EMAIL', smtp_user)
-        support_phone = os.environ.get('SUPPORT_PHONE', '')
-        body = (
-            f"Dear {display_name},\n\n"
-            "Welcome to AgriAI — we’re delighted to have you with us! 🌾\n\n"
-            "AgriAI is dedicated to empowering farmers through smart, data-driven solutions for better productivity and market access. You’re now part of a growing community working towards a smarter and more sustainable agriculture future.\n\n"
-            "Stay tuned for updates, tips, and new features designed to make farming easier and more efficient.\n\n"
-            "If you have any questions, feel free to contact us anytime at "
-            f"{support_email}{(' / ' + support_phone) if support_phone else ''}.\n\n"
-            "Warm regards,\n"
-            "The AgriAI Team\n"
-            "AI-Enhanced Contract Farming and Farmer Advisory System\n"
-        )
-        msg = EmailMessage()
-        msg['Subject'] = subj
-        msg['From'] = from_addr
-        msg['To'] = to_email
-        msg.set_content(body)
-        context = ssl.create_default_context()
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            try:
-                server.starttls(context=context)
-            except Exception:
-                pass
-            server.login(smtp_user, smtp_password)
-            server.send_message(msg)
+        try:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                try:
+                    server.starttls(context=context)
+                except Exception:
+                    pass
+                if smtp_password:
+                    try:
+                        server.login(smtp_user, smtp_password)
+                    except Exception:
+                        pass
+                server.send_message(msg)
+        except Exception as e:
+            print('SMTP send error in send_buyer_deal_uploaded_email:', e)
 
     try:
         smtp_host = smtp_host or os.environ.get('SMTP_HOST', 'smtp.gmail.com')
@@ -1170,30 +1457,67 @@ def send_welcome_email(to_email, first, last, smtp_host=None, smtp_port=None, sm
         from_addr = os.environ.get('SMTP_FROM', smtp_user)
         _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr)
     except Exception as e:
-        print('send_welcome_email error:', e)
+        print('send_buyer_deal_uploaded_email error:', e)
 
-
-def send_crop_uploaded_email(to_email, farmer_name, crop_name, smtp_host=None, smtp_port=None, smtp_user=None, smtp_password=None):
-    """Send the crop-uploaded notification email using configured SMTP settings.
-    This uses the provided bilingual template and defaults to agriai.team7@gmail.com as sender.
-    """
-    def _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr):
+def send_welcome_email(to_email, first, last, lang='en', smtp_host=None, smtp_port=None, smtp_user=None, smtp_password=None):
+    """Send the welcome email to a newly registered user. Supports explicit SMTP params and
+    localized templates for English (`en`), Hindi (`hi`) and Kannada (`kn`)."""
+    def _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr, lang):
         if not smtp_host or not smtp_user or not smtp_password or not to_email:
-            print('SMTP or recipient missing; skipping crop uploaded email send.')
+            print('SMTP not configured for welcome email; skipping send.')
             return
-        subj = 'New Crop Uploaded Successfully on Agri AI🌾'
-        # Exact body template provided by user
-        body = (
-            f"Dear {farmer_name or ''},\n\n"
-            "Namaste! 🙏\n\n"
-            f"We are happy to inform you that your crop {crop_name} has been successfully uploaded on Agri AI.\n"
-            "Your crop is now visible to interested buyers across the platform.\n\n"
-            "Thank you for using Agri AI — empowering farmers with digital innovation for a smarter future in agriculture!\n\n"
-            "If you have any questions or need help, feel free to reach us at agriai.team7@gmail.com.\n\n"
-            "Warm regards,\n"
-            "Team Agri AI\n"
-            "AI-Enhanced Contract Farming and Farmer Advisory System🌱\n"
-        )
+        display_name = first.strip() or 'Friend'
+        # Normalize language code
+        code = (lang or 'en').strip().lower()
+        if code in ('hi', 'hindi'):
+            subj = 'AgriAI में आपका स्वागत है! 🌱'
+            body = (
+                f"प्रिय {display_name},\n\n"
+                "**AgriAI** में आपका स्वागत है! 🌱\n\n"
+                "हमारे प्लेटफ़ॉर्म पर पंजीकरण करने के लिए धन्यवाद। हमें खुशी है कि आप AgriAI – एक एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली से जुड़ गए हैं, जिसे किसानों को स्मार्ट, डेटा-आधारित सुझाव और सेवाएँ प्रदान करने के लिए डिज़ाइन किया गया है।\n\n"
+                "आपका खाता सफलतापूर्वक बना दिया गया है। अब आप लॉग इन कर सकते हैं और निम्नलिखित सुविधाओं का लाभ उठा सकते हैं:\n\n"
+                "- एआई-आधारित किसान परामर्श सेवाएँ\n"
+                "- अनुबंध खेती सहायता\n"
+                "- फसल और बाज़ार संबंधी जानकारी\n"
+                "- व्यक्तिगत कृषि सिफारिशें\n\n"
+                "यदि आपके कोई प्रश्न हों या आपको किसी सहायता की आवश्यकता हो, तो कृपया हमारे प्लेटफ़ॉर्म के “Contact Us” (संपर्क करें) अनुभाग के माध्यम से हमसे संपर्क करें। हमारी टीम आपकी सहायता करने में प्रसन्न होगी।\n\n"
+                "सादर,\n"
+                "AgriAI टीम\n"
+                "एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली\n"
+            )
+        elif code in ('kn', 'kannada'):
+            subj = 'AgriAI ಗೆ ಸ್ವಾಗತ! 🌱'
+            body = (
+                f"ಪ್ರಿಯ {display_name},\n\n"
+                "**AgriAI** ಗೆ ಸ್ವಾಗತ! 🌱\n\n"
+                "ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ನೋಂದಣಿ ಮಾಡಿಕೊಂಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. AgriAI – ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ ಯ ಭಾಗವಾಗಿರುವುದಕ್ಕೆ ನಾವು ಸಂತೋಷಪಡುತ್ತೇವೆ. ಇದು ರೈತರಿಗೆ ಬುದ್ಧಿವಂತ, ಡೇಟಾ ಆಧಾರಿತ ಮಾಹಿತಿ ಮತ್ತು ಸೇವೆಗಳನ್ನು ಒದಗಿಸಲು ವಿನ್ಯಾಸಗೊಳಿಸಲಾಗಿದೆ.\n\n"
+                "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ರಚಿಸಲಾಗಿದೆ. ಈಗ ನೀವು ಲಾಗಿನ್ ಮಾಡಿ ಕೆಳಗಿನ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಅನ್ವೇಷಿಸಬಹುದು:\n\n"
+                "- ಎಐ ಆಧಾರಿತ ರೈತ ಸಲಹಾ ಸೇವೆಗಳು\n"
+                "- ಒಪ್ಪಂದ ಕೃಷಿ ಸಹಾಯ\n"
+                "- ಬೆಳೆ ಮತ್ತು ಮಾರುಕಟ್ಟೆ ಮಾಹಿತಿಗಳು\n"
+                "- ವೈಯಕ್ತಿಕ ಕೃಷಿ ಶಿಫಾರಸುಗಳು\n\n"
+                "ಯಾವುದಾದರೂ ಪ್ರಶ್ನೆಗಳಿದ್ದರೆ ಅಥವಾ ಸಹಾಯ ಬೇಕಾದರೆ, ದಯವಿಟ್ಟು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿರುವ “Contact Us” (ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ) ವಿಭಾಗದ ಮೂಲಕ ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ. ನಮ್ಮ ತಂಡವು ನಿಮಗೆ ಸಹಾಯ ಮಾಡಲು ಸಂತೋಷಪಡುತ್ತದೆ.\n\n"
+                "ಧನ್ಯವಾದಗಳು,\n"
+                "AgriAI ತಂಡ\n"
+                "ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ\n"
+            )
+        else:
+            subj = 'Welcome to AgriAI! 🌱'
+            body = (
+                f"Dear {display_name},\n\n"
+                "Welcome to AgriAI! 🌱\n\n"
+                "Thank you for registering on our platform. We are excited to have you join AgriAI — an AI-Enhanced Contract Farming and Farmer Advisory System, designed to support farmers with smart, data-driven insights and services.\n\n"
+                "Your account has been successfully created. You can now log in and start exploring features such as:\n\n"
+                "- AI-based farmer advisory services\n"
+                "- Contract farming assistance\n"
+                "- Crop and market insights\n"
+                "- Personalized agricultural recommendations\n\n"
+                "If you have any questions or need assistance, please feel free to reach out to us using the ‘Contact Us’ section on our platform. Our team will be happy to assist you.\n\n"
+                "Warm regards,\n"
+                "The AgriAI Team\n"
+                "AI-Enhanced Contract Farming and Farmer Advisory System\n"
+            )
+
         msg = EmailMessage()
         msg['Subject'] = subj
         msg['From'] = from_addr
@@ -1206,7 +1530,119 @@ def send_crop_uploaded_email(to_email, farmer_name, crop_name, smtp_host=None, s
                     server.starttls(context=context)
                 except Exception:
                     pass
-                server.login(smtp_user, smtp_password)
+                if smtp_password:
+                    server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        except Exception as e:
+            print('send_welcome_email send error:', e)
+
+    try:
+        smtp_host = smtp_host or os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+        smtp_port = int(smtp_port or os.environ.get('SMTP_PORT', '587'))
+        smtp_user = smtp_user or os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
+        smtp_password = smtp_password or os.environ.get('SMTP_PASSWORD')
+        if smtp_password:
+            smtp_password = smtp_password.replace(' ', '').strip()
+        from_addr = os.environ.get('SMTP_FROM', smtp_user)
+        _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr, lang)
+    except Exception as e:
+        print('send_welcome_email error:', e)
+
+
+def send_crop_uploaded_email(to_email, farmer_name, crop_name, variety=None, quantity=None, price=None, lang='en', smtp_host=None, smtp_port=None, smtp_user=None, smtp_password=None):
+    """Send the crop-uploaded notification email using configured SMTP settings.
+    Supports English ('en'), Hindi ('hi') and Kannada ('kn'). Defaults to agriai.team7@gmail.com as sender.
+    """
+    def _send(smtp_host, smtp_port, smtp_user, smtp_password, from_addr):
+        if not smtp_host or not smtp_user or not smtp_password or not to_email:
+            print('SMTP or recipient missing; skipping crop uploaded email send.')
+            return
+        # build localized subject and body
+        subject_en = 'Your Crop Has Been Successfully Uploaded on AgriAI🌾'
+        # English body (user-provided expanded template)
+        body_en = (
+            f"Dear {farmer_name or ''},\n\n"
+            "Thank you for uploading your crop details on AgriAI! 🌾\n\n"
+            "We are pleased to inform you that your crop has been successfully uploaded on our platform. The details are now under review and will be made visible to interested buyers for discovery and engagement.\n\n"
+            "Crop Details:\n\n"
+            f"- Crop Name: {crop_name or ''}\n"
+            f"- Variety: {variety or 'N/A'}\n"
+            f"- Quantity Available: {quantity or 'N/A'}\n"
+            f"- Price: {price or 'N/A'}\n\n"
+            "Once buyers show interest or place orders, you will be notified immediately through the platform.\n\n"
+            "If any additional verification or clarification is required, our team will contact you shortly.\n"
+            "For any questions or assistance, please feel free to reach out to us using the “Contact Us” section on the platform.\n\n"
+            "Thank you for choosing AgriAI – an AI-Enhanced Contract Farming and Farmer Advisory System. We look forward to supporting you in connecting with buyers and achieving better outcomes for your produce.\n\n"
+            "Warm regards,\n"
+            "The AgriAI Team\n"
+            "AI-Enhanced Contract Farming and Farmer Advisory System\n"
+        )
+
+        # Hindi translation
+        body_hi = (
+            f"प्रिय {farmer_name or ''},\n\n"
+            "AgriAI पर अपनी फसल का विवरण अपलोड करने के लिए धन्यवाद!🌾\n\n"
+            "हमें यह बताते हुए खुशी हो रही है कि आपकी फसल हमारे प्लेटफ़ॉर्म पर सफलतापूर्वक अपलोड कर दी गई है। विवरण अब समीक्षा के अंतर्गत हैं और इच्छुक खरीदारों के लिए खोज और सहभागिता हेतु उपलब्ध कराए जाएंगे।\n\n"
+            "फसल विवरण:\n\n"
+            f"- फसल का नाम: {crop_name or ''}\n"
+            f"- वेरायटी: {variety or 'N/A'}\n"
+            f"- उपलब्ध मात्रा: {quantity or 'N/A'}\n"
+            f"- मूल्य: {price or 'N/A'}\n\n"
+            "जब भी कोई खरीदार रुचि दिखाता है या ऑर्डर देता है, तो आपको प्लेटफ़ॉर्म के माध्यम से तुरंत सूचित किया जाएगा।\n\n"
+            "यदि किसी अतिरिक्त सत्यापन या स्पष्टीकरण की आवश्यकता होगी, तो हमारी टीम शीघ्र ही आपसे संपर्क करेगी।\n\n"
+            "किसी भी प्रश्न या सहायता के लिए, कृपया हमारे प्लेटफ़ॉर्म के “Contact Us” (संपर्क करें) अनुभाग के माध्यम से हमसे संपर्क करें।\n\n"
+            "AgriAI – एक एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली को चुनने के लिए धन्यवाद। हम आपको खरीदारों से जोड़ने और आपकी उपज के लिए बेहतर परिणाम प्राप्त करने में सहयोग करने के लिए तत्पर हैं।\n\n"
+            "AgriAI चुनने के लिए धन्यवाद।\n\n"
+            "सादर,\n"
+            "AgriAI टीम\n"
+            "एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली\n"
+        )
+
+        # Kannada translation
+        body_kn = (
+            f"ಪ್ರಿಯ {farmer_name or ''},\n\n"
+            "AgriAI ನಲ್ಲಿ ನಿಮ್ಮ ಬೆಳೆ ವಿವರಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು!🌾\n\n"
+            "ನಿಮ್ಮ ಬೆಳೆಯನ್ನು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಯಶಸ್ವಿಯಾಗಿ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ ಎಂಬುದನ್ನು ತಿಳಿಸಲು ನಮಗೆ ಸಂತೋಷವಾಗಿದೆ. ಈ ವಿವರಗಳು ಈಗ ಪರಿಶೀಲನೆಯಲ್ಲಿದ್ದು, ಆಸಕ್ತ ಖರೀದಿದಾರರಿಗೆ ಹುಡುಕಾಟ ಮತ್ತು ಭಾಗವಹಿಸುವಿಕೆಗೆ ಲಭ್ಯವಾಗುತ್ತವೆ.\n\n"
+            "ಬೆಳೆ ವಿವರಗಳು:\n\n"
+            f"- ಬೆಳೆ ಹೆಸರು: {crop_name or ''}\n"
+            f"- ವೈವಿಧ್ಯ: {variety or 'N/A'}\n"
+            f"- ಲಭ್ಯ ಪ್ರಮಾಣ: {quantity or 'N/A'}\n"
+            f"- ಬೆಲೆ: {price or 'N/A'}\n\n"
+            "ಯಾವುದೇ ಖರೀದಿದಾರರು ಆಸಕ್ತಿ ತೋರಿಸಿದಾಗ ಅಥವಾ ಆರ್ಡರ್ ನೀಡಿದಾಗ, ನಿಮಗೆ ವೇದಿಕೆಯ ಮೂಲಕ ತಕ್ಷಣ ಮಾಹಿತಿ ನೀಡಲಾಗುತ್ತದೆ.\n\n"
+            "ಯಾವುದೇ ಹೆಚ್ಚುವರಿ ಪರಿಶೀಲನೆ ಅಥವಾ ಸ್ಪಷ್ಟೀಕರಣ ಅಗತ್ಯವಿದ್ದರೆ, ನಮ್ಮ ತಂಡವು ಶೀಘ್ರದಲ್ಲೇ ನಿಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸುತ್ತದೆ.\n"
+            "ಯಾವುದೇ ಪ್ರಶ್ನೆಗಳು ಅಥವಾ ಸಹಾಯಕ್ಕಾಗಿ, ದಯವಿಟ್ಟು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಇರುವ “Contact Us” (ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ) ವಿಭಾಗದ ಮೂಲಕ ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ.\n\n"
+            "AgriAI – ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ ಅನ್ನು ಆಯ್ಕೆ ಮಾಡಿಕೊಂಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಖರೀದಿದಾರರೊಂದಿಗೆ ನಿಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ ನಿಮ್ಮ ಉತ್ಪನ್ನಕ್ಕೆ ಉತ್ತಮ ಫಲಿತಾಂಶಗಳನ್ನು ಸಾಧಿಸಲು ನಾವು ನಿಮ್ಮನ್ನು ಬೆಂಬಲಿಸಲು ಎದುರುನೋಡುತ್ತಿದ್ದೇವೆ.\n\n"
+            "ಹೃತ್ಪೂರ್ವಕ ವಂದನೆಗಳೊಂದಿಗೆ,\n"
+            "AgriAI ತಂಡ\n"
+            "ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ\n"
+        )
+
+        subject_hi = 'AgriAI पर आपकी फसल सफलतापूर्वक अपलोड की गई🌾'
+        subject_kn = 'AgriAI ನಲ್ಲಿ ನಿಮ್ಮ ಬೆಳೆ ಯಶಸ್ವಿಯಾಗಿ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ🌾'
+        subj = subject_en
+        if lang and str(lang).lower().startswith('hi'):
+            subj = subject_hi
+            body = body_hi
+        elif lang and str(lang).lower().startswith('kn'):
+            subj = subject_kn
+            body = body_kn
+        else:
+            body = body_en
+
+        msg = EmailMessage()
+        msg['Subject'] = subj
+        msg['From'] = from_addr
+        msg['To'] = to_email
+        msg.set_content(body)
+        context = ssl.create_default_context()
+        try:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+                try:
+                    server.starttls(context=context)
+                except Exception:
+                    pass
+                if smtp_password:
+                    server.login(smtp_user, smtp_password)
                 server.send_message(msg)
         except Exception as e:
             print('send_crop_uploaded_email error:', e)
@@ -1546,6 +1982,7 @@ def ensure_cart_table():
                 "id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
                 "user_type VARCHAR(16) NOT NULL DEFAULT 'buyer',"
                 "user_id BIGINT NULL,"
+                "buyer_id BIGINT NULL,"
                 "user_phone VARCHAR(32) DEFAULT NULL,"
                 "crop_id BIGINT NULL,"
                 "crop_name VARCHAR(255) DEFAULT NULL,"
@@ -1573,6 +2010,7 @@ def ensure_cart_table():
                 "id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
                 "user_type VARCHAR(16) NOT NULL DEFAULT 'buyer',"
                 "user_id BIGINT NULL,"
+                "buyer_id BIGINT NULL,"
                 "user_phone VARCHAR(32) DEFAULT NULL,"
                 "crop_id BIGINT NULL,"
                 "crop_name VARCHAR(255) DEFAULT NULL,"
@@ -1580,6 +2018,8 @@ def ensure_cart_table():
                 "quantity_kg DECIMAL(12,3) NOT NULL DEFAULT 0.000,"
                 "price_per_kg DECIMAL(12,3) DEFAULT NULL,"
                 "image_path VARCHAR(255) DEFAULT NULL,"
+                "total_quantity DECIMAL(12,3) DEFAULT 0.000,"
+                "total_price DECIMAL(12,2) DEFAULT 0.00,"
                 "added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
                 "PRIMARY KEY (id)"
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
@@ -1591,6 +2031,52 @@ def ensure_cart_table():
             except Exception: pass
         except Exception as e:
             print('ensure_cart_b_table mysql error:', e)
+        # Ensure cart has total_quantity and total_price columns (idempotent on MySQL 8+)
+        try:
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            try:
+                    cur.execute("ALTER TABLE cart ADD COLUMN IF NOT EXISTS total_quantity DECIMAL(12,3) DEFAULT 0.000")
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE cart ADD COLUMN IF NOT EXISTS total_price DECIMAL(12,2) DEFAULT 0.00")
+            except Exception:
+                pass
+                try:
+                    cur.execute("ALTER TABLE cart ADD COLUMN IF NOT EXISTS buyer_id BIGINT NULL")
+                except Exception:
+                    pass
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception:
+            pass
+
+        # Migrate any non-farmer rows from `cart` into `cart_b` (idempotent)
+        try:
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            try:
+                # Insert non-farmer rows into cart_b using available fields; compute totals if missing
+                cur.execute(
+                    "INSERT IGNORE INTO cart_b (user_type,user_id,user_phone,crop_id,crop_name,variety,quantity_kg,price_per_kg,image_path,total_quantity,total_price,added_at) "
+                    "SELECT user_type,user_id,user_phone,crop_id,crop_name,variety,quantity_kg,price_per_kg,image_path,COALESCE(total_quantity,quantity_kg),COALESCE(total_price,ROUND(quantity_kg*COALESCE(price_per_kg,0),2)),added_at "
+                    "FROM cart WHERE user_type IS NULL OR LOWER(user_type) != 'farmer'"
+                )
+                cur.execute("DELETE FROM cart WHERE user_type IS NULL OR LOWER(user_type) != 'farmer'")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception:
+            pass
     else:
         try:
             db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
@@ -1601,6 +2087,7 @@ def ensure_cart_table():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_type TEXT NOT NULL DEFAULT 'buyer',
                     user_id INTEGER,
+                    buyer_id INTEGER,
                     user_phone TEXT,
                     crop_id INTEGER,
                     crop_name TEXT,
@@ -1628,6 +2115,7 @@ def ensure_cart_table():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_type TEXT NOT NULL DEFAULT 'buyer',
                     user_id INTEGER,
+                    buyer_id INTEGER,
                     user_phone TEXT,
                     crop_id INTEGER,
                     crop_name TEXT,
@@ -1635,6 +2123,8 @@ def ensure_cart_table():
                     quantity_kg REAL NOT NULL DEFAULT 0.0,
                     price_per_kg REAL,
                     image_path TEXT,
+                    total_quantity REAL DEFAULT 0.0,
+                    total_price REAL DEFAULT 0.0,
                     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
@@ -1645,6 +2135,51 @@ def ensure_cart_table():
             except Exception: pass
         except Exception as e:
             print('ensure_cart_b_table sqlite error:', e)
+        # Ensure cart has total_quantity and total_price columns in sqlite (best-effort)
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            try:
+                cur.execute('ALTER TABLE cart ADD COLUMN total_quantity REAL DEFAULT 0.0')
+            except Exception:
+                pass
+            try:
+                cur.execute('ALTER TABLE cart ADD COLUMN total_price REAL DEFAULT 0.0')
+            except Exception:
+                pass
+            try:
+                cur.execute('ALTER TABLE cart ADD COLUMN buyer_id INTEGER')
+            except Exception:
+                pass
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception:
+            pass
+
+        # Migrate non-farmer rows from cart to cart_b in sqlite (idempotent)
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            try:
+                cur.execute("INSERT OR IGNORE INTO cart_b (user_type,user_id,user_phone,crop_id,crop_name,variety,quantity_kg,price_per_kg,image_path,total_quantity,total_price,added_at) "
+                            "SELECT user_type,user_id,user_phone,crop_id,crop_name,variety,quantity_kg,price_per_kg,image_path,COALESCE(total_quantity,quantity_kg),COALESCE(total_price,ROUND(quantity_kg*COALESCE(price_per_kg,0),2)),added_at "
+                            "FROM cart WHERE user_type IS NULL OR LOWER(user_type) != 'farmer'")
+                cur.execute("DELETE FROM cart WHERE user_type IS NULL OR LOWER(user_type) != 'farmer'")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception:
+            pass
 
 
 def notify_expired_crops_once():
@@ -1799,6 +2334,7 @@ def create_purchase_notifications():
     data = request.get_json(silent=True) or {}
     buyer = data.get('buyer') or {}
     items = data.get('items') or []
+    invoice_id = (data.get('invoice_id') or data.get('invoice') or buyer.get('invoice_id') or None)
     if not isinstance(items, list) or not items:
         return jsonify({'ok': False, 'error': 'items_required'}), 400
 
@@ -1864,12 +2400,188 @@ def create_purchase_notifications():
                         (buyer.get('phone') or None),
                     )
                 )
+                # attempt to notify the farmer via email (best-effort)
+                try:
+                    farmer_email = None
+                    farmer_name = None
+                    farmer_lang = None
+                    if farmer_id:
+                        try:
+                            cur2 = conn.cursor()
+                            # try to select email,name and optionally lang (if column exists)
+                            try:
+                                cur2.execute('SELECT email,name,lang FROM farmer WHERE id=%s LIMIT 1', (farmer_id,))
+                                r2 = cur2.fetchone()
+                                if r2:
+                                    farmer_email = r2[0]
+                                    farmer_name = r2[1] if len(r2) > 1 else None
+                                    farmer_lang = r2[2] if len(r2) > 2 else None
+                            except Exception:
+                                try:
+                                    cur2.execute('SELECT email,name FROM farmer WHERE id=%s LIMIT 1', (farmer_id,))
+                                    r2 = cur2.fetchone()
+                                    if r2:
+                                        farmer_email = r2[0]
+                                        farmer_name = r2[1] if len(r2) > 1 else None
+                                except Exception:
+                                    pass
+                            try: cur2.close()
+                            except Exception: pass
+                        except Exception:
+                            pass
+                    # fallback to farmer_phone lookup
+                    if not farmer_email and farmer_phone:
+                        try:
+                            cur2 = conn.cursor()
+                            try:
+                                cur2.execute('SELECT email,name,lang FROM farmer WHERE phone=%s LIMIT 1', (farmer_phone,))
+                                r2 = cur2.fetchone()
+                                if r2:
+                                    farmer_email = r2[0]
+                                    farmer_name = r2[1] if len(r2) > 1 else None
+                                    farmer_lang = r2[2] if len(r2) > 2 else None
+                            except Exception:
+                                try:
+                                    cur2.execute('SELECT email,name FROM farmer WHERE phone=%s LIMIT 1', (farmer_phone,))
+                                    r2 = cur2.fetchone()
+                                    if r2:
+                                        farmer_email = r2[0]
+                                        farmer_name = r2[1] if len(r2) > 1 else None
+                                except Exception:
+                                    pass
+                            try: cur2.close()
+                            except Exception: pass
+                        except Exception:
+                            pass
+                    # determine language
+                    _lang = (farmer_lang or '').strip().lower() or None
+                    if not _lang:
+                        _lang = 'en'
+                    # spawn email send thread if address available
+                    if farmer_email:
+                        try:
+                            # compute per-item total if available; prefer grand total from buyer_orders when invoice_id present
+                            total_val = None
+                            try:
+                                # prefer incoming totals if provided by the buyer/frontend
+                                try:
+                                    item_totals = it.get('totals') if isinstance(it, dict) else None
+                                except Exception:
+                                    item_totals = None
+                                top_totals = None
+                                try:
+                                    top_totals = data.get('totals') if isinstance(data, dict) else None
+                                except Exception:
+                                    top_totals = None
+                                if item_totals and (isinstance(item_totals, dict) and (item_totals.get('grand_total') is not None or item_totals.get('grandTotal') is not None)):
+                                    total_val = float(item_totals.get('grand_total') or item_totals.get('grandTotal'))
+                                elif top_totals and isinstance(top_totals, dict):
+                                    # top-level totals may be a mapping by farmer_id or a single totals object
+                                    try:
+                                        # try farmer-specific entry
+                                        tentry = top_totals.get(str(farmer_id)) or top_totals.get(farmer_id)
+                                        if tentry and isinstance(tentry, dict) and (tentry.get('grand_total') is not None or tentry.get('grandTotal') is not None):
+                                            total_val = float(tentry.get('grand_total') or tentry.get('grandTotal'))
+                                        elif top_totals.get('grand_total') is not None or top_totals.get('grandTotal') is not None:
+                                            total_val = float(top_totals.get('grand_total') or top_totals.get('grandTotal'))
+                                    except Exception:
+                                        pass
+                                # try to fetch grand total for this invoice and farmer (MySQL)
+                                if total_val is None and invoice_id and farmer_id:
+                                    try:
+                                        cur2 = conn.cursor()
+                                        cur2.execute('SELECT crop_name, quantity_kg, price_per_kg, total FROM buyer_orders WHERE invoice_id=%s AND farmer_id=%s', (invoice_id, farmer_id))
+                                        rows_bo = cur2.fetchall()
+                                        net_sum = None
+                                        if rows_bo:
+                                            net_sum = 0.0
+                                            for brow in rows_bo:
+                                                try:
+                                                    b_crop = (brow[0] or '')
+                                                    b_qty = float(brow[1] or 0)
+                                                    b_price = float(brow[2] or 0)
+                                                    b_total = float(brow[3] or (b_qty * b_price))
+                                                    # determine rates similar to frontend computeNetAmount
+                                                    cat_l = ''
+                                                    nm = (b_crop or '').lower()
+                                                    gstRate = 0
+                                                    commissionRate = 8
+                                                    if 'masala' in nm or 'masalas' in nm:
+                                                        gstRate = 5; commissionRate = 15
+                                                    elif 'fruit' in nm or 'vegetable' in nm:
+                                                        gstRate = 0; commissionRate = 12
+                                                    elif 'crop' in nm or 'crops' in nm:
+                                                        gstRate = 0; commissionRate = 8
+                                                    else:
+                                                        if 'masala' in nm:
+                                                            gstRate = 5; commissionRate = 15
+                                                        elif 'fruit' in nm or 'vegetable' in nm:
+                                                            gstRate = 0; commissionRate = 12
+                                                        else:
+                                                            gstRate = 0; commissionRate = 8
+                                                    gstAmt = (b_total * gstRate) / 100
+                                                    platformFee = (b_total * commissionRate) / 100
+                                                    net = b_total - gstAmt - platformFee
+                                                    net_sum += net
+                                                except Exception:
+                                                    continue
+                                        if net_sum is not None:
+                                            total_val = float(net_sum)
+                                        try: cur2.close()
+                                        except Exception: pass
+                                    except Exception:
+                                        try:
+                                            cur2.close()
+                                        except Exception:
+                                            pass
+                                # fallback to item-level totals
+                                if total_val is None:
+                                    total_val = it.get('total') if isinstance(it.get('total'), (int, float)) or (it.get('total') and str(it.get('total')).strip()) else None
+                                    if not total_val:
+                                        total_val = it.get('total_price') or it.get('price')
+                                    if not total_val:
+                                        total_val = float(it.get('price_per_kg') or 0) * float(qty or 0)
+                            except Exception:
+                                try:
+                                    total_val = float(it.get('total') or 0)
+                                except Exception:
+                                    total_val = 0
+                            threading.Thread(target=send_farmer_purchase_email, args=(farmer_email, farmer_name or '', crop_name, variety_val or '', qty, total_val, (buyer.get('name') or ''), _lang)).start()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
                 inserted += 1
             conn.commit()
             try: cur.close()
             except Exception: pass
             try: conn.close()
             except Exception: pass
+            # After inserting notifications, attempt to send buyer confirmation email (best-effort)
+            try:
+                buyer_email = (buyer.get('email') or '').strip()
+                if buyer_email:
+                    # collect totals
+                    try:
+                        total_price = 0.0
+                        for it in items:
+                            try:
+                                total_price += float(it.get('total') or (float(it.get('price_per_kg') or 0) * float(it.get('order_quantity') or 0)))
+                            except Exception:
+                                pass
+                    except Exception:
+                        total_price = None
+                    # determine preferred language (header > request top-level > buyer object > query param > default)
+                    lang = (
+                        request.headers.get('Agri-Lang') or request.headers.get('agri-lang') or
+                        data.get('lang') or data.get('language') or
+                        buyer.get('lang') or buyer.get('language') or
+                        request.args.get('lang') or 'en'
+                    )
+                    invoice_id = (data.get('invoice_id') or data.get('invoice') or buyer.get('invoice_id') or None)
+                    threading.Thread(target=send_purchase_email, args=(buyer_email, buyer.get('name') or '', items, total_price, lang, invoice_id)).start()
+            except Exception:
+                pass
             return jsonify({'ok': True, 'inserted': inserted}), 200
         except Exception as e:
             print('create_purchase_notifications mysql error:', e)
@@ -1926,12 +2638,182 @@ def create_purchase_notifications():
                         (buyer.get('phone') or None),
                     )
                 )
+                # attempt to notify the farmer via email (best-effort)
+                try:
+                    farmer_email = None
+                    farmer_name = None
+                    farmer_lang = None
+                    if farmer_id:
+                        try:
+                            s_conn = sqlite3.connect(db_path)
+                            s_cur = s_conn.cursor()
+                            try:
+                                s_cur.execute('SELECT email,name,lang FROM farmer WHERE id=?', (farmer_id,))
+                                r2 = s_cur.fetchone()
+                                if r2:
+                                    farmer_email = r2[0]
+                                    farmer_name = r2[1] if len(r2) > 1 else None
+                                    farmer_lang = r2[2] if len(r2) > 2 else None
+                            except Exception:
+                                try:
+                                    s_cur.execute('SELECT email,name FROM farmer WHERE id=?', (farmer_id,))
+                                    r2 = s_cur.fetchone()
+                                    if r2:
+                                        farmer_email = r2[0]
+                                        farmer_name = r2[1] if len(r2) > 1 else None
+                                except Exception:
+                                    pass
+                            try: s_cur.close(); s_conn.close()
+                            except Exception: pass
+                        except Exception:
+                            pass
+                    if not farmer_email and farmer_phone:
+                        try:
+                            s_conn = sqlite3.connect(db_path)
+                            s_cur = s_conn.cursor()
+                            try:
+                                s_cur.execute('SELECT email,name,lang FROM farmer WHERE phone=?', (farmer_phone,))
+                                r2 = s_cur.fetchone()
+                                if r2:
+                                    farmer_email = r2[0]
+                                    farmer_name = r2[1] if len(r2) > 1 else None
+                                    farmer_lang = r2[2] if len(r2) > 2 else None
+                            except Exception:
+                                try:
+                                    s_cur.execute('SELECT email,name FROM farmer WHERE phone=?', (farmer_phone,))
+                                    r2 = s_cur.fetchone()
+                                    if r2:
+                                        farmer_email = r2[0]
+                                        farmer_name = r2[1] if len(r2) > 1 else None
+                                except Exception:
+                                    pass
+                            try: s_cur.close(); s_conn.close()
+                            except Exception: pass
+                        except Exception:
+                            pass
+                    _lang = (farmer_lang or '').strip().lower() or None
+                    if not _lang:
+                        _lang = 'en'
+                    if farmer_email:
+                        try:
+                            # compute per-item total if available (sqlite branch)
+                            total_val = None
+                            try:
+                                # prefer incoming totals if provided by the buyer/frontend
+                                try:
+                                    item_totals = it.get('totals') if isinstance(it, dict) else None
+                                except Exception:
+                                    item_totals = None
+                                top_totals = None
+                                try:
+                                    top_totals = data.get('totals') if isinstance(data, dict) else None
+                                except Exception:
+                                    top_totals = None
+                                if item_totals and (isinstance(item_totals, dict) and (item_totals.get('grand_total') is not None or item_totals.get('grandTotal') is not None)):
+                                    total_val = float(item_totals.get('grand_total') or item_totals.get('grandTotal'))
+                                elif top_totals and isinstance(top_totals, dict):
+                                    try:
+                                        tentry = top_totals.get(str(farmer_id)) or top_totals.get(farmer_id)
+                                        if tentry and isinstance(tentry, dict) and (tentry.get('grand_total') is not None or tentry.get('grandTotal') is not None):
+                                            total_val = float(tentry.get('grand_total') or tentry.get('grandTotal'))
+                                        elif top_totals.get('grand_total') is not None or top_totals.get('grandTotal') is not None:
+                                            total_val = float(top_totals.get('grand_total') or top_totals.get('grandTotal'))
+                                    except Exception:
+                                        pass
+                                # try to fetch grand total for this invoice and farmer (sqlite branch may have buyer_orders table)
+                                if total_val is None and invoice_id and farmer_id:
+                                    try:
+                                        s_conn2 = sqlite3.connect(db_path)
+                                        s_cur2 = s_conn2.cursor()
+                                        try:
+                                            s_cur2.execute('SELECT crop_name, quantity_kg, price_per_kg, total FROM buyer_orders WHERE invoice_id=? AND farmer_id=?', (invoice_id, farmer_id))
+                                            rows_bo = s_cur2.fetchall()
+                                            net_sum = None
+                                            if rows_bo:
+                                                net_sum = 0.0
+                                                for brow in rows_bo:
+                                                    try:
+                                                        b_crop = (brow[0] or '')
+                                                        b_qty = float(brow[1] or 0)
+                                                        b_price = float(brow[2] or 0)
+                                                        b_total = float(brow[3] or (b_qty * b_price))
+                                                        nm = (b_crop or '').lower()
+                                                        gstRate = 0
+                                                        commissionRate = 8
+                                                        if 'masala' in nm or 'masalas' in nm:
+                                                            gstRate = 5; commissionRate = 15
+                                                        elif 'fruit' in nm or 'vegetable' in nm:
+                                                            gstRate = 0; commissionRate = 12
+                                                        elif 'crop' in nm or 'crops' in nm:
+                                                            gstRate = 0; commissionRate = 8
+                                                        else:
+                                                            if 'masala' in nm:
+                                                                gstRate = 5; commissionRate = 15
+                                                            elif 'fruit' in nm or 'vegetable' in nm:
+                                                                gstRate = 0; commissionRate = 12
+                                                            else:
+                                                                gstRate = 0; commissionRate = 8
+                                                        gstAmt = (b_total * gstRate) / 100
+                                                        platformFee = (b_total * commissionRate) / 100
+                                                        net = b_total - gstAmt - platformFee
+                                                        net_sum += net
+                                                    except Exception:
+                                                        continue
+                                            if net_sum is not None:
+                                                total_val = float(net_sum)
+                                        except Exception:
+                                            pass
+                                        try: s_cur2.close(); s_conn2.close()
+                                        except Exception:
+                                            pass
+                                    except Exception:
+                                        pass
+                                # fallback to item-level totals
+                                if total_val is None:
+                                    total_val = it.get('total') if isinstance(it.get('total'), (int, float)) or (it.get('total') and str(it.get('total')).strip()) else None
+                                    if not total_val:
+                                        total_val = it.get('total_price') or it.get('price')
+                                    if not total_val:
+                                        total_val = float(it.get('price_per_kg') or 0) * float(qty or 0)
+                            except Exception:
+                                try:
+                                    total_val = float(it.get('total') or 0)
+                                except Exception:
+                                    total_val = 0
+                            threading.Thread(target=send_farmer_purchase_email, args=(farmer_email, farmer_name or '', crop_name, variety_val or '', qty, total_val, (buyer.get('name') or ''), _lang)).start()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
                 inserted += 1
             conn.commit()
             try: cur.close()
             except Exception: pass
             try: conn.close()
             except Exception: pass
+            # After inserting notifications, attempt to send buyer confirmation email (best-effort)
+            try:
+                buyer_email = (buyer.get('email') or '').strip()
+                if buyer_email:
+                    try:
+                        total_price = 0.0
+                        for it in items:
+                            try:
+                                total_price += float(it.get('total') or (float(it.get('price_per_kg') or 0) * float(it.get('order_quantity') or 0)))
+                            except Exception:
+                                pass
+                    except Exception:
+                        total_price = None
+                    lang = (
+                        request.headers.get('Agri-Lang') or request.headers.get('agri-lang') or
+                        data.get('lang') or data.get('language') or
+                        buyer.get('lang') or buyer.get('language') or
+                        request.args.get('lang') or 'en'
+                    )
+                    invoice_id = (data.get('invoice_id') or data.get('invoice') or buyer.get('invoice_id') or None)
+                    threading.Thread(target=send_purchase_email, args=(buyer_email, buyer.get('name') or '', items, total_price, lang, invoice_id)).start()
+            except Exception:
+                pass
             return jsonify({'ok': True, 'inserted': inserted}), 200
         except Exception as e:
             print('create_purchase_notifications sqlite error:', e)
@@ -2093,33 +2975,51 @@ def cart_add():
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
     table_name = 'cart' if (user_type and str(user_type).lower() == 'farmer') else 'cart_b'
 
-    # Normalize and verify user id for farmers: prefer explicit user_id if it exists in farmer table,
-    # otherwise resolve from phone. Always store the farmer's id (from `farmer` table) in cart.user_id.
-    parsed_user_id = None
+    # Precompute totals when inserting buyer cart items so we can store them on each row
+    total_qty_for_payload = 0.0
+    total_price_for_payload = 0.0
+    try:
+        for it in items:
+            qty = float(it.get('quantity_kg') or it.get('order_quantity') or 0)
+            price = float(it.get('price_per_kg') or it.get('price') or 0)
+            total_qty_for_payload += qty
+            total_price_for_payload += (qty * price)
+    except Exception:
+        total_qty_for_payload = 0.0
+        total_price_for_payload = 0.0
+
+    # Parse incoming ids.
+    tmp_user_id = None
     try:
         if user_id is not None and str(user_id).strip() != '':
             try:
-                parsed_user_id = int(user_id)
+                tmp_user_id = int(user_id)
             except Exception:
-                parsed_user_id = None
-        # If the caller claims to be a farmer, verify the id exists in farmer table
-        if parsed_user_id is not None and str(user_type).lower() == 'farmer':
+                tmp_user_id = None
+    except Exception:
+        tmp_user_id = None
+
+    # parsed_user_id will hold a farmer id ONLY (never a buyer id).
+    parsed_user_id = None
+    try:
+        if tmp_user_id is not None and str(user_type).lower() == 'farmer':
             try:
                 kind_check, conn_check = get_db_connection()
                 cur_check = conn_check.cursor()
                 if kind_check == 'mysql':
-                    cur_check.execute('SELECT id FROM farmer WHERE id=%s LIMIT 1', (parsed_user_id,))
+                    cur_check.execute('SELECT id FROM farmer WHERE id=%s LIMIT 1', (tmp_user_id,))
                 else:
-                    cur_check.execute('SELECT id FROM farmer WHERE id=? LIMIT 1', (parsed_user_id,))
+                    cur_check.execute('SELECT id FROM farmer WHERE id=? LIMIT 1', (tmp_user_id,))
                 r = cur_check.fetchone()
                 try: cur_check.close()
                 except Exception: pass
                 try: conn_check.close()
                 except Exception: pass
-                if not r:
-                    parsed_user_id = None
+                if r:
+                    parsed_user_id = tmp_user_id
             except Exception:
                 parsed_user_id = None
+
         # If still not resolved and phone provided, try to resolve farmer by phone
         if parsed_user_id is None and user_phone:
             try:
@@ -2134,6 +3034,22 @@ def cart_add():
                 parsed_user_id = None
     except Exception:
         parsed_user_id = None
+
+    # parsed_buyer_id will hold buyer id when provided or when caller is buyer
+    parsed_buyer_id = None
+    try:
+        bval = data.get('buyer_id') if isinstance(data, dict) else None
+        if bval is not None and str(bval).strip() != '':
+            try:
+                parsed_buyer_id = int(bval)
+            except Exception:
+                parsed_buyer_id = None
+        # If caller did not provide explicit buyer_id but role is buyer and tmp_user_id exists, treat tmp_user_id as buyer id
+        if parsed_buyer_id is None and str(user_type).lower() == 'buyer' and tmp_user_id is not None:
+            parsed_buyer_id = tmp_user_id
+    except Exception:
+        parsed_buyer_id = None
+
     inserted = []
     if use_mysql:
         try:
@@ -2153,20 +3069,48 @@ def cart_add():
                 qty = it.get('quantity_kg') or it.get('order_quantity') or 0
                 price = it.get('price_per_kg') or it.get('price') or None
                 image = it.get('image_path') or it.get('image_url') or None
-                # Prefer resolving farmer id from crops.seller_id for farmer carts
-                insert_user_id = parsed_user_id if parsed_user_id is not None else None
-                # Prevent duplicate cart rows for same user + crop: check existing row
+
+                # Determine farmer id to store in user_id column: prefer parsed_user_id (explicit farmer),
+                # otherwise resolve from crops.seller_id.
+                insert_user_id = None
+                if parsed_user_id is not None:
+                    insert_user_id = parsed_user_id
+                try:
+                    if crop_id is not None and insert_user_id is None:
+                        cur2 = conn.cursor()
+                        cur2.execute('SELECT seller_id, category FROM crops WHERE id=%s LIMIT 1', (int(crop_id),))
+                        rr = cur2.fetchone()
+                        try: cur2.close()
+                        except Exception: pass
+                        if rr and len(rr) > 0:
+                            seller_from_crop = rr[0] if len(rr) > 0 else None
+                            crop_category_from_db = rr[1] if len(rr) > 1 else None
+                            if seller_from_crop is not None:
+                                insert_user_id = seller_from_crop
+                            if (it.get('category') is None or str(it.get('category')).strip() == '') and crop_category_from_db:
+                                category = crop_category_from_db
+                except Exception:
+                    pass
+
+                # Determine buyer id to store in buyer_id column (if available)
+                insert_buyer_id = parsed_buyer_id if parsed_buyer_id is not None else None
+
+                # Prevent duplicate cart rows for same crop + owner: check by farmer (user_id), buyer_id, or phone
                 try:
                     cur_check = conn.cursor()
-                    # match by crop_id and owner (user_id or user_phone) and user_type
-                    sql_check = f"SELECT id FROM {table_name} WHERE crop_id=%s AND user_type=%s AND ((user_id IS NOT NULL AND user_id=%s) OR (user_phone IS NOT NULL AND user_phone=%s)) LIMIT 1"
-                    params_check = (int(crop_id) if crop_id is not None else None, user_type, user_id if user_id is not None else None, user_phone if user_phone is not None else None)
+                    sql_check = f"SELECT id FROM {table_name} WHERE crop_id=%s AND user_type=%s AND ((user_id IS NOT NULL AND user_id=%s) OR (buyer_id IS NOT NULL AND buyer_id=%s) OR (user_phone IS NOT NULL AND user_phone=%s)) LIMIT 1"
+                    params_check = (
+                        int(crop_id) if crop_id is not None else None,
+                        user_type,
+                        insert_user_id if insert_user_id is not None else None,
+                        insert_buyer_id if insert_buyer_id is not None else None,
+                        user_phone if user_phone is not None else None
+                    )
                     cur_check.execute(sql_check, params_check)
                     existing_row = cur_check.fetchone()
                     try: cur_check.close()
                     except Exception: pass
                     if existing_row:
-                        # Skip inserting duplicate; return existing id info
                         try:
                             exist_id = existing_row[0] if isinstance(existing_row, (list, tuple)) else (existing_row.get('id') if isinstance(existing_row, dict) else existing_row)
                         except Exception:
@@ -2174,36 +3118,39 @@ def cart_add():
                         inserted.append({'id': exist_id, 'crop_id': crop_id, 'crop_name': crop_name, 'note': 'duplicate_skipped'})
                         continue
                 except Exception:
-                    # on any check error, proceed to insert (best-effort)
                     try: cur_check.close()
                     except Exception: pass
-                try:
-                    if str(table_name).lower() == 'cart' and crop_id is not None:
-                        try:
-                            cur2 = conn.cursor()
-                            cur2.execute('SELECT seller_id FROM crops WHERE id=%s LIMIT 1', (int(crop_id),))
-                            rr = cur2.fetchone()
-                            try: cur2.close()
-                            except Exception: pass
-                            if rr and len(rr) > 0 and rr[0] is not None:
-                                insert_user_id = rr[0]
-                        except Exception:
-                            # ignore resolution error and keep parsed_user_id
-                            pass
-                except Exception:
-                    pass
 
-                cur.execute(f'INSERT INTO {table_name} (user_type, user_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)', (
-                    user_type,
-                    insert_user_id if insert_user_id is not None else None,
-                    user_phone if user_phone else None,
-                    int(crop_id) if crop_id is not None else None,
-                    crop_name if crop_name else None,
-                    variety,
-                    float(qty) if qty is not None else 0,
-                    float(price) if price is not None else None,
-                    image
-                ))
+                # Read category from payload if present; fallback to None. Compute per-item totals
+                category = it.get('category') or it.get('Category') or None
+                try:
+                    qty_val = float(qty) if qty is not None else 0.0
+                except Exception:
+                    qty_val = 0.0
+                try:
+                    price_val = float(price) if price is not None else 0.0
+                except Exception:
+                    price_val = 0.0
+                item_total_price = round(qty_val * price_val, 2)
+
+                cur.execute(
+                    f'INSERT INTO {table_name} (user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                    (
+                        user_type,
+                        insert_user_id if insert_user_id is not None else None,
+                        insert_buyer_id if insert_buyer_id is not None else None,
+                        user_phone if user_phone else None,
+                        int(crop_id) if crop_id is not None else None,
+                        crop_name if crop_name else None,
+                        variety,
+                        qty_val,
+                        price_val if price is not None else None,
+                        image,
+                        category,
+                        qty_val,
+                        item_total_price
+                    )
+                )
                 try:
                     inserted_id = cur.lastrowid
                 except Exception:
@@ -2235,13 +3182,37 @@ def cart_add():
                 qty = it.get('quantity_kg') or it.get('order_quantity') or 0
                 price = it.get('price_per_kg') or it.get('price') or None
                 image = it.get('image_path') or it.get('image_url') or None
-                # Prefer resolving farmer id from crops.seller_id for farmer carts
-                insert_user_id = parsed_user_id if parsed_user_id is not None else None
-                # Prevent duplicate cart rows for same user + crop: check existing row (sqlite)
+
+                # Determine farmer id to store in user_id column: prefer parsed_user_id (explicit farmer),
+                # otherwise resolve from crops.seller_id.
+                insert_user_id = None
+                if parsed_user_id is not None:
+                    insert_user_id = parsed_user_id
+                try:
+                    if crop_id is not None and insert_user_id is None:
+                        cur2 = conn.cursor()
+                        cur2.execute('SELECT seller_id, category FROM crops WHERE id=? LIMIT 1', (int(crop_id),))
+                        rr = cur2.fetchone()
+                        try: cur2.close()
+                        except Exception: pass
+                        if rr and len(rr) > 0:
+                            seller_from_crop = rr[0] if len(rr) > 0 else None
+                            crop_category_from_db = rr[1] if len(rr) > 1 else None
+                            if seller_from_crop is not None:
+                                insert_user_id = seller_from_crop
+                            if (it.get('category') is None or str(it.get('category')).strip() == '') and crop_category_from_db:
+                                category = crop_category_from_db
+                except Exception:
+                    pass
+
+                # Determine buyer id to store in buyer_id column (if available)
+                insert_buyer_id = parsed_buyer_id if parsed_buyer_id is not None else None
+
+                # Prevent duplicate cart rows for same crop + owner: check by farmer (user_id), buyer_id, or phone
                 try:
                     cur_check = conn.cursor()
-                    sql_check = f"SELECT id FROM {table_name} WHERE crop_id=? AND user_type=? AND ((user_id IS NOT NULL AND user_id=?) OR (user_phone IS NOT NULL AND user_phone=?)) LIMIT 1"
-                    params_check = (int(crop_id) if crop_id is not None else None, user_type, user_id if user_id is not None else None, user_phone if user_phone is not None else None)
+                    sql_check = f"SELECT id FROM {table_name} WHERE crop_id=? AND user_type=? AND ((user_id IS NOT NULL AND user_id=?) OR (buyer_id IS NOT NULL AND buyer_id=?) OR (user_phone IS NOT NULL AND user_phone=?)) LIMIT 1"
+                    params_check = (int(crop_id) if crop_id is not None else None, user_type, insert_user_id if insert_user_id is not None else None, insert_buyer_id if insert_buyer_id is not None else None, user_phone if user_phone is not None else None)
                     cur_check.execute(sql_check, params_check)
                     existing_row = cur_check.fetchone()
                     try: cur_check.close()
@@ -2253,31 +3224,32 @@ def cart_add():
                 except Exception:
                     try: cur_check.close()
                     except Exception: pass
-                try:
-                    if str(table_name).lower() == 'cart' and crop_id is not None:
-                        try:
-                            cur2 = conn.cursor()
-                            cur2.execute('SELECT seller_id FROM crops WHERE id=? LIMIT 1', (int(crop_id),))
-                            rr = cur2.fetchone()
-                            try: cur2.close()
-                            except Exception: pass
-                            if rr and len(rr) > 0 and rr[0] is not None:
-                                insert_user_id = rr[0]
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
 
-                cur.execute(f'INSERT INTO {table_name} (user_type, user_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path) VALUES (?,?,?,?,?,?,?,?,?)', (
+                # Read category from payload if present; fallback to None. Compute per-item totals (store item-level total_price and total_quantity)
+                category = it.get('category') or it.get('Category') or None
+                try:
+                    qty_val = float(qty) if qty is not None else 0.0
+                except Exception:
+                    qty_val = 0.0
+                try:
+                    price_val = float(price) if price is not None else 0.0
+                except Exception:
+                    price_val = 0.0
+                item_total_price = round(qty_val * price_val, 2)
+                cur.execute(f'INSERT INTO {table_name} (user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', (
                     user_type,
                     insert_user_id if insert_user_id is not None else None,
+                    insert_buyer_id if insert_buyer_id is not None else None,
                     user_phone if user_phone else None,
                     int(crop_id) if crop_id is not None else None,
                     crop_name if crop_name else None,
                     variety,
-                    float(qty) if qty is not None else 0,
-                    float(price) if price is not None else None,
-                    image
+                    qty_val,
+                    price_val if price is not None else None,
+                    image,
+                    category,
+                    qty_val,
+                    item_total_price
                 ))
                 inserted_id = cur.lastrowid
                 inserted.append({'id': inserted_id, 'crop_id': crop_id, 'crop_name': crop_name})
@@ -2326,7 +3298,7 @@ def cart_list():
                 where.append('user_id=%s'); params.append(user_id)
             if user_phone:
                 where.append('user_phone=%s'); params.append(user_phone)
-            sql = f'SELECT id, user_type, user_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, added_at FROM {table_name}'
+            sql = f'SELECT id, user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, added_at FROM {table_name}'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC'
@@ -2337,7 +3309,7 @@ def cart_list():
                     results.append(r)
                 else:
                     results.append({
-                        'id': r[0], 'user_type': r[1], 'user_id': r[2], 'user_phone': r[3], 'crop_id': r[4], 'crop_name': r[5], 'variety': r[6], 'quantity_kg': r[7], 'price_per_kg': r[8], 'image_path': r[9], 'added_at': r[10]
+                        'id': r[0], 'user_type': r[1], 'user_id': r[2], 'buyer_id': r[3], 'user_phone': r[4], 'crop_id': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'price_per_kg': r[9], 'image_path': r[10], 'category': r[11], 'total_quantity': r[12], 'total_price': r[13], 'added_at': r[14]
                     })
             try: cur.close()
             except Exception: pass
@@ -2360,7 +3332,7 @@ def cart_list():
                 where.append('user_id=?'); params.append(user_id)
             if user_phone:
                 where.append('user_phone=?'); params.append(user_phone)
-            sql = f'SELECT id, user_type, user_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, added_at FROM {table_name}'
+            sql = f'SELECT id, user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, added_at FROM {table_name}'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC'
@@ -2368,7 +3340,7 @@ def cart_list():
             rows = cur.fetchall()
             for r in rows:
                 results.append({
-                    'id': r[0], 'user_type': r[1], 'user_id': r[2], 'user_phone': r[3], 'crop_id': r[4], 'crop_name': r[5], 'variety': r[6], 'quantity_kg': r[7], 'price_per_kg': r[8], 'image_path': r[9], 'added_at': r[10]
+                    'id': r[0], 'user_type': r[1], 'user_id': r[2], 'buyer_id': r[3], 'user_phone': r[4], 'crop_id': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'price_per_kg': r[9], 'image_path': r[10], 'category': r[11], 'total_quantity': r[12], 'total_price': r[13], 'added_at': r[14]
                 })
             try: cur.close()
             except Exception: pass
@@ -2534,9 +3506,42 @@ def cart_update():
             }
             conn = mysql.connect(**cfg)
             cur = conn.cursor()
-            params = [float(qty)]
-            sql = f'UPDATE {table_name} SET quantity_kg=%s WHERE id=%s'
-            params.append(row_id)
+            # Read existing row values so updates may be partial (qty and/or price)
+            cur_get = conn.cursor()
+            try:
+                cur_get.execute(f'SELECT quantity_kg, price_per_kg FROM {table_name} WHERE id=%s LIMIT 1', (row_id,))
+                rowp = cur_get.fetchone()
+                existing_qty = 0.0
+                existing_price = 0.0
+                if rowp:
+                    try:
+                        existing_qty = float(rowp[0]) if rowp[0] is not None else 0.0
+                    except Exception:
+                        existing_qty = 0.0
+                    try:
+                        existing_price = float(rowp[1]) if rowp[1] is not None else 0.0
+                    except Exception:
+                        existing_price = 0.0
+            except Exception:
+                existing_qty = 0.0; existing_price = 0.0
+            try: cur_get.close()
+            except Exception: pass
+
+            # Use provided values when present, otherwise fall back to existing row values
+            try:
+                qty_val = float(qty) if qty is not None else existing_qty
+            except Exception:
+                qty_val = existing_qty
+            pval = data.get('price_per_kg')
+            try:
+                price_val = float(pval) if pval is not None else existing_price
+            except Exception:
+                price_val = existing_price
+
+            new_total_price = round(qty_val * (price_val or 0.0), 2)
+
+            params = [qty_val, price_val, new_total_price, row_id]
+            sql = f'UPDATE {table_name} SET quantity_kg=%s, price_per_kg=%s, total_price=%s WHERE id=%s'
             if user_type:
                 sql += ' AND user_type=%s'; params.append(user_type)
             if user_id:
@@ -2553,8 +3558,41 @@ def cart_update():
             db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
-            params = [float(qty), row_id]
-            sql = 'UPDATE ' + table_name + ' SET quantity_kg=? WHERE id=?'
+            # Read existing row values so updates may be partial
+            try:
+                cur_get = conn.cursor()
+                cur_get.execute('SELECT quantity_kg, price_per_kg FROM ' + table_name + ' WHERE id=? LIMIT 1', (row_id,))
+                rowp = cur_get.fetchone()
+                existing_qty = 0.0
+                existing_price = 0.0
+                if rowp:
+                    try:
+                        existing_qty = float(rowp[0]) if rowp[0] is not None else 0.0
+                    except Exception:
+                        existing_qty = 0.0
+                    try:
+                        existing_price = float(rowp[1]) if rowp[1] is not None else 0.0
+                    except Exception:
+                        existing_price = 0.0
+                try: cur_get.close()
+                except Exception: pass
+            except Exception:
+                existing_qty = 0.0; existing_price = 0.0
+
+            try:
+                qty_val = float(qty) if qty is not None else existing_qty
+            except Exception:
+                qty_val = existing_qty
+            pval = data.get('price_per_kg')
+            try:
+                price_val = float(pval) if pval is not None else existing_price
+            except Exception:
+                price_val = existing_price
+
+            new_total_price = round(qty_val * (price_val or 0.0), 2)
+
+            params = [qty_val, price_val, new_total_price, row_id]
+            sql = 'UPDATE ' + table_name + ' SET quantity_kg=?, price_per_kg=?, total_price=? WHERE id=?'
             if user_type:
                 sql += ' AND user_type=?'; params.append(user_type)
             if user_id:
@@ -2869,7 +3907,8 @@ def add_crop_listing():
             # send crop-uploaded email asynchronously (if provided)
             try:
                 if seller_email:
-                    threading.Thread(target=send_crop_uploaded_email, args=(seller_email, seller_name, crop_name)).start()
+                    _lang = (data.get('lang') if isinstance(data, dict) else None) or request.values.get('lang') or 'en'
+                    threading.Thread(target=send_crop_uploaded_email, args=(seller_email, seller_name, crop_name, variety, quantity_kg, price_per_kg, _lang)).start()
             except Exception:
                 pass
 
@@ -3020,7 +4059,8 @@ def add_crop_listing():
         # send crop-uploaded email asynchronously if provided
         try:
             if seller_email:
-                threading.Thread(target=send_crop_uploaded_email, args=(seller_email, seller_name, crop_name)).start()
+                _lang = (data.get('lang') if isinstance(data, dict) else None) or (request.values.get('lang') if request.values else None) or 'en'
+                threading.Thread(target=send_crop_uploaded_email, args=(seller_email, seller_name, crop_name, variety, quantity_kg, price_per_kg, _lang)).start()
         except Exception:
             pass
 
@@ -3226,7 +4266,20 @@ def add_deal():
         # After successful insert, send buyer deal-uploaded notification email if an email was provided
         try:
             if buyer_email:
-                threading.Thread(target=send_buyer_deal_uploaded_email, args=(buyer_email, buyer_name, crop_name), daemon=True).start()
+                # Determine language from submitted data (supports 'lang' or 'language')
+                language_raw = (data.get('lang') or data.get('language') or '').strip().lower()
+                if language_raw in ('hi', 'hindi'):
+                    lang_code = 'hi'
+                elif language_raw in ('kn', 'kannada'):
+                    lang_code = 'kn'
+                else:
+                    lang_code = 'en'
+                # Schedule localized email including variety, quantity and delivery date
+                threading.Thread(
+                    target=send_buyer_deal_uploaded_email,
+                    args=(buyer_email, buyer_name, crop_name, variety, quantity_kg, delivery_date_val, lang_code),
+                    daemon=True
+                ).start()
         except Exception:
             # don't fail the request if email send scheduling fails
             pass
@@ -4432,11 +5485,47 @@ def agri_ai_chat():
         if not query:
             return jsonify({"error": "Empty query"}), 400
 
-        # Call Groq API with basic system instruction
-        system_instr = (
-            "You are AgriAI, an intelligent Indian farming assistant that provides clear, "
-            "friendly answers to farmers' questions in simple English."
+        # Read optional language and mode flags (short/detailed/stepwise)
+        lang = (data.get('lang') or 'en').strip().lower()
+        mode = (data.get('mode') or 'short').strip().lower()
+
+        # Build a system instruction that requires the assistant to reply in the requested language
+        base_instr = (
+            "You are AgriAI, an intelligent Indian farming assistant that provides clear, helpful answers to farmers' questions. "
+            "Be practical and use simple, locally understandable language suitable for Indian farmers."
         )
+        lang_instr = ''
+        if lang in ('hi', 'hindi'):
+            lang_instr = (
+                "Answer the user only in Hindi (Devanagari). Use polite, simple and locally understandable phrasing. "
+                "If the user requests step-by-step guidance, present numbered steps. If they request a detailed answer, provide a thorough explanation in Hindi."
+            )
+        elif lang in ('kn', 'kannada'):
+            lang_instr = (
+                "Answer the user only in Kannada. Use polite, simple and locally understandable phrasing. "
+                "If the user requests step-by-step guidance, present numbered steps. If they request a detailed answer, provide a thorough explanation in Kannada."
+            )
+        else:
+            lang_instr = (
+                "Answer the user only in simple English tailored to Indian farmers. "
+                "If the user requests step-by-step guidance, present numbered steps. If they request a detailed answer, provide a thorough explanation in English."
+            )
+
+        # Instruct the model to produce only the answer text and not to include meta commentary
+        mode_instr = ''
+        post_req = (
+            "Respond ONLY with the direct answer text. Do NOT include meta commentary, explanations about language, or any headers like 'Answer:'; do not include code fences or JSON wrappers. "
+            "If numeric lists are requested, use simple numbered lines (1., 2., 3.). Keep formatting plain text."
+        )
+        if mode == 'stepwise':
+            mode_instr = "When appropriate, present the answer as numbered steps."
+        elif mode == 'detailed':
+            mode_instr = "Provide a detailed, thorough answer; include steps, examples and practical tips where relevant."
+        else:
+            mode_instr = "Prefer short, direct answers unless the user explicitly requests more detail or stepwise instructions."
+
+        system_instr = base_instr + ' ' + lang_instr + ' ' + mode_instr + ' ' + post_req
+
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
@@ -4894,7 +5983,7 @@ def profile_get():
     if not row:
         return jsonify({'error': 'not_found'}), 404
 
-    # row: id,name,phone,email,aadhar,password_hash,region,state,address
+    # row: id,name,phone,email,aadhar,password_hash,region,state,address,lang
     user = {
         'role': tbl,
         'id': row[0],
@@ -4904,9 +5993,81 @@ def profile_get():
         'aadhar': row[4],
         'region': row[6] if len(row) > 6 else None,
         'state': row[7] if len(row) > 7 else None,
-        'address': row[8] if len(row) > 8 else None
+        'address': row[8] if len(row) > 8 else None,
+        'lang': row[9] if len(row) > 9 else None
     }
     return jsonify({'user': user}), 200
+
+
+@app.route('/buyer/get', methods=['GET'])
+def buyer_get():
+    """Return buyer info by id. Query param: id
+    Response: { ok: True, buyer: { id, name, phone, email, region, state, address } }
+    """
+    bid = request.args.get('id') or request.args.get('buyer_id')
+    if not bid:
+        return jsonify({'error': 'id_required'}), 400
+    try:
+        bid_int = int(bid)
+    except Exception:
+        return jsonify({'error': 'invalid_id'}), 400
+    kind, conn = get_db_connection()
+    try:
+        cur = get_cursor(kind, conn)
+        if kind == 'mysql':
+            cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE id=%s LIMIT 1', (bid_int,))
+        else:
+            cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE id=? LIMIT 1', (bid_int,))
+        row = cur.fetchone()
+        try: cur.close()
+        except Exception: pass
+        try: conn.close()
+        except Exception: pass
+        if not row:
+            # If buyer not found in `buyer` table, try to find recent info in `deals` table
+            try:
+                cur2 = get_cursor(kind, conn)
+                if kind == 'mysql':
+                    cur2.execute('SELECT buyer_name,buyer_phone,region,state FROM deals WHERE buyer_id=%s ORDER BY id DESC LIMIT 1', (bid_int,))
+                else:
+                    cur2.execute('SELECT buyer_name,buyer_phone,region,state FROM deals WHERE buyer_id=? ORDER BY id DESC LIMIT 1', (bid_int,))
+                dr = cur2.fetchone()
+                try: cur2.close()
+                except Exception: pass
+                try: conn.close()
+                except Exception: pass
+                if dr:
+                    buyer = {
+                        'id': bid_int,
+                        'name': dr[0] if len(dr) > 0 else None,
+                        'phone': dr[1] if len(dr) > 1 else None,
+                        'email': None,
+                        'region': dr[2] if len(dr) > 2 else None,
+                        'state': dr[3] if len(dr) > 3 else None,
+                        'address': None,
+                    }
+                    return jsonify({'ok': True, 'buyer': buyer}), 200
+            except Exception:
+                try: conn.close()
+                except Exception: pass
+            return jsonify({'error': 'not_found'}), 404
+        buyer = {
+            'id': row[0],
+            'name': row[1] if len(row) > 1 else None,
+            'phone': row[2] if len(row) > 2 else None,
+            'email': row[3] if len(row) > 3 else None,
+            'region': row[4] if len(row) > 4 else None,
+            'state': row[5] if len(row) > 5 else None,
+            'address': row[6] if len(row) > 6 else None,
+        }
+        return jsonify({'ok': True, 'buyer': buyer}), 200
+    except Exception as e:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        print('buyer_get error:', e)
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/states/list', methods=['GET'])
@@ -5175,7 +6336,11 @@ def profile_update():
     if identifier_exists_excluding(tbl, user_id, aadhar=aadhar):
         return jsonify({'error': 'aadhar_exists'}), 400
 
-    ok = update_user(tbl, user_id, name, phone, email, aadhar, region=region, state=state, address=address)
+    # ensure lang is defined (accept 'lang' or 'language' in payload)
+    lang = (data.get('lang') or data.get('language') or '').strip().lower() or None
+    if lang and lang not in ('en', 'hi', 'kn'):
+        lang = None
+    ok = update_user(tbl, user_id, name, phone, email, aadhar, region=region, state=state, address=address, lang=lang)
     if not ok:
         return jsonify({'error': 'update_failed'}), 500
 

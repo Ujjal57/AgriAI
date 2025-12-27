@@ -1,5 +1,6 @@
 import React from 'react';
 import Navbar from './Navbar';
+import { t } from './i18n';
 
 const MyDeals = () => {
   const [sellerName, setSellerName] = React.useState(localStorage.getItem('agriai_name') || '');
@@ -24,6 +25,7 @@ const MyDeals = () => {
   const [deliveryDate, setDeliveryDate] = React.useState('');
   const [lastFetchUrl, setLastFetchUrl] = React.useState('');
   const [lastFetchJson, setLastFetchJson] = React.useState(null);
+  const [siteLang, setSiteLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
 
   const todayStr = React.useMemo(() => {
     try { return new Date().toISOString().slice(0,10); } catch (e) { return ''; }
@@ -73,6 +75,12 @@ const MyDeals = () => {
   React.useEffect(() => { fetchListings(); }, [fetchListings]);
 
   React.useEffect(() => {
+    const onLang = (e) => { const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); setSiteLang(l); };
+    window.addEventListener('agri:lang:change', onLang);
+    return () => { try { window.removeEventListener('agri:lang:change', onLang); } catch (e) {} };
+  }, []);
+
+  React.useEffect(() => {
     const id = setInterval(() => {
       fetchListings();
     }, 15000);
@@ -102,16 +110,16 @@ const MyDeals = () => {
         fetchListings();
       } else {
         console.error('Failed to save edit', j);
-        alert('Failed to update: ' + (j.error || JSON.stringify(j)));
+        alert(t('failedUpdate', siteLang) + ': ' + (j.error || JSON.stringify(j)));
       }
     } catch (e) {
       console.error('saveEdit error', e);
-      alert('Failed to update');
+      alert(t('failedUpdate', siteLang));
     }
   };
 
   const deleteDeal = async (id) => {
-    if (!window.confirm('Delete this deal? This action cannot be undone.')) return;
+    if (!window.confirm(t('confirmDelete', siteLang))) return;
     const sid = sellerId || localStorage.getItem('agriai_id') || '';
     try {
       let url = `${apiBase}/deals/${id}`;
@@ -123,11 +131,11 @@ const MyDeals = () => {
         setTimeout(fetchListings, 300);
       } else {
         console.error('delete failed', j);
-        alert('Failed to delete: ' + (j.error || JSON.stringify(j)));
+        alert(t('failedDelete', siteLang) + ': ' + (j.error || JSON.stringify(j)));
       }
     } catch (e) {
       console.error('deleteDeal error', e);
-      alert('Delete failed: ' + String(e));
+      alert(t('failedDelete', siteLang) + ': ' + String(e));
     }
   };
 
@@ -160,7 +168,7 @@ const MyDeals = () => {
     setLoading(true);
     setSaved(null);
     if (!imageFile) {
-      setSaved({ status: 'error', message: 'Please attach an image for the crop.' });
+      setSaved({ status: 'error', message: t('attachImageError', siteLang) });
       setLoading(false);
       return;
     }
@@ -178,6 +186,8 @@ const MyDeals = () => {
       if (deliveryDate) formData.append('delivery_date', deliveryDate);
       if (sellerId) formData.append('buyer_id', sellerId);
       if (imageFile) formData.append('image', imageFile, imageFile.name);
+      // include user's selected language so backend can send localized emails
+      if (siteLang) formData.append('lang', siteLang);
 
       const res = await fetch(`${apiBase}/deals`, { method: 'POST', body: formData });
       const j = await res.json();
@@ -199,7 +209,7 @@ const MyDeals = () => {
     <div>
       <Navbar />
       <main style={{padding: '6rem 1rem 2rem', background: '#53b635'}}>
-        <div style={{maxWidth:1200,margin:'0 auto',background:'#fff',padding:'2rem',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.06)'}}>
+        <div style={{maxWidth:1200,margin:'0 auto',background:'#fff',padding:'2rem',boxShadow:'0 8px 24px rgba(0,0,0,0.06)'}}>
           
           {/* Top Row: Add New Deal */}
           <div style={{
@@ -217,7 +227,7 @@ const MyDeals = () => {
               flex: '1 1 100%',
               fontSize: '2rem'
             }}>
-              Add New Deal
+              {t('myDealsTitle', siteLang)}
             </h2>
 
             <div style={{
@@ -232,7 +242,7 @@ const MyDeals = () => {
               <input
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Search crop name"
+                placeholder={t('searchPlaceholder', siteLang)}
                 style={{ padding: 8, border: '1px solid #e5e5e5', borderRadius: 6 }}
               />
               <select
@@ -240,62 +250,62 @@ const MyDeals = () => {
                 onChange={e => setSort(e.target.value)}
                 style={{ padding: 8, border: '1px solid #e5e5e5', borderRadius: 6 }}
               >
-                <option value="recent">Most recent</option>
-                <option value="qty_desc">Quantity: High to Low</option>
-                <option value="qty_asc">Quantity: Low to High</option>
+                <option value="recent">{t('sortMostRecent', siteLang)}</option>
+                <option value="qty_desc">{t('sortQtyDesc', siteLang)}</option>
+                <option value="qty_asc">{t('sortQtyAsc', siteLang)}</option>
               </select>
             </div>
           </div>
 
-          <div style={{height:8}} />
+          <div style={{height:40}} />
 
           {/* Form Section */}
           <form onSubmit={handleSubmit} style={{display:'grid', gap:12}}>
             {/* Crop details row */}
             <div style={{display:'flex', gap:12, alignItems:'flex-start', flexWrap: 'wrap'}}>
               <div style={{flex:'0 0 220px'}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>Category</div>
+                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>{t('formCategoryLabel', siteLang)}</div>
                 <select value={category} onChange={e=>setCategory(e.target.value)} style={{width:'100%', padding:10}}>
-                  <option value=''>-- Select Category --</option>
-                  <option value='Food Crops'>Food Crops</option>
-                  <option value='Fruits and Vegetables'>Fruits and Vegetables</option>
-                  <option value='Masalas'>Masalas</option>
+                  <option value=''>{t('selectCategoryPlaceholder', siteLang)}</option>
+                  <option value='Food Crops'>{t('catFood', siteLang)}</option>
+                  <option value='Fruits and Vegetables'>{t('catFruits', siteLang)}</option>
+                  <option value='Masalas'>{t('catMasalas', siteLang)}</option>
                 </select>
-                <div style={{fontSize:12,color:'#000',marginTop:6}}>Choose category</div>
+                <div style={{fontSize:12,color:'#000',marginTop:6}}>{t('chooseCategoryText', siteLang)}</div>
               </div>
 
               <div style={{flex:2}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>Crop name</div>
-                <input ref={cropNameRef} placeholder="Crop name" value={cropName} onChange={e=>setCropName(e.target.value)} style={{width:'100%',padding:10}} required />
-                <div style={{fontSize:14,color:'#000',marginTop:6}}>Name of the crop (e.g., Wheat, Rice)</div>
+                <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>{t('formCropNameLabel', siteLang)}</div>
+                <input ref={cropNameRef} placeholder={t('formCropNameLabel', siteLang)} value={cropName} onChange={e=>setCropName(e.target.value)} style={{width:'100%',padding:10}} required />
+                <div style={{fontSize:14,color:'#000',marginTop:6}}>{t('cropNameHelper', siteLang)}</div>
               </div>
 
               <div style={{flex:'0 0 220px'}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>Variety</div>
-                <input placeholder="Variety name" value={variety} onChange={e=>setVariety(e.target.value)} style={{width:'100%',padding:10}} />
-                <div style={{fontSize:12,color:'#000',marginTop:6}}>Variety or cultivar name</div>
+                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>{t('formVarietyLabel', siteLang)}</div>
+                <input placeholder={t('formVarietyLabel', siteLang)} value={variety} onChange={e=>setVariety(e.target.value)} style={{width:'100%',padding:10}} />
+                <div style={{fontSize:12,color:'#000',marginTop:6}}>{t('varietyHelper', siteLang)}</div>
               </div>
 
               <div style={{flex:1}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>Quantity (kg)</div>
-                <input placeholder="Quantity (kg)" type="number" step="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)} style={{width:'100%',padding:10}} required />
-                <div style={{fontSize:14,color:'#000',marginTop:6}}>Total available quantity in kilograms</div>
+                <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>{t('formQuantityLabel', siteLang)}</div>
+                <input placeholder={t('formQuantityLabel', siteLang)} type="number" step="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)} style={{width:'100%',padding:10}} required />
+                <div style={{fontSize:14,color:'#000',marginTop:6}}>{t('quantityHelper', siteLang)}</div>
               </div>
 
               <div style={{flex:'0 0 220px'}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>Delivery Date</div>
+                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>{t('formDeliveryDateLabel', siteLang)}</div>
                 <input type="date" min={todayStr} value={deliveryDate} onChange={e=>setDeliveryDate(e.target.value)} style={{width:'100%', padding:10}} />
-                <div style={{fontSize:12, color:'#000', marginTop:6, textAlign:'center'}}>Expected delivery</div>
+                <div style={{fontSize:12, color:'#000', marginTop:6, textAlign:'center'}}>{t('formDeliveryDateLabel', siteLang)}</div>
               </div>
             </div>
 
             <div style={{display:'flex', justifyContent:'center', marginTop:8}}>
               <div style={{flex:'0.6 4 220px', textAlign:'center'}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6}}>Image</div>
+                <div style={{fontWeight:700, color:'#000', marginBottom:6}}>{t('formImageLabel', siteLang)}</div>
                 <div style={{padding:6, border:'1px dashed #ddd', borderRadius:6, background:'#fafafa', display:'inline-block'}}>
                   <input required type="file" accept="image/*" onChange={e=> setImageFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
                 </div>
-                <div style={{fontSize:12, color:'#000', marginTop:6}}>Attach a photo</div>
+                <div style={{fontSize:12, color:'#000', marginTop:6}}>{t('formAttachPhoto', siteLang)}</div>
               </div>
             </div>
 
@@ -315,7 +325,7 @@ const MyDeals = () => {
                 }}
                 disabled={loading}
               >
-                {loading ? 'Uploading...' : 'Upload'}
+                {loading ? t('uploading', siteLang) : t('uploadButton', siteLang)}
               </button>
             </div>
           </form>
@@ -324,7 +334,7 @@ const MyDeals = () => {
           <section style={{marginTop:18}}>
             {visibleListings.length === 0 && (
               <div style={{textAlign:'center'}}>
-                <div style={{marginBottom:8}}>No deals yet.</div>
+                <div style={{marginBottom:8}}>{t('noDealsYet', siteLang)}</div>
               </div>
             )}
 
@@ -382,7 +392,7 @@ const MyDeals = () => {
                           onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                         />
                       ) : (
-                        <div style={{color:'#999'}}>No image</div>
+                        <div style={{color:'#999'}}>{t('noImage', siteLang)}</div>
                       )}
                     </div>
 
@@ -405,7 +415,7 @@ const MyDeals = () => {
 
                     <div style={{display:'flex', gap:8, marginTop:10, flexWrap:'wrap'}}>
                       <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:110, flex:'1 1 120px'}}>
-                        <div style={{fontSize:12, color:'#000000ff'}}>Quantity</div>
+                        <div style={{fontSize:12, color:'#000000ff'}}>{t('cardQuantityLabel', siteLang)}</div>
                         {editingId === l.id ? (
                           <div style={{display:'flex', gap:6, alignItems:'center'}}>
                             <input value={editQuantity} onChange={e=>setEditQuantity(e.target.value)} style={{width:120,padding:6}} />
@@ -415,19 +425,19 @@ const MyDeals = () => {
                         )}
                       </div>
                       <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:160, flex:'1 1 180px'}}>
-                        <div style={{fontSize:12, color:'#000000ff'}}>Delivery Date</div>
+                        <div style={{fontSize:12, color:'#000000ff'}}>{t('cardDeliveryDateLabel', siteLang)}</div>
                         {editingId === l.id ? (
                           <div style={{display:'flex', gap:6, alignItems:'center'}}>
                             <input type="date" min={todayStr} value={editDeliveryDate} onChange={e=>setEditDeliveryDate(e.target.value)} style={{width:150,padding:6}} />
-                            <button onClick={() => saveEdit(l.id)} style={{padding:'6px 8px', background:'#236902', color:'#fff', border:'none', borderRadius:6}}>Save</button>
-                            <button onClick={cancelEdit} style={{padding:'6px 8px', background:'#ddd', border:'none', borderRadius:6}}>Cancel</button>
+                            <button onClick={() => saveEdit(l.id)} style={{padding:'6px 8px', background:'#236902', color:'#fff', border:'none', borderRadius:6}}>{t('saveButton', siteLang)}</button>
+                            <button onClick={cancelEdit} style={{padding:'6px 8px', background:'#ddd', border:'none', borderRadius:6}}>{t('cancelButton', siteLang)}</button>
                           </div>
                         ) : (
                           <div style={{fontWeight:700}}>{l.delivery_date ? new Date(l.delivery_date).toLocaleDateString('en-GB') : '—'}</div>
                         )}
                       </div>
                       <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:140, flex:'1 1 160px'}}>
-                        <div style={{fontSize:12, color:'#000000ff'}}>Uploaded</div>
+                        <div style={{fontSize:12, color:'#000000ff'}}>{t('cardUploadedLabel', siteLang)}</div>
                         <div style={{fontWeight:700}}>{formatDate(l.created_at || l.createdAt || l.created)}</div>
                       </div>
                     </div>
@@ -438,11 +448,11 @@ const MyDeals = () => {
                         const dd = l.delivery_date ? new Date(l.delivery_date) : null;
                         const isExpired = dd ? (dd < today) : false;
                         const isToday = dd ? (dd.getFullYear() === today.getFullYear() && dd.getMonth() === today.getMonth() && dd.getDate() === today.getDate()) : false;
-                        if (isExpired) return (<div style={{background:'#f44336', color:'#fff', padding:'6px 8px', borderRadius:6, fontWeight:700}}>Expired</div>);
-                        if (isToday) return (<div style={{background:'#ffb300', color:'#000', padding:'6px 8px', borderRadius:6, fontWeight:700}}>Expires today</div>);
+                        if (isExpired) return (<div style={{background:'#f44336', color:'#fff', padding:'6px 8px', borderRadius:6, fontWeight:700}}>{t('expiredLabel', siteLang)}</div>);
+                        if (isToday) return (<div style={{background:'#ffb300', color:'#000', padding:'6px 8px', borderRadius:6, fontWeight:700}}>{t('expiresToday', siteLang)}</div>);
                         return (
                           <div style={{color:'#236902', fontWeight:700}}>
-                            {l.delivery_date ? `Delivery: ${new Date(l.delivery_date).toLocaleDateString('en-GB')}` : <span style={{background:'#eaf6ea', padding:'4px 6px', borderRadius:6}}>No delivery date</span>}
+                            {l.delivery_date ? `${t('deliveryPrefix', siteLang)}: ${new Date(l.delivery_date).toLocaleDateString('en-GB')}` : <span style={{background:'#eaf6ea', padding:'4px 6px', borderRadius:6}}>{t('noDeliveryDateLabel', siteLang)}</span>}
                           </div>
                         );
                       })()}
@@ -451,9 +461,9 @@ const MyDeals = () => {
                     {/* Buttons */}
                     <div style={{display:'flex', flexDirection:'row', alignItems:'center', gap:8, marginBottom:10}}>
                       {editingId !== l.id && (
-                        <button onClick={() => startEdit(l)} style={{padding:'6px 10px', width:'80%', background:'#1976d2', color:'#fff', border:'none', borderRadius:6}}>Edit</button>
+                        <button onClick={() => startEdit(l)} style={{padding:'6px 10px', width:'80%', background:'#1976d2', color:'#fff', border:'none', borderRadius:6}}>{t('editButton', siteLang)}</button>
                       )}
-                      <button onClick={() => deleteDeal(l.id)} style={{padding:'6px 10px', width:'80%', background:'#e53935', color:'#fff', border:'none', borderRadius:6}}>Delete</button>
+                      <button onClick={() => deleteDeal(l.id)} style={{padding:'6px 10px', width:'80%', background:'#e53935', color:'#fff', border:'none', borderRadius:6}}>{t('deleteButton', siteLang)}</button>
                     </div>
                   </div>
                 ))}

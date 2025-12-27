@@ -175,7 +175,8 @@ DROP TABLE IF EXISTS `cart`;
 CREATE TABLE `cart` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_type` VARCHAR(16) NOT NULL DEFAULT 'buyer', -- 'buyer' or 'farmer'
-  `user_id` BIGINT NULL,                            -- referenced user id when available
+  `user_id` BIGINT NULL,
+  `buyer_id` BIGINT NULL,                             -- referenced user id when available
   `user_phone` VARCHAR(32) DEFAULT NULL,           -- fallback phone to identify user
   `crop_id` BIGINT NULL,
   `crop_name` VARCHAR(255) DEFAULT NULL,
@@ -183,6 +184,9 @@ CREATE TABLE `cart` (
   `quantity_kg` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
   `price_per_kg` DECIMAL(12,3) DEFAULT NULL,
   `image_path` VARCHAR(255) DEFAULT NULL,
+  `category` VARCHAR(100) DEFAULT NULL,
+  `total_quantity` DECIMAL(12,3) DEFAULT 0.000,
+  `total_price` DECIMAL(12,2) DEFAULT 0.00,
   `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX `idx_cart_user` (`user_type`, `user_id`, `user_phone`),
@@ -199,7 +203,55 @@ ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `variety` VARCHAR(255) DEFAULT NULL;
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `quantity_kg` DECIMAL(12,3) NOT NULL DEFAULT 0.000;
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `price_per_kg` DECIMAL(12,3) DEFAULT NULL;
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `image_path` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `category` VARCHAR(100) DEFAULT NULL;
+ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `total_quantity` DECIMAL(12,3) DEFAULT 0.000;
+ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `total_price` DECIMAL(12,2) DEFAULT 0.00;
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+-- Add an index on category for faster category-based aggregations and lookups
+ALTER TABLE `cart` ADD INDEX IF NOT EXISTS `idx_cart_category` (`category`);
+
+-- Populate existing cart rows with the crop category when possible (one-time idempotent update)
+UPDATE `cart` c
+LEFT JOIN `crops` cr ON cr.id = c.crop_id
+SET c.category = cr.category
+WHERE (c.category IS NULL OR c.category = '')
+  AND c.crop_id IS NOT NULL
+  AND cr.category IS NOT NULL;
+
+-- ========== Buyer-specific Cart table (cart_b) ==========
+DROP TABLE IF EXISTS `cart_b`;
+CREATE TABLE `cart_b` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_type` VARCHAR(16) NOT NULL DEFAULT 'buyer',
+  `user_id` BIGINT NULL,
+  `user_phone` VARCHAR(32) DEFAULT NULL,
+  `crop_id` BIGINT NULL,
+  `crop_name` VARCHAR(255) DEFAULT NULL,
+  `variety` VARCHAR(255) DEFAULT NULL,
+  `quantity_kg` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+  `price_per_kg` DECIMAL(12,3) DEFAULT NULL,
+  `image_path` VARCHAR(255) DEFAULT NULL,
+  `total_quantity` DECIMAL(12,3) DEFAULT 0.000,
+  `total_price` DECIMAL(12,2) DEFAULT 0.00,
+  `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_cart_b_user` (`user_type`, `user_id`, `user_phone`),
+  INDEX `idx_cart_b_crop` (`crop_id`)
+);
+
+-- Idempotent alters for cart_b
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `user_type` VARCHAR(16) NOT NULL DEFAULT 'buyer';
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `user_id` BIGINT NULL;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `user_phone` VARCHAR(32) DEFAULT NULL;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `crop_id` BIGINT NULL;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `crop_name` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `variety` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `quantity_kg` DECIMAL(12,3) NOT NULL DEFAULT 0.000;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `price_per_kg` DECIMAL(12,3) DEFAULT NULL;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `image_path` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `total_quantity` DECIMAL(12,3) DEFAULT 0.000;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `total_price` DECIMAL(12,2) DEFAULT 0.00;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 -- ========== Buyer Orders table ==========
 -- Stores finalized buyer orders placed at checkout, including payment details.
@@ -271,6 +323,11 @@ UPDATE `admin` SET state = CONCAT(UCASE(LEFT(TRIM(state),1)), LCASE(SUBSTRING(TR
 ALTER TABLE `farmer` ADD COLUMN IF NOT EXISTS `address` VARCHAR(255) DEFAULT NULL;
 ALTER TABLE `buyer` ADD COLUMN IF NOT EXISTS `address` VARCHAR(255) DEFAULT NULL;
 ALTER TABLE `admin` ADD COLUMN IF NOT EXISTS `address` VARCHAR(255) DEFAULT NULL;
+
+-- Add language preference column for users (farmer, buyer, admin)
+ALTER TABLE `farmer` ADD COLUMN IF NOT EXISTS `lang` VARCHAR(10) DEFAULT 'en';
+ALTER TABLE `buyer` ADD COLUMN IF NOT EXISTS `lang` VARCHAR(10) DEFAULT 'en';
+ALTER TABLE `admin` ADD COLUMN IF NOT EXISTS `lang` VARCHAR(10) DEFAULT 'en';
 
 -- If your MySQL installation still has a `date` column on crops (older experiments), drop it now
 -- This will remove the separate `date` column in favor of the created_day/month/year fields

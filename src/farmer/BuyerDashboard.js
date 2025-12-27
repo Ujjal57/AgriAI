@@ -1,7 +1,7 @@
 import React from 'react';
 import Navbar from '../Navbar';
-import Chatbot from '../Chatbot';
 import { useNavigate } from 'react-router-dom';
+import { t } from '../i18n';
 
 function BuyerSearchBox() {
   const [region, setRegion] = React.useState('');
@@ -14,7 +14,7 @@ function BuyerSearchBox() {
   const [category, setCategory] = React.useState('');
   const [varietyOptions, setVarietyOptions] = React.useState([]);
   const [variety, setVariety] = React.useState('');
-  const [cropsSource, setCropsSource] = React.useState([]);
+  const [, setCropsSource] = React.useState([]);
   const [dealsSource, setDealsSource] = React.useState([]);
 
   const [results, setResults] = React.useState(null);
@@ -24,6 +24,20 @@ function BuyerSearchBox() {
   const [searchAnim, setSearchAnim] = React.useState(false);
   const [addAnimId, setAddAnimId] = React.useState(null);
   const navigate = useNavigate();
+
+  const [lang, setLang] = React.useState((typeof window !== 'undefined' && localStorage.getItem('agri_lang')) || 'en');
+  React.useEffect(() => {
+    const onLang = () => setLang((localStorage.getItem('agri_lang') || 'en'));
+    try { window.addEventListener && window.addEventListener('agri:lang:change', onLang); } catch(e){}
+    return () => { try { window.removeEventListener && window.removeEventListener('agri:lang:change', onLang); } catch(e){} };
+  }, []);
+
+  const localeFor = (L) => {
+    if (!L) return 'en-IN';
+    if (L.startsWith('hi')) return 'hi-IN';
+    if (L.startsWith('kn')) return 'kn-IN';
+    return 'en-IN';
+  };
 
   const handleSearch = () => {
     setActiveCropFilter((crop || '').toString().trim());
@@ -226,7 +240,7 @@ function BuyerSearchBox() {
 
   return (
     <div style={{display:'flex', alignItems:'center', justifyContent:'center', padding:'5rem 10rem 2rem 10rem'}}>
-      <div style={{background:'#fff', padding:'1rem 3rem', borderRadius:8, boxShadow:'0 6px 12px rgba(0,0,0,0.06)', width:'100%', maxWidth:1000, marginTop: '1.5rem'}}>
+      <div style={{background:'#fff', padding:'1rem 3rem', boxShadow:'0 6px 12px rgba(0,0,0,0.06)', width:'100%', maxWidth:1000, marginTop: '1.5rem'}}>
       <div
   style={{
     display: 'flex',
@@ -253,7 +267,7 @@ function BuyerSearchBox() {
       pointerEvents: 'none'
     }}
   >
-    Find Buyers
+    {t('findBuyersTitle', lang)}
   </h3>
 
   {/* Right-Aligned Button */}
@@ -268,55 +282,55 @@ function BuyerSearchBox() {
         borderRadius: 6,
         cursor: 'pointer'
       }}
-    >
-      Show All
+      >
+      {t('showAll', lang)}
     </button>
   </div>
 </div>
 
-        <div style={{display:'flex', gap:6, alignItems:'flex-start', flexWrap:'wrap'}}>
+        <div style={{display:'flex', gap:6, alignItems:'flex-start', flexWrap:'wrap', marginTop:30}}>
           <div style={{flex:'1 1 160px', minWidth:120}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>Region</label>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelRegion', lang)}</label>
             {regionOptions && regionOptions.length ? (
               <select value={region} onChange={e => setRegion(e.target.value)} style={{width:'100%', padding:6}}>
-                <option value=''>-- Select region --</option>
+                <option value=''>{t('selectRegion', lang)}</option>
                 {regionOptions.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             ) : (
               <select value={region} onChange={e => setRegion(e.target.value)} style={{width:'100%', padding:6}}>
-                <option value=''>-- Select region --</option>
-                <option value='North'>North</option>
-                <option value='South'>South</option>
-                <option value='East'>East</option>
-                <option value='West'>West</option>
+                <option value=''>{t('selectRegion', lang)}</option>
+                <option value='North'>{t('regionNorth', lang)}</option>
+                <option value='South'>{t('regionSouth', lang)}</option>
+                <option value='East'>{t('regionEast', lang)}</option>
+                <option value='West'>{t('regionWest', lang)}</option>
               </select>
             )}
           </div>
           <div style={{flex:'1 1 220px', minWidth:120}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>State</label>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelState', lang)}</label>
             <select value={state} onChange={e => setState(e.target.value)} style={{width:'100%', padding:6}}>
-              <option value=''>-- Select State --</option>
+              <option value=''>{t('selectState', lang)}</option>
               {stateOptions && stateOptions.length ? stateOptions.map(s => <option key={s} value={s}>{s}</option>) : null}
             </select>
           </div>
           <div style={{flex:'1 1 180px', minWidth:140}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>Category</label>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelCategory', lang)}</label>
             <select value={category} onChange={e => { setCategory(e.target.value); setCrop(''); setVariety(''); }} style={{width:'100%', padding:6}}>
-              <option value=''>-- Select Category --</option>
+              <option value=''>{t('selectCategory', lang)}</option>
               {categoryOptions && categoryOptions.length ? categoryOptions.map(s => <option key={s} value={s}>{s}</option>) : null}
             </select>
           </div>
           <div style={{flex:'1 1 180px', minWidth:110}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>Crop Name</label>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelCropName', lang)}</label>
             <select value={crop} onChange={e => setCrop(e.target.value)} style={{width:'100%', padding:6}}>
-              <option value=''>-- Select Crop --</option>
+              <option value=''>{t('selectCrop', lang)}</option>
               {cropOptions && cropOptions.length ? cropOptions.map(s => <option key={s} value={s}>{s}</option>) : null}
             </select>
           </div>
           <div style={{flex:'1 1 180px', minWidth:120}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>Variety</label>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelVariety', lang)}</label>
             <select value={variety} onChange={e => setVariety(e.target.value)} style={{width:'100%', padding:6}}>
-              <option value=''>-- Select Variety --</option>
+              <option value=''>{t('selectVariety', lang)}</option>
               {varietyOptions && varietyOptions.length ? varietyOptions.map(s => <option key={s} value={s}>{s}</option>) : null}
             </select>
           </div>
@@ -337,8 +351,8 @@ function BuyerSearchBox() {
               transform: searchAnim ? 'scale(0.96)' : 'scale(1)',
               transition: 'transform 140ms ease'
             }}
-          >
-            Search
+            >
+            {t('searchButton', lang)}
           </button>
         </div>
         <style>
@@ -370,8 +384,8 @@ function BuyerSearchBox() {
     `}
   </style>
   <div style={{ textAlign: 'center', marginBottom: 10 }}>
-    <h3 style={{ margin: 0, fontSize: 22, lineHeight: 1.25, color: '#236902' }}>Buyers</h3>
-    {loading && <div style={{ color: '#000000ff' }}>Searching...</div>}
+    <h3 style={{ margin: 0, fontSize: 22, lineHeight: 1.25, color: '#236902' }}>{t('buyersTitle', lang)}</h3>
+    {loading && <div style={{ color: '#000000ff' }}>{t('searching', lang)}</div>}
     {error && <div style={{ color: 'crimson' }}>{error}</div>}
   </div>
 
@@ -392,15 +406,16 @@ function BuyerSearchBox() {
                 _farmer_name: farmerName,
                 _farmer_phone: farmerPhone,
                 _farmer_id: c.farmer_id || c.seller_id || f.id,
-                _farmer_region: c.region || f.region,
-                _farmer_state: c.state || f.state
+                _farmer_state: c.state || f.state,
+                _farmer_region: c.region || f.region
+                
               });
             });
           }
         });
 
         if (!crops.length)
-          return <div style={{ gridColumn: '1/-1', color: '#000000ff' }}>No recent listings</div>;
+          return <div style={{ gridColumn: '1/-1', color: '#000000ff' }}>{t('noRecentListings', lang)}</div>;
 
         const activeTerm = (activeCropFilter || '').toString().trim().toLowerCase();
         const nonExpired = crops.filter(ci => {
@@ -425,7 +440,7 @@ function BuyerSearchBox() {
         const filtered = nameFiltered;
 
         if (!filtered.length)
-          return <div style={{ gridColumn: '1/-1', color: '#000000ff' }}>No listings match your crop search</div>;
+          return <div style={{ gridColumn: '1/-1', color: '#000000ff' }}>{t('noListingsMatch', lang)}</div>;
 
         return filtered.map(c => (
           <div
@@ -455,14 +470,14 @@ function BuyerSearchBox() {
               {c.image_url ? (
                 <img src={c.image_url} alt={c.crop_name} className="card-image" />
               ) : (
-                <div style={{ color: '#999' }}>No image</div>
+                <div style={{ color: '#999' }}>{t('noImage', lang)}</div>
               )}
             </div>
 
             <div style={{ marginTop: 8, fontWeight: 800, fontSize: 18, color: '#236902' }}>{c.crop_name}</div>
 
             <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: '#000', textAlign: 'center' }}>
-              Quantity: {Number(c.quantity_kg || 0).toLocaleString('en-IN')} kg
+              {t('quantityLabel', lang)}: {Number(c.quantity_kg || 0).toLocaleString(localeFor(lang))} {t('kg', lang)}
             </div>
 
             {(() => {
@@ -476,13 +491,13 @@ function BuyerSearchBox() {
                 dd.getDate() === today.getDate();
               return (
                 <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, textAlign: 'center' }}>
-                  {isToday ? 'Expires today' : `Delivery: ${dd.toLocaleDateString('en-GB')}`}
+                  {isToday ? t('expiresToday', lang) : `${t('deliveryPrefix', lang)}: ${dd.toLocaleDateString(localeFor(lang))}`}
                 </div>
               );
             })()}
 
             <div style={{ marginTop: 8, fontSize: 13, color: '#000000ff', fontWeight: 700 }}>
-              {c._farmer_name ? `Buyer: ${c._farmer_name}` : ''}
+              {c._farmer_name ? `${t('buyerPrefix', lang)}: ${c._farmer_name}` : ''}
             </div>
 
             {(() => {
@@ -513,7 +528,7 @@ function BuyerSearchBox() {
                         whiteSpace: 'nowrap',
                         maxWidth: '100%'
                       }}
-                    >{`Address: ${addr}`}</div>
+                    >{`${t('addressPrefix', lang)}: ${addr}`}</div>
                   ) : null}
                   {(region || state) ? (
                     <div style={{ fontSize: 12, color: '#000000ff' }}>
@@ -567,9 +582,19 @@ function BuyerSearchBox() {
                       const userId = localStorage.getItem('agriai_id') || null;
                       const userPhone = localStorage.getItem('agriai_phone') || null;
                       // Ensure we send explicit user_type and a numeric user_id when available for farmers
+                      // Attempt to resolve buyer_id from the deals table (dealsSource)
+                      let buyerIdFromDeal = null;
+                      try {
+                        const match = (dealsSource || []).find(d => {
+                          try { return String(d.id) === String(c.id) || String(d.crop_id) === String(c.id); } catch(e) { return false; }
+                        });
+                        if (match) buyerIdFromDeal = match.buyer_id || match.buyerId || match.buyer || null;
+                      } catch (e) { buyerIdFromDeal = null; }
+
                       const payload = {
                         user_type: userRole || (userId ? 'farmer' : 'buyer'),
                         user_id: (userId != null && userId !== '') ? (isNaN(userId) ? userId : Number(userId)) : undefined,
+                        buyer_id: (buyerIdFromDeal != null && buyerIdFromDeal !== '') ? (isNaN(buyerIdFromDeal) ? buyerIdFromDeal : Number(buyerIdFromDeal)) : undefined,
                         user_phone: userPhone || undefined,
                         items: [
                           {
@@ -578,7 +603,8 @@ function BuyerSearchBox() {
                             variety: c.variety || c.variety || '',
                             quantity_kg: c.quantity_kg || 0,
                             price_per_kg: c.price_per_kg || null,
-                            image_path: c.image_url || null
+                            image_path: c.image_url || null,
+                            category: c.category || c.cat || ''
                           }
                         ]
                       };
@@ -644,7 +670,7 @@ function BuyerSearchBox() {
                   transition: 'transform 140ms ease'
                 }}
               >
-                Add to cart
+                {t('addToCart', lang)}
               </button>
             </div>
           </div>

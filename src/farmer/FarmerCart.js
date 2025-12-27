@@ -1,6 +1,7 @@
 import React from 'react';
 import Navbar from '../Navbar';
 import logo192 from '../assets/logo192.png';
+import { t } from '../i18n';
 
 const FarmerCart = () => {
   const [items, setItems] = React.useState([]);
@@ -14,6 +15,13 @@ const FarmerCart = () => {
   const [showContractPreview, setShowContractPreview] = React.useState(false);
 
   const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
+
+  const [siteLang, setSiteLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
+  React.useEffect(() => {
+    const onLang = (e) => { const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); setSiteLang(l); };
+    try { window.addEventListener('agri:lang:change', onLang); } catch (e) {}
+    return () => { try { window.removeEventListener('agri:lang:change', onLang); } catch (e) {} };
+  }, []);
 
   React.useEffect(() => {
     // Try to load server-backed farmer cart when signed in; otherwise fall back to localStorage
@@ -30,23 +38,52 @@ const FarmerCart = () => {
             const res = await fetch(`${apiBase}/cart/list?${qp}`);
             if (res && res.ok) {
               const j = await res.json().catch(() => null);
-              if (j && j.ok && Array.isArray(j.cart)) {
+                if (j && j.ok && Array.isArray(j.cart)) {
                 const mapped = j.cart.map(r => ({
                   id: r.crop_id || r.id,
                   cart_id: r.id,
                   crop_name: r.crop_name || '',
-                  quantity_kg: Number(r.quantity_kg || 0),
+                  // Mirror buyer cart mapping: `quantity_kg` shown as available comes from `total_quantity`
+                  quantity_kg: Number(r.total_quantity != null ? r.total_quantity : (r.quantity_kg || 0)),
+                  // keep original stored row quantity as order_quantity
+                  order_quantity: Number(r.quantity_kg || 0),
                   price_per_kg: r.price_per_kg != null ? Number(r.price_per_kg) : 0,
+                  total_quantity: Number(r.total_quantity != null ? r.total_quantity : (r.quantity_kg || 0)),
+                  total_price: r.total_price != null ? Number(r.total_price) : Number((r.quantity_kg || 0) * (r.price_per_kg || 0)),
                   image_url: r.image_path || r.image_url || '',
-                  order_quantity: 0,
                   variety: r.variety || '',
                   category: r.category || r.cat || '',
                   user_type: r.user_type || userRole,
                   user_id: r.user_id || null,
+                  buyer_id: r.buyer_id || null,
                   user_phone: r.user_phone || null,
                 }));
                 setItems(mapped);
                 try { localStorage.setItem(cartKey, JSON.stringify(mapped)); } catch (e) {}
+
+                // If any mapped rows lack a category, try to fetch crop metadata
+                (async () => {
+                  try {
+                    const need = mapped.filter(m => (!m.category || String(m.category).trim() === '') && (m.id || m.crop_id));
+                    if (!need.length) return;
+                    await Promise.all(need.map(async (m) => {
+                      try {
+                        const cid = m.id;
+                        const resC = await fetch(`${apiBase}/crops/${encodeURIComponent(cid)}`);
+                        if (!resC || !resC.ok) return;
+                        const jc = await resC.json().catch(() => null);
+                        if (jc && jc.ok && jc.crop) {
+                          const catVal = jc.crop.category || jc.crop.cat || jc.crop._category || '';
+                          if (catVal && String(catVal).trim()) {
+                            m.category = catVal;
+                          }
+                        }
+                      } catch (e) {}
+                    }));
+                    try { localStorage.setItem(cartKey, JSON.stringify(mapped)); } catch (e) {}
+                    setItems(mapped);
+                  } catch (e) {}
+                })();
                 return;
               }
             }
@@ -70,6 +107,30 @@ const FarmerCart = () => {
     };
 
     load();
+
+    // Auto-refresh when other parts of the app dispatch this event
+    const onUpdate = () => { try { load(); } catch (e) { console.warn('cart auto-refresh failed', e); } };
+    try { window.addEventListener('agriai:cart:update', onUpdate); } catch (e) {}
+
+    // Also listen for localStorage changes from other tabs/windows and refresh immediately
+    const storageHandler = (e) => {
+      try {
+        if (!e) return;
+        if (e.key === 'agriai_cart_farmer' || e.key === 'agriai_cart_buyer') {
+          try { load(); } catch (err) { console.warn('storage-handler load failed', err); }
+        }
+      } catch (err) {}
+    };
+    try { window.addEventListener && window.addEventListener('storage', storageHandler); } catch (e) {}
+
+    // Poll as a fallback so the farmer sees updates without manual reload. Use a short interval for fast refresh.
+    const pollInterval = setInterval(() => { try { load(); } catch (e) {} }, 2000);
+
+    return () => {
+      try { window.removeEventListener('agriai:cart:update', onUpdate); } catch (e) {}
+      try { window.removeEventListener && window.removeEventListener('storage', storageHandler); } catch (e) {}
+      try { clearInterval(pollInterval); } catch (e) {}
+    };
   }, []);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -100,14 +161,31 @@ const FarmerCart = () => {
     try {
       const updated = items.map(it => {
         if (it.id !== id) return it;
-        const avail = Number(it.quantity_kg || 0) || 0;
+        const avail = Number(it.total_quantity != null ? it.total_quantity : it.quantity_kg || 0) || 0;
         const current = Number(it.order_quantity || 0) || 0;
         const next = Math.max(0, Math.min(avail, current + delta));
         return { ...it, order_quantity: next };
       });
-      localStorage.setItem('agriai_cart_farmer', JSON.stringify(updated));
       setItems(updated);
+      try { localStorage.setItem('agriai_cart_farmer', JSON.stringify(updated)); } catch (e) {}
       try { window.dispatchEvent(new Event('agriai:cart:update')); } catch (e) {}
+
+      // persist change to server if we have cart row id (match buyer behaviour)
+      try {
+        const userRole = localStorage.getItem('agriai_role') || '';
+        const userId = localStorage.getItem('agriai_id') || '';
+        const userPhone = localStorage.getItem('agriai_phone') || '';
+        const it = updated.find(x => x.id === id);
+        if (it && it.cart_id && userRole && (userId || userPhone)) {
+          (async () => {
+            try {
+              const payload = { id: it.cart_id, quantity_kg: it.order_quantity, user_type: userRole, user_id: userId || undefined, user_phone: userPhone || undefined };
+              const res = await fetch(`${apiBase}/cart/update`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+              if (!res.ok) console.warn('cart/update failed');
+            } catch (e) { console.warn('cart/update error', e); }
+          })();
+        }
+      } catch (e) {}
     } catch (e) {}
   };
 
@@ -151,11 +229,11 @@ const FarmerCart = () => {
       const newQty = parseFloat(editVal);
       const newPrice = parseFloat(editPrice);
       if (Number.isNaN(newQty) || newQty <= 0) {
-        alert('Please enter a valid order quantity (greater than 0).');
+        alert(t('orderQtyInvalid', siteLang));
         return;
       }
       if (Number.isNaN(newPrice) || newPrice < 0) {
-        alert('Please enter a valid price per kg (>= 0).');
+        alert(t('pricePerKgInvalid', siteLang));
         return;
       }
       const updated = items.map(it => {
@@ -183,7 +261,7 @@ const FarmerCart = () => {
             const changed = updated.find(x => x.id === id);
             if (changed && changed.cart_id) {
               try {
-                await fetch(`${apiBase}/cart/update`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: changed.cart_id, quantity_kg: Number(changed.order_quantity || 0), user_type: userRole, user_id: userId || undefined, user_phone: userPhone || undefined }) });
+                await fetch(`${apiBase}/cart/update`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: changed.cart_id, quantity_kg: Number(changed.order_quantity || 0), price_per_kg: Number(changed.price_per_kg || 0), user_type: userRole, user_id: userId || undefined, user_phone: userPhone || undefined }) });
               } catch (e) { console.warn('cart/update failed', e); }
             }
           }
@@ -193,31 +271,78 @@ const FarmerCart = () => {
   };
 
   const calculateGstAndCommission = (item) => {
-    const qty = Number(item.order_quantity || 0);
-    const price = Number(item.price_per_kg || 0);
-    const total = qty * price;
+    const round2 = (v) => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
+    const qty = Number(item.order_quantity || 0) || 0;
+    const price = Number(item.price_per_kg || 0) || 0;
+    const total = round2(qty * price);
+    // Determine group using category/name fields (robust matching)
+    const getGroupFromItem = (it) => {
+      const fields = [it && it.category, it && it.cat, it && it._category, it && it.category_name, it && it.categoryName, it && it.tags, it && it.tag].filter(Boolean).join(' ');
+      const catRaw = (fields || (it && it.crop_name) || '').toString().trim().toLowerCase();
+      const name = (it && it.crop_name || '').toString().toLowerCase();
 
-    const cat = (item.category || item.cat || '').toString().toLowerCase();
-    let gstRate = 0;
+      // Prefer exact category values chosen in `MyCrops` select
+      // Map common exact values to internal groups
+      const exact = (it && (it.category || it.cat) || '').toString().trim().toLowerCase();
+      if (exact === 'food crops' || exact === 'food crop' || exact === 'food' || exact === 'crops') return 'crop';
+      if (exact === 'fruits and vegetables' || exact === 'fruits & vegetables' || exact === 'fruits' || exact === 'fruits and veg') return 'fruitveg';
+      if (exact === 'masalas' || exact === 'masala' || exact === 'spices' || exact === 'spice') return 'masala';
+
+      // Fallback keyword matching (includes plurals and some local words)
+      const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ'];
+      const fruitKeywords = ['fruit', 'fruits', 'फल', 'ಹಣ್ಣು'];
+      const vegKeywords = ['vegetable', 'vegetables', 'veg', 'veggie', 'veget', 'सब्जी', 'ತರಕಾರಿ'];
+      const hasAny = (str, arr) => arr.some(k => str.includes(k));
+      if (hasAny(catRaw, masalaKeywords) || hasAny(name, masalaKeywords)) return 'masala';
+      if (hasAny(catRaw, fruitKeywords) || hasAny(name, fruitKeywords) || hasAny(catRaw, vegKeywords) || hasAny(name, vegKeywords)) return 'fruitveg';
+      if (hasAny(catRaw, ['crop', 'crops', 'food'])) return 'crop';
+      return 'crop';
+    };
+
+    // Aggregate category subtotal across items so tiering uses category totals
+    const categoryTotals = items.reduce((acc, it) => {
+      try {
+        const q = Number(it.order_quantity || 0) || 0;
+        const p = Number(it.price_per_kg || 0) || 0;
+        const line = round2(q * p);
+        const g = getGroupFromItem(it);
+        acc[g] = (acc[g] || 0) + line;
+      } catch (e) {}
+      return acc;
+    }, { crop: 0, fruitveg: 0, masala: 0 });
+
+    const group = getGroupFromItem(item);
+    const categoryTotal = round2(categoryTotals[group] || 0);
+
+    // Tiered commission rates (percent) by group and category subtotal
     let commissionRate = 0;
-
-    if (cat.includes('masala') || cat.includes('masalas')) {
-      gstRate = 5; commissionRate = 15;
-    } else if (cat.includes('fruit') || cat.includes('vegetable')) {
-      gstRate = 0; commissionRate = 12;
-    } else if (cat.includes('crop') || cat.includes('crops')) {
-      gstRate = 0; commissionRate = 8;
-    } else {
-      const name = (item.crop_name || '').toString().toLowerCase();
-      if (name.includes('masala')) { gstRate = 5; commissionRate = 15; }
-      else if (name.includes('fruit') || name.includes('vegetable')) { gstRate = 0; commissionRate = 12; }
-      else { gstRate = 0; commissionRate = 8; }
+    if (group === 'crop') {
+      if (categoryTotal < 200001) commissionRate = 2.0;
+      else if (categoryTotal < 600001) commissionRate = 2.5;
+      else if (categoryTotal < 1000001) commissionRate = 3.0;
+      else commissionRate = 3.4;
+    } else if (group === 'fruitveg') {
+      if (categoryTotal < 200001) commissionRate = 2.5;
+      else if (categoryTotal < 600001) commissionRate = 3.0;
+      else if (categoryTotal < 1000001) commissionRate = 3.4;
+      else commissionRate = 4.0;
+    } else if (group === 'masala') {
+      if (categoryTotal < 200001) commissionRate = 3.0;
+      else if (categoryTotal < 600001) commissionRate = 3.4;
+      else if (categoryTotal < 1000001) commissionRate = 4.0;
+      else commissionRate = 4.4;
     }
 
-    const gstAmt = (total * gstRate) / 100;
-    const commissionAmt = (total * commissionRate) / 100;
+    // Platform fee (amount) = total * commissionRate%; cap at 100000
+      let commissionAmt = round2((total * (commissionRate / 100)) || 0);
+    if (!Number.isFinite(commissionAmt) || commissionAmt < 0) commissionAmt = 0;
+    if (commissionAmt > 100000) commissionAmt = 100000;
 
-    return { gstRate, commissionRate, gstAmt, commissionAmt, lineTotal: total };
+    // GST is 18% on the platform fee
+    const gstRate = 18;
+      const gstAmt = round2((commissionAmt * gstRate) / 100);
+
+    return { gstRate, commissionRate, gstAmt, commissionAmt, lineTotal: total, group, categoryTotal };
   };
 
   const totals = items.reduce(
@@ -230,7 +355,7 @@ const FarmerCart = () => {
     },
     { subtotal: 0, gst: 0, commission: 0 }
   );
-  const grandTotal = totals.subtotal + totals.gst + totals.commission;
+  const grandTotal = Math.round((totals.subtotal - totals.commission - totals.gst + Number.EPSILON) * 100) / 100;
   const totalAvailableQty = items.reduce((s, it) => s + (Number(it.quantity_kg || 0) || 0), 0);
   const totalOrderedQty = items.reduce((s, it) => s + (Number(it.order_quantity || 0) || 0), 0);
 
@@ -243,20 +368,21 @@ const FarmerCart = () => {
   const handleBuyNow = async () => {
     setPaymentError('');
     if (!paymentMethod) {
-      setPaymentError('Please select a payment method (Online or Cash on Delivery).');
+      setPaymentError(t('selectPaymentMethod', siteLang));
       return;
     }
     const invalid = items.some(it => !it.order_quantity || Number(it.order_quantity) <= 0);
     if (invalid) {
-      alert('Please edit each item and enter the order quantity before proceeding.');
+      alert(t('editEnterOrderQty', siteLang));
       return;
     }
     try {
-      const orderItems = items.map(it => {
+        const orderItems = items.map(it => {
         const qty = Number(it.order_quantity || 0);
         const price = Number(it.price_per_kg || 0);
-        const lineTotal = qty * price;
+        const lineTotal = Math.round((qty * price + Number.EPSILON) * 100) / 100;
         const { gstAmt, commissionAmt } = calculateGstAndCommission(it);
+        const net = Math.round((lineTotal - commissionAmt - gstAmt + Number.EPSILON) * 100) / 100;
         return {
           id: it.id,
           crop_name: it.crop_name,
@@ -267,7 +393,7 @@ const FarmerCart = () => {
           subtotal: lineTotal,
           gst: gstAmt,
           platform_fee: commissionAmt,
-          total: lineTotal + gstAmt + commissionAmt
+          total: net
         };
       });
 
@@ -277,7 +403,7 @@ const FarmerCart = () => {
         acc.platform_fee += it.platform_fee;
         return acc;
       }, { subtotal: 0, gst: 0, platform_fee: 0 });
-      const grand_total = summary.subtotal + summary.gst + summary.platform_fee;
+      const grand_total = Math.round((summary.subtotal - summary.platform_fee - summary.gst + Number.EPSILON) * 100) / 100;
 
       const invoiceId = 'ORD' + Date.now();
       const createdAt = new Date().toISOString();
@@ -326,16 +452,19 @@ const FarmerCart = () => {
       setTimeout(() => { window.location.href = '/farmer/history'; }, 100);
     } catch (e) {
       console.error('FarmerCart checkout failed', e);
-      alert('Something went wrong while completing your purchase. Please try again.');
+      alert(t('purchaseFailed', siteLang));
     }
   };
 
-  const generateContract = () => {
+  const generateContract = async () => {
     try {
       // Attempt to obtain buyer and farmer details from localStorage / items
-      const farmerName = localStorage.getItem('agriai_name') || '';
-      const farmerEmail = localStorage.getItem('agriai_email') || '';
-      const farmerAddress = localStorage.getItem('agriai_address') || '';
+      let farmerName = localStorage.getItem('agriai_name') || '';
+      let farmerEmail = localStorage.getItem('agriai_email') || '';
+      let farmerAddress = localStorage.getItem('agriai_address') || '';
+      let farmerId = localStorage.getItem('agriai_id') || '';
+      let farmerState = '';
+      let farmerRegion = '';
 
       // Helper: try multiple possible localStorage keys for buyer/farmer fields
       const fetchFirst = (keys, fallback) => {
@@ -350,191 +479,372 @@ const FarmerCart = () => {
  
       // Buye
       // r info: check a list of commonly-used keys, then fall back to placeholders
-      const buyerName = fetchFirst(['contract_buyer_name', 'agriai_buyer_name', 'buyer_name', 'selected_buyer_name'], '[Buyer Name]');
-      const buyerEmail = fetchFirst(['contract_buyer_email', 'agriai_buyer_email', 'buyer_email', 'selected_buyer_email'], '[Buyer Email]');
-      const buyerAddress = fetchFirst(['contract_buyer_address', 'agriai_buyer_address', 'buyer_address', 'selected_buyer_address'], '[Buyer Address]');
-      const buyerPhone = fetchFirst(['contract_buyer_phone', 'agriai_buyer_phone', 'buyer_phone', 'selected_buyer_phone'], '');
+      let buyerName = fetchFirst(['contract_buyer_name', 'agriai_buyer_name', 'buyer_name', 'selected_buyer_name'], '[Buyer Name]');
+      let buyerEmail = fetchFirst(['contract_buyer_email', 'agriai_buyer_email', 'buyer_email', 'selected_buyer_email'], '[Buyer Email]');
+      let buyerAddress = fetchFirst(['contract_buyer_address', 'agriai_buyer_address', 'buyer_address', 'selected_buyer_address'], '[Buyer Address]');
+      const buyerIdFromStorage = fetchFirst(['contract_buyer_id', 'agriai_buyer_id', 'buyer_id', 'selected_buyer_id'], '');
+      let buyerId = buyerIdFromStorage || '';
+      let buyerState = fetchFirst(['contract_buyer_state', 'agriai_buyer_state', 'buyer_state', 'selected_buyer_state'], '');
+      let buyerRegion = fetchFirst(['contract_buyer_region', 'agriai_buyer_region', 'buyer_region', 'selected_buyer_region'], '');
+
+      // Try to fetch authoritative farmer profile (state/region/address) from backend
+      try {
+        const farmPhone = localStorage.getItem('agriai_phone') || '';
+        const farmEmail = localStorage.getItem('agriai_email') || '';
+        if (farmPhone || farmEmail) {
+          const res = await fetch(`${apiBase}/profile/get`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: farmPhone || undefined, email: farmEmail || undefined }) });
+          if (res && res.ok) {
+            const j = await res.json().catch(() => null);
+            if (j && j.user) {
+              farmerName = j.user.name || farmerName;
+              farmerEmail = j.user.email || farmerEmail;
+              farmerAddress = j.user.address || farmerAddress;
+              farmerId = (j.user.id != null && j.user.id !== '') ? String(j.user.id) : farmerId;
+              farmerState = j.user.state || '';
+              farmerRegion = j.user.region || '';
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('profile/get failed', e);
+      }
+
+      // Prefer buyer id from cart items; fall back to storage keys. If we have a buyer id,
+      // fetch authoritative buyer details from backend `/buyer/get?id=...`.
+      try {
+        const buyerIdFromItems = (items && Array.isArray(items) && items.find(it => it && it.buyer_id)) ? String(items.find(it => it && it.buyer_id).buyer_id) : '';
+        const resolvedBuyerId = buyerIdFromItems || buyerIdFromStorage || '';
+        if (resolvedBuyerId) {
+          try {
+            const resB = await fetch(`${apiBase}/buyer/get?id=${encodeURIComponent(resolvedBuyerId)}`);
+            if (resB && resB.ok) {
+              const jb = await resB.json().catch(() => null);
+              if (jb && jb.ok && jb.buyer) {
+                buyerId = jb.buyer.id ? String(jb.buyer.id) : (buyerId || '');
+                if (jb.buyer.name) buyerName = jb.buyer.name;
+                if (jb.buyer.email) buyerEmail = jb.buyer.email;
+                if (jb.buyer.address) buyerAddress = jb.buyer.address;
+                buyerState = jb.buyer.state || buyerState || '';
+                buyerRegion = jb.buyer.region || buyerRegion || '';
+              }
+            }
+          } catch (e) {
+            console.warn('buyer/get failed', e);
+          }
+        }
+      } catch (e) {
+        console.warn('buyer lookup failed', e);
+      }
 
       const startDate = new Date().toLocaleDateString('en-GB');
       // default end date 30 days later for one-time, seasonal ~90 days, yearly ~365
       const days = contractType === 'one-time' ? 30 : (contractType === 'seasonal' ? 90 : 365);
       const endDate = new Date(Date.now() + days * 24 * 3600 * 1000).toLocaleDateString('en-GB');
 
-      // Build commodity rows from items
-      const rows = (items || []).map((it, idx) => {
+      // Build commodity rows from items (separate from the big template to avoid nested template parsing issues)
+      const rowsHtml = (items || []).map((it, idx) => {
         const qty = Number(it.order_quantity || 0) || 0;
         const variety = it.variety || it.crop_variety || it.var || '';
-        const quality = it.quality || it.grade || '';
         return `<tr>
           <td style="padding:8px;border:1px solid #ddd;text-align:center">${idx + 1}</td>
           <td style="padding:8px;border:1px solid #ddd">${it.crop_name || ''}</td>
           <td style="padding:8px;border:1px solid #ddd">${variety}</td>
           <td style="padding:8px;border:1px solid #ddd;text-align:right">${qty.toLocaleString('en-IN')} kg</td>
         </tr>`;
-      }).join('') || `<tr><td colspan="5" style="padding:8px;border:1px solid #ddd;text-align:center">No items</td></tr>`;
-
+      }).join('');
+      const rowsPlaceholder = rowsHtml && rowsHtml.trim() ? rowsHtml : `<tr><td colspan="4" style="padding:8px;border:1px solid #ddd;text-align:center">${t('noItems', siteLang)}</td></tr>`;
       const html = `<!doctype html>
-      <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>Procurement Contract</title>
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <style>
-          body { font-family: 'Times New Roman', Times, serif; color: #111; padding: 24px; }
-          h1 { text-align: center; color: #236902; margin: 0 }
-          table { border-collapse: collapse; width: 100%; margin-top: 12px }
-          th, td { border: 1px solid #ddd; padding: 8px }
-          th { background: #f7f7f7; text-align: left }
-          .muted { color: #000000ff; font-size: 0.95rem }
-          .section { margin-top: 16px }
-        </style>
-      </head>
-      <body>
-        <div style="text-align:center;">
-              <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
-          <h1>Agri AI<br/>PROCUREMENT CONTRACT FARMING AGREEMENT</h1>
-          <div style="margin-top:6px;font-weight:800">Contract Type: ${contractType}</div>
-        </div>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Procurement Contract</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-        <div class="section">
-          <strong>Party A – The Buyer / Company</strong>
-          <div class="muted">Name: ${buyerName}</div>
-          <div class="muted">Address: ${buyerAddress}</div>
-          <div class="muted">Contact: ${buyerEmail}</div>
-        </div>
+  <style>
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #111;
+      padding: 24px;
+      line-height: 1.6;
+    }
 
-        <div class="section">
-          <strong>Party B – The Farmer / Producer</strong>
-          <div class="muted">Name: ${farmerName}</div>
-          <div class="muted">Address: ${farmerAddress}</div>
-          <div class="muted">Contact: ${farmerEmail}</div>
-        </div>
+    h1 {
+      text-align: center;
+      color: #236902;
+      margin: 0;
+    }
 
-        <div class="section">
-          <strong>1. Purpose of Agreement</strong>
-          <div class="muted">This agreement outlines the terms under which the Farmer agrees to produce and supply agricultural produce to the Buyer, and the Buyer agrees to purchase the same at a predetermined price, ensuring stable market access and fair remuneration to the Farmer.</div>
-        </div>
+    h2 {
+      margin-top: 18px;
+    }
 
-        <div class="section">
-          <strong>2. Duration of Contract</strong>
-          <div class="muted">Start Date: ${startDate}</div>
-          <div class="muted">End Date: ${endDate}</div>
-          <div class="muted">Duration: ${days} days</div>
-          <div class="muted">The contract may be renewed or extended only through the official Agri AI website using registered login credentials. Both parties must agree digitally to confirm renewal.</div>
-        </div>
+    .section {
+      margin-top: 16px;
+    }
 
-        <div class="section">
-          <strong>Data Privacy</strong>
-          <div class="muted">All farmer data collected via the Agri AI platform will be stored securely and used only for:</div>
-          <ul>
-            <li class="muted">Contract processing &amp; renewal</li>
-            <li class="muted">Payment settlement</li>
-            <li class="muted">Insurance facilitation</li>
-          </ul>
-          <div class="muted">This is in full compliance with the Digital Personal Data Protection Act, 2023.</div>
-        </div>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 12px;
+    }
 
-        <div class="section">
-          <strong>3. Commodity Details</strong>
-          <table>
-            <thead>
-              <tr>
-                <th style="width:6%">Item</th>
-                <th>Crop Name</th>
-                <th>Variety</th>
-                <th style="width:14%;text-align:right">Quantity</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
-        </div>
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
 
-        <div class="section">
-          <strong>4. Price and Payment Terms</strong>
-          <div class="muted"><strong>Fixed Procurement Price:</strong> ₹________ per kg / quintal / ton.</div>
-          <div class="muted">Price remains fixed throughout the contract period irrespective of market fluctuations.</div>
+    th {
+      background: #f7f7f7;
+      text-align: left;
+    }
 
-          <div style="margin-top:8px"><strong>Payment Schedule</strong></div>
-          <ul>
-            <li class="muted">50% payment on delivery of produce.</li>
-            <li class="muted">50% payment within 7 working days after quality assessment and acceptance.</li>
-          </ul>
+    pre {
+      white-space: pre-wrap;
+      font-family: 'Times New Roman', Times, serif;
+    }
+  </style>
+</head>
 
-          <div style="margin-top:8px"><strong>Mode of Payment</strong></div>
-          <ul>
-            <li class="muted">Bank Transfer</li>
-            <li class="muted">UPI</li>
-            <li class="muted">Cheque</li>
-          </ul>
+<body>
 
-          <div class="muted">Buyer shall issue digital or physical receipts for all payments.</div>
-        </div>
+  <div style="text-align:center; margin-bottom:20px;">
+    <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
+    <h1>
+      Agri AI<br/>
+      PROCUREMENT CONTRACT FARMING AGREEMENT
+    </h1>
+    <div style="margin-top:6px;font-weight:800">
+      Contract Type: ${contractType}
+    </div>
+  </div>
 
-        <div class="section">
-          <strong>5. Risk, Liability &amp; Insurance</strong>
-          <div class="muted">The Farmer will follow standard agricultural practices to achieve expected production.</div>
-          <div class="muted">In case of crop loss due to natural calamities (flood, drought, cyclone, pest outbreak etc.), both parties shall share losses fairly and transparently.</div>
-          <div class="muted">Buyer shall facilitate insurance coverage for contracted farmers under:</div>
-          <ul>
-            <li class="muted">Pradhan Mantri Fasal Bima Yojana (PMFBY)</li>
-            <li class="muted">through ICICI Lombard General Insurance Co. or any approved insurer.</li>
-          </ul>
-          <div class="muted">Any insurance compensation received shall be transferred to the Farmer without delay.</div>
-          <div class="muted">In case of complete crop failure with no insurance coverage, the Buyer may voluntarily provide up to 25% relief of the expected procurement value.</div>
-          <div class="muted">After delivery and acceptance of produce, all risks (transport/storage/price fluctuations) shift to the Buyer.</div>
-        </div>
+  <section class="section">
+  <h2>PARTIES</h2>
+  <p><strong>Party A – Buyer / Company</strong></p>
+  <p><b>Name:</b> ${buyerName}</p>
+  <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
+  <p><b>Address:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
+  
 
-        <div class="section">
-          <strong>6. Force Majeure</strong>
-          <div class="muted">Neither party shall be liable for delays or failure caused by events beyond control, including natural disasters, war, government restrictions, strikes, lockdowns or pandemics. Performance obligations will resume once conditions normalize.</div>
-        </div>
+  <p><strong>Party B – Farmer / Producer</strong></p>
+  <p><b>Name:</b> ${farmerName}</p>
+  <p><b>Farmer ID:</b> ${farmerId}</p>
+  <p><b>Address:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
 
-        <div class="section">
-          <strong>7. Dispute Resolution &amp; Jurisdiction</strong>
-          <div class="muted">Initial resolution through mutual negotiation between Farmer and Buyer.</div>
-          <div class="muted">If unresolved, the issue shall be referred to the local Farmer Dispute Resolution Board, District Agriculture Office, or respective Rural Development Authority.</div>
-          <div class="muted">Final arbitration as per the Arbitration and Conciliation Act, 1996. Courts of ________________ (District / State) shall have exclusive jurisdiction.</div>
-        </div>
+    <p>
+      Party A and Party B are hereinafter collectively referred to as "the Parties".
+      All communication, delivery, and payments shall be conducted via the AgriAI platform unless otherwise authorized.
+    </p>
+  </section>
 
-        <div class="section">
-          <strong>8. Termination Clause</strong>
-          <div class="muted">Either party may terminate the agreement with 30 days’ written notice for valid reasons:</div>
-          <ul>
-            <li class="muted">Non-payment</li>
-            <li class="muted">Non-delivery</li>
-            <li class="muted">Fraudulent activity</li>
-            <li class="muted">Force majeure</li>
-            <li class="muted">Violation of terms</li>
-          </ul>
-          <div class="muted">All outstanding dues must be fully settled before termination becomes effective.</div>
-        </div>
+  <section class="section">
+    <h2>1. PURPOSE OF AGREEMENT</h2>
+    <p>
+      This Agreement defines the terms and conditions under which the Farmer agrees to produce
+      and supply agricultural produce to the Buyer, and the Buyer agrees to procure such produce
+      at a pre-determined price, ensuring:
+    </p>
+    <ul>
+      <li>Assured market access to the Farmer</li>
+      <li>Fair and transparent pricing</li>
+      <li>Timely and secure payment</li>
+      <li>Reduced dependency on intermediaries</li>
+    </ul>
+  </section>
 
-        <div class="section">
-          <strong>9. Language of Agreement</strong>
-          <div class="muted">This Agreement has been explained and translated to the Farmer in ________________ (Language). In case of any conflict, the English version shall be legally binding.</div>
-        </div>
+  <section class="section">
+    <h2>2. CONTRACT TYPE & DURATION</h2>
+    <p>Contract Type: ${contractType === 'one-time' ? 'One-Time Procurement Contract' : contractType}</p>
+    <p>Start Date: ${startDate}</p>
+    <p>End Date: ${endDate}</p>
+    <p>Duration: ${days} Days</p>
+    <p>
+      This Agreement shall automatically expire on the End Date unless renewed digitally through
+      the AgriAI platform with explicit consent from both Parties using registered login credentials.
+    </p>
+  </section>
 
-        <div class="section">
-          <strong>10. Execution &amp; Signatures</strong>
-          <div class="muted">This Agreement is executed on non-judicial stamp paper of appropriate value as per state laws, and signed by both parties in presence of witnesses.</div>
-          <div style="margin-top:12px">Buyer / Company Representative: ___________________________</div>
-          <div style="margin-top:12px">Farmer / Producer: ___________________________</div>
-          <div style="margin-top:12px">Witness 1: ___________________________</div>
-          <div style="margin-top:12px">Witness 2: ___________________________</div>
-        </div>
+  <section class="section">
+    <h2>3. DATA PRIVACY & PLATFORM COMPLIANCE</h2>
+    <p>
+      All personal, agricultural, and transactional data collected through the AgriAI platform shall be:
+    </p>
+    <ul>
+      <li>Stored securely</li>
+      <li>Used strictly for:</li>
+      <li>Contract execution and renewal</li>
+      <li>Payment settlement</li>
+      <li>Insurance facilitation</li>
+      <li>Legal and regulatory compliance</li>
+    </ul>
+    <p>
+      This Agreement is fully compliant with the Digital Personal Data Protection Act, 2023.
+    </p>
+  </section>
 
-        <div style="margin-top:18px;font-size:0.9rem;color:#666">Contract Type: ${contractType}</div>
-      </body>
-      </html>`;
+  <section class="section">
+    <h2>4. COMMODITY DETAILS</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Sl. No</th>
+          <th style="padding:8px;border:1px solid #ddd">Crop Name</th>
+          <th style="padding:8px;border:1px solid #ddd">Variety</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:right">Quantity</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsPlaceholder}
+      </tbody>
+    </table>
+  </section>
 
-      // show an in-app preview modal instead of opening a new tab
+  <section class="section">
+    <h2>5. PRICE & PAYMENT TERMS</h2>
+    <p><strong>5.1 Fixed Procurement Price</strong></p>
+    <p>Price: ₹________ per kg / quintal / ton</p>
+    <p>The agreed price shall remain fixed throughout the contract period, irrespective of market fluctuations.</p>
+
+    <p><strong>5.2 Payment Schedule</strong></p>
+    <p>50% payment upon successful delivery of produce</p>
+    <p>50% payment within 7 working days after quality inspection and acceptance</p>
+
+    <p><strong>5.3 Mode of Payment</strong></p>
+    <p>Bank Transfer / UPI / Cheque</p>
+    <p>The Buyer shall issue digital or physical receipts for all payments made under this Agreement.</p>
+  </section>
+
+  <section class="section">
+    <h2>6. DELIVERY, LOGISTICS & TRANSPORTATION</h2>
+
+    <p><strong>6.1 Delivery Responsibility</strong></p>
+    <p>
+      Delivery of agricultural produce under this Agreement shall be facilitated through third-party
+      logistics service providers available on or approved by the AgriAI platform.
+    </p>
+    <p>
+      Neither the Buyer nor the Farmer shall be required to independently arrange transportation unless
+      mutually agreed in writing.
+    </p>
+
+    <p><strong>6.2 Vehicle Selection</strong></p>
+    <p>
+      The type of vehicle used for transportation shall be selected based on quantity of produce,
+      nature of crop, and handling requirements.
+    </p>
+    <p>Selected Vehicle Type: ___________________________</p>
+
+    <p><strong>6.3 Delivery Pricing Method</strong></p>
+    <p>
+      Delivery charges shall be determined solely by the third-party logistics provider.
+      The final delivery cost shall be calculated and communicated at the delivery location.
+    </p>
+
+    <p><strong>6.4 Payment of Delivery Charges</strong></p>
+    <p>
+      Delivery charges shall be paid directly by the Buyer to the logistics provider or delivery personnel,
+      offline or online.
+    </p>
+
+    <p><strong>6.5 Transfer of Risk During Transit</strong></p>
+    <p>
+      During transit, responsibility shall lie with the logistics provider.
+      Upon delivery, risk transfers to the Buyer.
+    </p>
+
+    <p><strong>6.6 Delay, Damage & Loss</strong></p>
+    <p>
+      Any delay, damage, or loss shall be governed by the logistics provider’s terms.
+      AgriAI shall not be held liable.
+    </p>
+
+    <p><strong>6.7 Proof of Delivery</strong></p>
+    <p>
+      Delivery shall be confirmed through physical receipt, digital confirmation, and Proof of Delivery (POD).
+      Records may be stored digitally or on blockchain.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>7. QUALITY STANDARDS & ACCEPTANCE</h2>
+    <p>Produce supplied shall meet mutually agreed quality standards.</p>
+    <p>Buyer shall complete inspection within 3 working days of delivery.</p>
+    <p>Any rejection must be communicated transparently with valid reasons.</p>
+  </section>
+
+  <section class="section">
+    <h2>8. RISK, LIABILITY & INSURANCE</h2>
+    <p>The Farmer shall follow standard agricultural practices.</p>
+    <p>
+      In case of crop loss due to natural calamities, losses shall be addressed fairly.
+      Insurance may be facilitated under PMFBY or government-approved insurers.
+    </p>
+    <p>
+      Any insurance compensation received shall be transferred to the Farmer.
+    </p>
+    <p>
+      After delivery and acceptance, all risks shall transfer to the Buyer.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>9. FORCE MAJEURE</h2>
+    <p>
+      Neither Party shall be liable for delay or failure caused by events beyond reasonable control.
+      Obligations shall resume once normal conditions are restored.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>10. DISPUTE RESOLUTION & JURISDICTION</h2>
+    <p>Disputes shall first be resolved through mutual discussion.</p>
+    <p>
+      If unresolved, disputes shall be referred to local authorities or arbitration under the
+      Arbitration and Conciliation Act, 1996.
+    </p>
+    <p>Courts of ________________ shall have exclusive jurisdiction.</p>
+  </section>
+
+  <section class="section">
+    <h2>11. TERMINATION</h2>
+    <p>
+      Either Party may terminate this Agreement with 30 days’ written notice
+      for valid reasons including breach, non-payment, or force majeure.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>12. LANGUAGE OF AGREEMENT</h2>
+    <p>
+      This Agreement has been explained and translated to the Farmer in ________________ (Language).
+      In case of any inconsistency, the English version shall prevail.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>13. EXECUTION & SIGNATURES</h2>
+
+    <p>Buyer / Authorized Representative</p>
+    <p>Signature: ___________________________</p>
+    <p>Date: ___________________________</p>
+
+    <p>Farmer / Producer</p>
+    <p>Signature: ___________________________</p>
+    <p>Date: ___________________________</p>
+
+    <p>Witness 1: ___________________________</p>
+    <p>Witness 2: ___________________________</p>
+  </section>
+
+</body>
+</html>`;
+
+  // show an in-app preview modal instead of opening a new tab
       setContractHtml(html);
       setShowContractPreview(true);
     } catch (e) {
       console.error('Failed to generate contract', e);
-      alert('Failed to generate contract. See console for details.');
+      alert(t('contractGenerateFailed', siteLang) || 'Failed to generate contract. See console for details.');
     }
   };
 
@@ -556,7 +866,7 @@ const FarmerCart = () => {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error('Download failed', e);
-      alert('Download failed. See console for details.');
+      alert(t('downloadFailed', siteLang) || 'Download failed. See console for details.');
     }
   };
 
@@ -583,21 +893,21 @@ const FarmerCart = () => {
       }, 250);
     } catch (e) {
       console.error('Print failed', e);
-      alert('Print failed. See console for details.');
+      alert(t('printFailed', siteLang) || 'Print failed. See console for details.');
     }
   };
 
   return (
-    <div>
+    <div style={{ background: '#53b635', minHeight: '85vh' }}>
       <Navbar />
       <main style={{ padding: '6rem 1rem 2rem' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', background: '#fff', padding: '1.25rem', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <h1 style={{ color: '#236902', margin: 0 }}>My Cart</h1>
+        <div style={{ maxWidth: 1100, margin: '0 auto', background: '#fff', padding: '1.25rem', boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'nowrap', position: 'relative', padding: '12px 0 18px', minHeight: 64 }}>
+            <h1 style={{ color: '#236902', margin: 0, position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>{t('cartTitle', siteLang)}</h1>
             {items.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={() => window.location.href = '/dashboard/buyer'} style={{ background: '#fff', border: '1px solid #dfeadf', color: '#236902', padding: '6px 10px', borderRadius: 6 }}>Continue Shopping</button>
-                <button onClick={clearCart} style={{ background: '#fff', border: '1px solid #f0dede', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>Clear Cart</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto', zIndex: 2 }}>
+                <button onClick={() => window.location.href = '/dashboard/buyer'} style={{ background: '#fff', border: '1px solid #dfeadf', color: '#236902', padding: '6px 10px', borderRadius: 6 }}>{t('continueShopping', siteLang)}</button>
+                <button onClick={clearCart} style={{ background: '#fff', border: '1px solid #f0dede', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>{t('clearCart', siteLang)}</button>
               </div>
             )}
           </div>
@@ -605,39 +915,48 @@ const FarmerCart = () => {
           {items.length === 0 ? (
             <div style={{ textAlign: 'center', marginTop: 16 }}>
               <div style={{ fontSize: 52, lineHeight: 1 }}>🧺</div>
-              <p style={{ marginTop: 8 }}>Your cart is empty. Add listings from the Market.</p>
+              <p style={{ marginTop: 8 }}>{t('cartEmptyMessage', siteLang)}</p>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 620px', minWidth: 320 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
                   {items.map(it => {
-                    const { gstRate, commissionRate, gstAmt, commissionAmt, lineTotal } = calculateGstAndCommission(it);
+                    const { gstRate, commissionRate: _commissionRate, gstAmt, commissionAmt, lineTotal, group: _group, categoryTotal: _categoryTotal } = calculateGstAndCommission(it);
                     return (
                       <div key={it.id} style={{ display: 'flex', gap: 12, alignItems: 'center', border: '1px solid #eee', padding: 12, borderRadius: 8 }}>
                         <div style={{ width: 120, height: 80, borderRadius: 6, overflow: 'hidden', background: '#f4f4f4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {it.image_url ? (
                             <img src={it.image_url} alt={it.crop_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
-                            <div style={{ color: '#999' }}>No image</div>
+                            <div style={{ color: '#999' }}>{t('noImage', siteLang)}</div>
                           )}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <div style={{ fontWeight: 800, color: '#236902' }}>{it.crop_name}</div>
+                            {it.variety && (
+                              <div style={{ background: '#f0f7ff', color: '#236902', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>{it.variety}</div>
+                            )}
                             {(it.category || it.cat) && (
                               <div style={{ background: '#eaf6ea', color: '#236902', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>{it.category || it.cat}</div>
                             )}
+                            
+                            {/* Debug badge: detected group and category subtotal */}
+                            
+                            
                           </div>
-                          <div style={{ marginTop: 6, fontWeight: 700 }}>{formatCurrency(it.price_per_kg)} / kg</div>
+                          <div style={{ marginTop: 6, fontWeight: 700 }}>{formatCurrency(it.price_per_kg)} / {t('kg', siteLang)}</div>
                           <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <div style={{ fontSize: 13, color: '#555' }}>GST: {gstRate}% ({formatCurrency(gstAmt)})</div>
-                            <div style={{ fontSize: 13, color: '#555' }}>Platform: {formatCurrency(commissionAmt)}</div>
-                            <div style={{ fontSize: 13, color: '#000', fontWeight: 700 }}>Item Total: {formatCurrency(lineTotal + gstAmt + commissionAmt)}</div>
+                            <div style={{ fontSize: 13, color: '#000000ff' }}>{t('subTotalLabel', siteLang)} {formatCurrency(it.total_price || (lineTotal))}</div>
+                            <div style={{ fontSize: 13, color: '#000000ff' }}>{t('tablePlatformFee', siteLang)}: {formatCurrency(commissionAmt)}</div>
+                            <div style={{ fontSize: 13, color: '#000000ff' }}>{t('gstTotalLabel', siteLang)}: {gstRate}% ({formatCurrency(gstAmt)})</div>
+
+                            <div style={{ fontSize: 13, color: '#000', fontWeight: 700 }}>{t('itemTotalLabel', siteLang)} {formatCurrency(Math.round((lineTotal - (commissionAmt || 0) - (gstAmt || 0) + Number.EPSILON) * 100) / 100)}</div>
                           </div>
                         </div>
                         <div style={{ textAlign: 'right', minWidth: 220 }}>
-                          <div style={{ fontWeight: 700 }}>Available: {Number(it.quantity_kg || 0).toLocaleString('en-IN')} kg</div>
+                          <div style={{ fontWeight: 700 }}>{t('availableLabel', siteLang)} {Number(it.total_quantity != null ? it.total_quantity : it.quantity_kg || 0).toLocaleString('en-IN')} {t('kg', siteLang)}</div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
                             <button onClick={() => updateQuantity(it.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>-</button>
                             <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800 }}>{Number(it.order_quantity || 0).toLocaleString('en-IN')} kg</div>
@@ -647,22 +966,22 @@ const FarmerCart = () => {
                             {editingId === it.id ? (
                               <>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                    <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Qty (kg)</label>
-                                    <input type="number" step="0.001" value={editVal} onChange={e => setEditVal(e.target.value)} style={{ width: 120, padding: 6 }} />
-                                  </div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                    <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Price/kg</label>
-                                    <input type="number" step="0.01" value={editPrice} onChange={e => setEditPrice(e.target.value)} style={{ width: 120, padding: 6 }} />
-                                  </div>
-                                </div>
-                                <button onClick={() => saveEdit(it.id)} style={{ padding: '6px 8px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, marginLeft: 8 }}>Save</button>
-                                <button onClick={cancelEdit} style={{ padding: '6px 8px', background: '#ddd', border: 'none', borderRadius: 6, marginLeft: 6 }}>Cancel</button>
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{t('formQuantityLabel', siteLang)}</label>
+                                        <input type="number" step="0.001" value={editVal} onChange={e => setEditVal(e.target.value)} style={{ width: 120, padding: 6 }} />
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{t('tablePricePerKg', siteLang)}</label>
+                                        <input type="number" step="0.01" value={editPrice} onChange={e => setEditPrice(e.target.value)} style={{ width: 120, padding: 6 }} />
+                                      </div>
+                                    </div>
+                                    <button onClick={() => saveEdit(it.id)} style={{ padding: '6px 8px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, marginLeft: 8 }}>{t('saveButton', siteLang)}</button>
+                                    <button onClick={cancelEdit} style={{ padding: '6px 8px', background: '#ddd', border: 'none', borderRadius: 6, marginLeft: 6 }}>{t('cancelButton', siteLang)}</button>
                               </>
                             ) : (
-                              <>
-                                <button onClick={() => startEdit(it)} style={{ padding: '6px 8px', background: '#1976d2', color: '#fff', border: 'none', borderRadius: 6 }}>Edit</button>
-                                <button onClick={() => removeItem(it.id)} style={{ background: '#fff', border: '1px solid #d32f2f', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>Remove</button>
+                                <>
+                                <button onClick={() => startEdit(it)} style={{ padding: '6px 8px', background: '#1976d2', color: '#fff', border: 'none', borderRadius: 6 }}>{t('editButton', siteLang)}</button>
+                                <button onClick={() => removeItem(it.id)} style={{ background: '#fff', border: '1px solid #d32f2f', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>{t('deleteButton', siteLang)}</button>
                               </>
                             )}
                           </div>
@@ -675,34 +994,34 @@ const FarmerCart = () => {
 
               <div style={{ flex: '0 0 320px', width: 320, position: 'sticky', top: 88, alignSelf: 'flex-start' }}>
                 <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
-                  <div style={{ fontWeight: 800, color: '#236902', marginBottom: 8 }}>Order Summary</div>
+                  <div style={{ fontWeight: 800, color: '#236902', marginBottom: 8 }}>{t('orderSummary', siteLang)}</div>
                   <div style={{ display: 'grid', gap: 6, fontWeight: 700 }}>
-                    <div>Total items: {items.length}</div>
-                    <div>Total available: {Number(totalAvailableQty).toLocaleString('en-IN')} kg</div>
-                    <div>Total ordered: {Number(totalOrderedQty).toLocaleString('en-IN')} kg</div>
-                    <div>Subtotal: {formatCurrency(totals.subtotal)}</div>
-                    <div>GST Total: {formatCurrency(totals.gst)}</div>
-                    <div>Platform Fee: {formatCurrency(totals.commission)}</div>
-                    <div style={{ fontSize: 18, color: '#236902', marginTop: 6 }}>Grand Total: {formatCurrency(grandTotal)}</div>
+                    <div>{t('totalItemsLabel', siteLang)} {items.length}</div>
+                    <div>{t('totalAvailableLabel', siteLang)} {Number(totalAvailableQty).toLocaleString('en-IN')} {t('kg', siteLang)}</div>
+                    <div>{t('totalOrderedLabel', siteLang)} {Number(totalOrderedQty).toLocaleString('en-IN')} {t('kg', siteLang)}</div>
+                    <div>{t('subTotalLabel', siteLang)} {formatCurrency(totals.subtotal)}</div>
+                    <div>{t('platformFeeTotalLabel', siteLang)} {formatCurrency(totals.commission)}</div>
+                    <div>{t('gstTotalLabel', siteLang)} {formatCurrency(totals.gst)}</div>
+                    <div style={{ fontSize: 18, color: '#236902', marginTop: 6 }}>{t('grandTotalLabel', siteLang)}: {formatCurrency(grandTotal)}</div>
                   </div>
                   
                   <div style={{ marginTop: 12 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 6 }}>Contract Type</div>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>{t('contractTypeLabel', siteLang)}</div>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <input type="radio" name="contractType" value="one-time" checked={contractType === 'one-time'} onChange={() => setContractType('one-time')} /> One-time
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractType" value="one-time" checked={contractType === 'one-time'} onChange={() => setContractType('one-time')} /> {t('contractOneTime', siteLang)}
                       </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <input type="radio" name="contractType" value="seasonal" checked={contractType === 'seasonal'} onChange={() => setContractType('seasonal')} /> Seasonal
+                        <input type="radio" name="contractType" value="seasonal" checked={contractType === 'seasonal'} onChange={() => setContractType('seasonal')} /> {t('contractSeasonal', siteLang)}
                       </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <input type="radio" name="contractType" value="yearly" checked={contractType === 'yearly'} onChange={() => setContractType('yearly')} /> Yearly
+                        <input type="radio" name="contractType" value="yearly" checked={contractType === 'yearly'} onChange={() => setContractType('yearly')} /> {t('contractYearly', siteLang)}
                       </label>
                     </div>
                   </div>
 
                   <button onClick={handleSendContract} disabled={!items.length} style={{ marginTop: 12, width: '100%', background: '#236902', color: '#fff', padding: '10px 12px', borderRadius: 6, border: 'none' }}>
-                    Send Contract
+                    {t('sendContract', siteLang)}
                   </button>
                 </div>
               </div>
@@ -714,17 +1033,17 @@ const FarmerCart = () => {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ width: '94%', maxWidth: 960, maxHeight: '92%', background: '#fff', padding: 16, overflow: 'auto', borderRadius: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ fontWeight: 800 }}>Contract Preview</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={downloadContract} style={{ padding: '6px 10px' }}>Download</button>
-                <button onClick={printContract} style={{ padding: '6px 10px' }}>Print</button>
-                <button onClick={() => setShowContractPreview(false)} style={{ padding: '6px 10px' }}>Close</button>
+                <div style={{ fontWeight: 800 }}>{t('contractPreview', siteLang)}</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={downloadContract} style={{ padding: '6px 10px' }}>{t('download', siteLang) || 'Download'}</button>
+                  <button onClick={printContract} style={{ padding: '6px 10px' }}>{t('print', siteLang) || 'Print'}</button>
+                  <button onClick={() => setShowContractPreview(false)} style={{ padding: '6px 10px' }}>{t('close', siteLang) || 'Close'}</button>
+                </div>
               </div>
-            </div>
             <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: contractHtml }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button onClick={() => { setShowContractPreview(false); handleBuyNow(); }} style={{ padding: '8px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>Confirm & Send</button>
-              <button onClick={() => setShowContractPreview(false)} style={{ padding: '8px 12px', background: '#ddd', border: 'none', borderRadius: 6 }}>Cancel</button>
+              <button onClick={() => { setShowContractPreview(false); handleBuyNow(); }} style={{ padding: '8px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>{t('confirmAndSend', siteLang) || 'Confirm & Send'}</button>
+              <button onClick={() => setShowContractPreview(false)} style={{ padding: '8px 12px', background: '#ddd', border: 'none', borderRadius: 6 }}>{t('cancelButton', siteLang)}</button>
             </div>
           </div>
         </div>
