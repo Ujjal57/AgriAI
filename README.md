@@ -1,70 +1,168 @@
-# Getting Started with Create React App
+# 🌾 AgriAI – AI-Powered Contract Farming Platform
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+AgriAI is an AI-powered contract farming platform that digitally connects farmers and buyers through a secure and transparent system. The platform enables farmers to upload crop details and buyers to post procurement deals, allowing both parties to search, negotiate, and finalize contracts through mutual agreement.
 
-## Available Scripts
+## ⚠️ Note on Source Code
 
-In the project directory, you can run:
+> 🔒 **Disclaimer:** he full implementation of some parts of the project, including advanced recommendation features, payment gateway integration, or proprietary logic, has been intentionally omitted from the public repository to protect sensitive code and data.
 
-### `npm start`
+## 👥 User Roles
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- Farmer
+- Buyer
+Each user role has secure authentication and role-based access.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 🧹 Data Handling & Processing
 
-### `npm test`
+- Structured data storage using MySQL
+- Separate tables for users, crops, deals, carts, and contracts
+- Secure CRUD operations through Flask APIs
+- Input validation and role-based access control
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## 🚀 Key Features
 
-### `npm run build`
+- 🔐 Farmer & Buyer Authentication – Secure login and registration
+- 🌱 Crop Upload – Farmers can list crops with price, quantity, and availability
+- 📄 Deal Posting – Buyers can upload purchase requirements
+- 🔎 Two-Way Search – Farmers can search buyers and buyers can search farmers
+- 🛒 Cart-Based Workflow – Crops or deals added to cart for contract initiation
+- 📝 Digital Contract System – Contracts generated after mutual approval
+- 🤖 AI Chatbot – Answers farming-related queries and platform guidance
+- 🌐 Multilingual Support – English, Hindi, and Kannada
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## 🚫 Deployment Status
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- Project is currently not deployed online
+- Can be executed locally using Flask backend and web-based frontend
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## 🎯 Impact
 
-### `npm run eject`
+- Enables direct farmer-to-buyer interaction
+- Reduces dependency on intermediaries
+- Promotes transparent and secure contract farming
+- Demonstrates real-world integration of AI, web technologies, and databases
+- Strong showcase of AgriTech-focused full stack development
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+---
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## 📂 Project Structure
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+```
+📁 AgriAI
+│
+├── backend/                 # Flask backend
+│   ├── app.py               # Main Flask app
+│   ├── create_tables.sql    # SQL scripts to create tables
+│   ├── .env                 # Environment variables
+│   ├── routes/              # API route files
+│   ├── utils/               # Helper functions, validations
+│
+├── src/                     # React.js frontend
+│   ├── components/          # Reusable components
+│   ├── farmer/              # Farmer-specific pages
+│   ├── buyer/               # Buyer-specific pages
+│   ├── Cart.js
+│   ├── Navbar.js
+│   └── i18n.js              # Multilingual support
+│
+├── README.md                # Project documentation
+└── package.json             # Frontend dependencies
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
-## Learn More
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+---
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## ⚙️ Installation & Running Locally
 
-### Code Splitting
+### 🔹 1. Clone the repository
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+```bash
+git clone https://github.com/Ujjal57/AgriAI.git
+cd AgriAI
+```
 
-### Analyzing the Bundle Size
+### 🔹 2. Set Up XAMPP
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+- Install [XAMPP]
+- Start **Apache** and **MySQL** services
+- Copy the project folder to:
 
-### Making a Progressive Web App
+```makefile
+C:\xampp\htdocs\AgriAI
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+### 🔹 3. Backend setup
 
-### Advanced Configuration
+- Install Python packages:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+```makefile
+C:\xampp\htdocs\AgriAI
+```
 
-### Deployment
+### 🔹 4. Frontend setup
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+- Navigate to src/ and install dependencies:
 
-### `npm run build` fails to minify
+```npm install
+npm start
+```
+- React app runs on http://localhost:3000
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+### 🔹 4. Run backend
+
+```python backend/app.py
+```
+
+- Flask API runs on http://localhost:5000
+    
+---
+
+## 🖼️ Screenshots
+<p align="center">
+  <em>Home Page</em><br>
+  <img src="images/home.png" alt="Home Page" width="700"/>
+</p>
+
+<p align="center">
+  <em>Sign In/Sign Up</em><br>
+  <img src="images/sign.png" alt="Sign In/Sign Up" width="700"/>
+</p>
+
+<p align="center">
+  <em>Farmer Page</em><br>
+  <img src="images/farmer.png" alt="Farmer Page" width="700"/>
+</p>
+
+<p align="center">
+  <em>Buyer Page</em><br>
+  <img src="images/buyer.png" alt="Buyert Page" width="700"/>
+</p>
+
+<p align="center">
+  <em>Crops Page</em><br>
+  <img src="images/crops.png" alt="Crops Page" width="700"/>
+</p>
+
+<p align="center">
+  <em>Deals Page</em><br>
+  <img src="images/deal.png" alt="Deals Page" width="700"/>
+</p>
+
+<p align="center">
+  <em>Cart Page</em><br>
+  <img src="images/cart.png" alt="Cart Page" width="700"/>
+</p>
+
+---
+
+## 🔐 Sample Admin/Farmer/Buyer Access
+
+- Credentials can be created through registration pages
+
+---
+
+## 👨‍💻 Developer
+
+**Ujjal Kumar Dey** 
