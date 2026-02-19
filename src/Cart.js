@@ -305,6 +305,35 @@ const Cart = () => {
     // ✅ Embed the imported logo as a data URL (for display in print)
     const logoSrc = window.location.origin + logo;
 
+    // compute delivery rate display (estimate) and labour charge for invoice
+    const totalContractQty = totalOrderedQty;
+    const qtyKg = Math.round(totalContractQty || 0);
+    const qtyRateMap = [
+      { min: 0, max: 40, rates: [12, 18, 22] },
+      { min: 41, max: 400, rates: [18, 22, 28] },
+      { min: 401, max: 1500, rates: [22, 28, 35] },
+      { min: 1501, max: 5000, rates: [28, 35, 45] },
+      { min: 5001, max: 10000, rates: [35, 45, 60] }
+    ];
+    let matching = qtyRateMap.find(r => qtyKg >= r.min && qtyKg <= r.max);
+    if (!matching) matching = qtyRateMap[qtyRateMap.length - 1];
+    const formatRates = (arr) => {
+      const parts = (arr || []).map(v => `₹${v} / km`);
+      if (parts.length === 0) return '₹-- / km';
+      if (parts.length === 1) return parts[0];
+      if (parts.length === 2) return `${parts[0]} or ${parts[1]}`;
+      return `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}`;
+    };
+    const deliveryRateDisplay = `${formatRates(matching.rates)}`;
+
+    const computeLabourCharge = (q) => {
+      if (!Number.isFinite(q) || q <= 0) return 0;
+      if (q <= 100) return 40;
+      if (q <= 1000) return 750;
+      return Math.round(750 + ((q - 1000) / 1000) * 300);
+    };
+    const labourCharge = computeLabourCharge(qtyKg);
+
     const userRoleForBill = (typeof window !== 'undefined' && window.localStorage) ? (localStorage.getItem('agriai_role') || '') : '';
     const includeFeesInBill = userRoleForBill !== 'buyer';
 
@@ -332,6 +361,9 @@ const Cart = () => {
               display: block;
             }
             #printBtn:hover { background-color: #1a4f02; }
+            .infoBtn { margin-left: 8px; border: 0; background: #1976d2; color: #fff; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; line-height: 18px; cursor: pointer; }
+            .modal { position: fixed; left: 0; top: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 10000; background: rgba(0,0,0,0.5); }
+            .modal-content { width: 92%; max-width: 760px; background: #fff; border-radius: 8px; padding: 18px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); overflow: auto; }
           </style>
         </head>
         <body>
@@ -383,12 +415,58 @@ const Cart = () => {
         <span style="color:#236902;">Grand Total: ₹${grandTotal.toFixed(2)}</span>
       </h3>
 
+      <div style="margin-top:8px;">
+        <strong>Delivery / Logistics Charges (Payable After Delivery):</strong> ${deliveryRateDisplay} <button class="infoBtn" onclick="showDeliveryInfo()" aria-label="Delivery info">i</button><br/>
+        
+      </div>
+
       <div class="footer">
         <p><strong>Payment Method:</strong> ${paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online'}</p>
         <p>Thank you for choosing Agri AI!<br>We connect farmers and buyers with trust.</p>
       </div>
 
       <button id="printBtn" onclick="window.print()">Print / Save as PDF</button>
+
+      <div id="deliveryModal" class="modal" style="display: none;">
+        <div class="modal-content">
+          <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;">
+            <div style="flex: 1;">
+              <h3 style="margin: 0 0 8px 0; color: #236902;">Delivery & Logistics Charges</h3>
+              <div style="font-size: 14px; color: #111; line-height: 1.5;">
+                <div style="overflow: auto;">
+                  <table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; text-align: center;">
+                    <thead>
+                      <tr>
+                        <th style="border: 1px solid #ddd; padding: 8px; background: #f7f7f7; text-align: center;">Vehicle Type</th>
+                        <th style="border: 1px solid #ddd; padding: 8px; background: #f7f7f7; text-align: center;">Typical Distance Range (km)</th>
+                        <th style="border: 1px solid #ddd; padding: 8px; background: #f7f7f7; text-align: center;">Vehicle Capacity</th>
+                        <th style="border: 1px solid #ddd; padding: 8px; background: #f7f7f7; text-align: center;">FIXED Cost per km (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td style="border: 1px solid #ddd; padding: 8px;">Bike Courier</td><td style="border: 1px solid #ddd; padding: 8px;">0 – 20 km</td><td style="border: 1px solid #ddd; padding: 8px;">Up to 40 kg</td><td style="border: 1px solid #ddd; padding: 8px;"><strong>₹12 / km</strong></td></tr>
+                      <tr><td style="border: 1px solid #ddd; padding: 8px;">3-Wheeler Cargo (Auto / Ape)</td><td style="border: 1px solid #ddd; padding: 8px;">0 – 80 km</td><td style="border: 1px solid #ddd; padding: 8px;">0 – 400 kg</td><td style="border: 1px solid #ddd; padding: 8px;"><strong>₹18 / km</strong></td></tr>
+                      <tr><td style="border: 1px solid #ddd; padding: 8px;">Mini Truck (Tata Ace / Pickup)</td><td style="border: 1px solid #ddd; padding: 8px;">0 – 100 km</td><td style="border: 1px solid #ddd; padding: 8px;">40 – 1500 kg</td><td style="border: 1px solid #ddd; padding: 8px;"><strong>₹22 / km</strong></td></tr>
+                      </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div style="flex: 0 0 auto; margin-top: 12px;">
+              <button onclick="hideDeliveryInfo()" style="background: #236902; color: #fff; border: none; border-radius: 6px; padding: 8px 10px; cursor: pointer; display: inline-block;">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <script>
+        function showDeliveryInfo() {
+          document.getElementById('deliveryModal').style.display = 'flex';
+        }
+        function hideDeliveryInfo() {
+          document.getElementById('deliveryModal').style.display = 'none';
+        }
+      </script>
     </body>
   </html>
   `;
@@ -396,6 +474,90 @@ const Cart = () => {
     const newWindow = window.open('', '_blank');
     newWindow.document.write(html);
     newWindow.document.close();
+  };
+
+  const sendContract = () => {
+    try {
+      const startDateObj = new Date();
+      const startDate = startDateObj.toLocaleDateString('en-GB');
+      const days = 30;
+      const endDateObj = new Date(Date.now() + days * 24 * 3600 * 1000);
+      const endDate = endDateObj.toLocaleDateString('en-GB');
+
+      const totalContractQty = totalOrderedQty;
+      const totalCropTradeValue = items.reduce((s, it) => s + ((Number(it.order_quantity || 0) || 0) * (Number(it.price_per_kg || 0) || 0)), 0);
+      const avgPricePerKg = totalContractQty > 0 ? (totalCropTradeValue / totalContractQty) : 0;
+
+      const qtyKg = Math.round(totalContractQty || 0);
+      const qtyRateMap = [
+        { min: 0, max: 40, rates: [12, 18, 22] },
+        { min: 41, max: 400, rates: [18, 22, 28] },
+        { min: 401, max: 1500, rates: [22, 28, 35] },
+        { min: 1501, max: 5000, rates: [28, 35, 45] },
+        { min: 5001, max: 10000, rates: [35, 45, 60] }
+      ];
+      let matching = qtyRateMap.find(r => qtyKg >= r.min && qtyKg <= r.max);
+      if (!matching) matching = qtyRateMap[qtyRateMap.length - 1];
+      const formatRates = (arr) => {
+        const parts = (arr || []).map(v => `₹${v} / km`);
+        if (parts.length === 0) return '₹-- / km';
+        if (parts.length === 1) return parts[0];
+        if (parts.length === 2) return `${parts[0]} or ${parts[1]}`;
+        return `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}`;
+      };
+      const deliveryRateDisplay = `${formatRates(matching.rates)}`;
+
+      const logoSrc = window.location.origin + logo;
+
+      const rowsHtml = (items || []).map((it, idx) => {
+        const qty = Number(it.order_quantity || 0) || 0;
+        const variety = it.variety || it.Variety || '';
+        const price = Number(it.price_per_kg || 0) || 0;
+        const amount = Math.round((qty * price + Number.EPSILON) * 100) / 100;
+        return `<tr>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${idx + 1}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${it.crop_name || ''}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${variety}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${qty.toLocaleString('en-IN')} kg</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${formatCurrency(price)}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${formatCurrency(amount)}</td>
+        </tr>`;
+      }).join('');
+
+      const html = `<!doctype html><html><head><meta charset="utf-8" /><title>Procurement Contract</title></head><body style="font-family:'Times New Roman', Times, serif;color:#111;padding:24px;line-height:1.6;">
+        <div style="text-align:center;margin-bottom:20px;">
+          <img src="${logoSrc}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
+          <h1 style="color:#236902;margin:0;">Agri AI<br/>PROCUREMENT CONTRACT FARMING AGREEMENT</h1>
+        </div>
+        <section><h2>PARTIES</h2>
+          <p><strong>Party A – Buyer / Company</strong></p>
+          <p><b>Name:</b> ${localStorage.getItem('agriai_name') || '[Buyer Name]'}</p>
+          <p><b>Buyer ID:</b> ${localStorage.getItem('agriai_id') || ''}</p>
+          <p><b>Address:</b> ${localStorage.getItem('agriai_address') || ''}</p>
+          <p><strong>Party B – Farmer / Producer</strong></p>
+          <p><b>Name:</b> ${sellerInfo.name || ''}</p>
+          <p><b>Farmer ID:</b> ${sellerInfo.id || ''}</p>
+          <p><b>Address:</b> ${sellerInfo.state || ''}${sellerInfo.region ? ', ' + sellerInfo.region : ''}</p>
+        </section>
+        <section><h2>4. COMMODITY DETAILS</h2>
+          <table style="border-collapse:collapse;width:100%;margin-top:12px;"><thead><tr><th style="padding:8px;border:1px solid #ddd;text-align:center">Sl. No</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Crop Name</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Variety</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Quantity</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Price (₹/kg)</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+        </section>
+        <section><h2>5. PRICE & PAYMENT TERMS</h2>
+          <p>Price: ${formatCurrency(avgPricePerKg)} per kg</p>
+          <p>Total Contract Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p>
+          <p><strong>Total Crop Trade Value (GST Exempt): ${formatCurrency(totalCropTradeValue)}</strong></p>
+          <p>Delivery / Logistics Charges (Payable After Delivery): ${deliveryRateDisplay}</p>
+        </section>
+        <section><p>Start Date: ${startDate}</p><p>End Date: ${endDate}</p><p>Duration: ${days} Days</p></section>
+      </body></html>`;
+
+      const newWindow = window.open('', '_blank');
+      newWindow.document.write(html);
+      newWindow.document.close();
+    } catch (e) {
+      console.error('sendContract failed', e);
+      alert('Failed to open contract. See console.');
+    }
   };
 
   const handleBuyNow = () => {
@@ -764,21 +926,39 @@ const Cart = () => {
                     {paymentError && <div style={{ color: 'crimson', marginTop: 6 }}>{paymentError}</div>}
                   </div>
 
-                    <button
-                      onClick={handleBuyNow}
-                      disabled={!items.length}
-                      style={{
-                      marginTop: 12,
-                      width: '100%',
-                        background: '#236902',
-                        color: '#fff',
-                      padding: '10px 12px',
-                        borderRadius: 6,
-                        border: 'none'
-                      }}
-                    >
-                      Buy Now
-                    </button>
+                    {userRole === 'buyer' && totalOrderedQty > 40 ? (
+                      <button
+                        onClick={sendContract}
+                        disabled={!items.length}
+                        style={{
+                          marginTop: 12,
+                          width: '100%',
+                          background: '#1976d2',
+                          color: '#fff',
+                          padding: '10px 12px',
+                          borderRadius: 6,
+                          border: 'none'
+                        }}
+                      >
+                        Send Contract
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleBuyNow}
+                        disabled={!items.length}
+                        style={{
+                          marginTop: 12,
+                          width: '100%',
+                          background: '#236902',
+                          color: '#fff',
+                          padding: '10px 12px',
+                          borderRadius: 6,
+                          border: 'none'
+                        }}
+                      >
+                        Buy Now
+                      </button>
+                    )}
                 </div>
               </div>
             </div>

@@ -79,22 +79,22 @@ def send_purchase_email(to_email, buyer_name, items, total_price=None, lang='en'
         en_blocks = []
         for cname, var, qty, price, fname in lines:
             en_blocks.append(f"* Crop Name: {cname}\n* Variety: {var}\n* Quantity Purchased: {qty}\n* Total Price: ₹{float(total_price or 0):.2f}\n")
-        en_body = f"Dear {buyer_name or ''},\n\nThank you for completing your purchase on AgriAI! 🌱\n\nWe are pleased to inform you that your purchase has been successfully confirmed. The selected crop has been purchased from the farmer, and the transaction details have been securely recorded on our platform.\n\nPurchase Details:\n\n" + ('\n'.join(en_blocks)) + f"\n\nYou can view and download the invoice from the “History” section of your account for complete transaction details.\n\nThe farmer has been notified about this purchase and will proceed with the next steps as per the agreed terms.\n\nIf you have any questions or need assistance, please feel free to reach out to us using the “Contact Us” section on the platform.\n\nThank you for choosing AgriAI – an AI-Enhanced Contract Farming and Farmer Advisory System. We appreciate your trust and look forward to supporting a smooth and successful transaction.\n\nWarm regards,\nThe AgriAI Team\nAI-Enhanced Contract Farming and Farmer Advisory System\n"
+        en_body = f"Dear {buyer_name or ''},\n\nThank you for submitting the contract on AgriAI.🌱\n\nWe would like to inform you that the contract has been successfully sent to the buyer and is currently awaiting the buyer’s review and approval.\n\nAt this stage:\n\n* No action is required from your side until the buyer responds.\n* You may delete the contract anytime before buyer approval, if needed.\n* The contract will remain visible in your “History” section for record and reference, even if deleted.\n\nOnce the buyer approves the contract, you will receive an immediate notification, and the contract will move to the next stage as per the agreed terms.\n\nThank you for choosing AgriAI – an AI-Enhanced Contract Farming and Farmer Advisory System. We are committed to ensuring secure, transparent, and fair contract farming for you.\n\nWarm regards,\nThe AgriAI Team\nAI-Enhanced Contract Farming and Farmer Advisory System."
+
 
         hi_blocks = []
         for cname, var, qty, price, fname in lines:
             hi_blocks.append(f"* फसल का नाम: {cname}\n* किस्म: {var}\n* खरीदी गई मात्रा: {qty}\n* कुल मूल्य: ₹{float(total_price or 0):.2f}\n")
         hi_body = (
             f"प्रिय {buyer_name or ''},\n\n"
-            "AgriAI पर अपनी खरीद पूरी करने के लिए धन्यवाद! 🌱\n\n"
-            "हमें यह बताते हुए खुशी हो रही है कि आपकी खरीद सफलतापूर्वक पुष्टि हो गई है। चयनित फसल किसान से खरीदी जा चुकी है और लेन-देन से संबंधित सभी विवरण हमारे प्लेटफ़ॉर्म पर सुरक्षित रूप से दर्ज कर लिए गए हैं।\n\n"
-            "खरीद विवरण:\n\n"
-            + ('\n'.join(hi_blocks))
-            + "\nआप अपने खाते के “History” (इतिहास) अनुभाग से पूरा लेन-देन विवरण देखने और इनवॉइस डाउनलोड करने में सक्षम हैं।\n\n"
-            "इस खरीद के बारे में किसान को सूचित कर दिया गया है और वह सहमत शर्तों के अनुसार आगे की प्रक्रिया करेगा।\n\n"
-            "यदि आपके कोई प्रश्न हों या आपको किसी सहायता की आवश्यकता हो, तो कृपया हमारे प्लेटफ़ॉर्म के “Contact Us” (संपर्क करें) अनुभाग के माध्यम से हमसे संपर्क करें।\n\n"
-            "AgriAI – एक एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली को चुनने के लिए धन्यवाद। हम आपके विश्वास की सराहना करते हैं और एक सुचारु तथा सफल लेन-देन में आपका सहयोग करने के लिए तत्पर हैं।\n\n"
-            "सादर,\nAgriAI टीम\nएआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली\n"
+            "AgriAI पर अनुबंध भेजने के लिए धन्यवाद। 🌱\n\n"
+            "हमें आपको यह सूचित करते हुए खुशी हो रही है कि अनुबंध सफलतापूर्वक खरीदार को भेज दिया गया है और वर्तमान में खरीदार की समीक्षा और स्वीकृति की प्रतीक्षा में है।\n\n"
+            "इस चरण में:\n\n"
+            "* खरीदार अनुबंध की समीक्षा कर रहा है।\n"
+            "* खरीदार की प्रतिक्रिया आने तक आपकी ओर से किसी कार्रवाई की आवश्यकता नहीं है।\n"
+            "* आवश्यकता होने पर आप खरीदार की स्वीकृति से पहले कभी भी अनुबंध को हटा सकते हैं।\n"
+            "* अनुबंध “History” (इतिहास) अनुभाग में रिकॉर्ड और संदर्भ के लिए उपलब्ध रहेगा, भले ही उसे हटा दिया जाए।\n\n"
+            "खरीदार द्वारा अनुबंध स्वीकृत होते ही आपको तुरंत सूचना प्राप्त होगी और अनुबंध सहमत शर्तों के अनुसार अगले चरण में चला जाएगा।\n\nAgriAI – एक एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली को चुनने के लिए धन्यवाद। हम आपके लिए सुरक्षित, पारदर्शी और निष्पक्ष अनुबंध खेती सुनिश्चित करने के लिए प्रतिबद्ध हैं।\n\nसादर,\nAgriAI टीम\nएआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली"
         )
 
         kn_blocks = []
@@ -102,15 +102,14 @@ def send_purchase_email(to_email, buyer_name, items, total_price=None, lang='en'
             kn_blocks.append(f"* ಬೆಳೆ ಹೆಸರು: {cname}\n* ಜಾತಿ: {var}\n* ಖರೀದಿಸಿದ ಪ್ರಮಾಣ: {qty}\n* ಒಟ್ಟು ಮೊತ್ತ: ₹{float(total_price or 0):.2f}\n")
         kn_body = (
             f"ಪ್ರಿಯ {buyer_name or ''},\n\n"
-            "AgriAI ನಲ್ಲಿ ನಿಮ್ಮ ಖರೀದಿಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು! 🌱\n\n"
-            "ನಿಮ್ಮ ಖರೀದಿ ಯಶಸ್ವಿಯಾಗಿ ದೃಢೀಕರಿಸಲಾಗಿದೆ ಎಂಬುದನ್ನು ತಿಳಿಸಲು ನಮಗೆ ಸಂತೋಷವಾಗಿದೆ. ಆಯ್ಕೆಮಾಡಿದ ಬೆಳೆ ರೈತನಿಂದ ಖರೀದಿಸಲ್ಪಟ್ಟಿದ್ದು, ವ್ಯವಹಾರದ ಎಲ್ಲಾ ವಿವರಗಳನ್ನು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ದಾಖಲಿಸಲಾಗಿದೆ.\n\n"
-            "ಖರೀದಿ ವಿವರಗಳು:\n\n"
-            + ('\n'.join(kn_blocks))
-            + "\nಪೂರ್ಣ ವ್ಯವಹಾರ ವಿವರಗಳಿಗಾಗಿ ನೀವು ನಿಮ್ಮ ಖಾತೆಯ “History” (ಇತಿಹಾಸ) ವಿಭಾಗದಿಂದ ಇನ್ವಾಯ್ಸ್ ಅನ್ನು ವೀಕ್ಷಿಸಿ ಹಾಗೂ ಡೌನ್‌ಲೋಡ್ ಮಾಡಬಹುದು.\n\n"
-            "ಈ ಖರೀದಿಯ ಕುರಿತು ರೈತನಿಗೆ ಈಗಾಗಲೇ ತಿಳಿಸಲಾಗಿದೆ ಮತ್ತು ಅವರು ಒಪ್ಪಿಗೆಯಾದ ಷರತ್ತುಗಳ ಪ್ರಕಾರ ಮುಂದಿನ ಕ್ರಮಗಳನ್ನು ಕೈಗೊಳ್ಳುತ್ತಾರೆ.\n\n"
-            "ನಿಮಗೆ ಯಾವುದೇ ಪ್ರಶ್ನೆಗಳಿದ್ದರೆ ಅಥವಾ ಸಹಾಯ ಬೇಕಾದರೆ, ದಯವಿಟ್ಟು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿರುವ “Contact Us” (ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ) ವಿಭಾಗದ ಮೂಲಕ ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ.\n\n"
-            "AgriAI – ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ ಅನ್ನು ಆಯ್ಕೆ ಮಾಡಿಕೊಂಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಸುಗಮ ಮತ್ತು ಯಶಸ್ವಿ ವ್ಯವಹಾರಕ್ಕೆ ನಿಮ್ಮನ್ನು ಬೆಂಬಲಿಸಲು ನಾವು ಎದುರುನೋಡುತ್ತಿದ್ದೇವೆ.\n\n"
-            "ಹೃತ್ಪೂರ್ವಕ ವಂದನೆಗಳೊಂದಿಗೆ,\nAgriAI ತಂಡ\nಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ\n"
+            "AgriAI ನಲ್ಲಿ ಒಪ್ಪಂದವನ್ನು ಸಲ್ಲಿಸಿದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. 🌱\n\n"
+            "ಒಪ್ಪಂದವನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಖರೀದಿದಾರರಿಗೆ ಕಳುಹಿಸಲಾಗಿದೆ ಮತ್ತು ಪ್ರಸ್ತುತ ಅದು ಖರೀದಿದಾರರ ಪರಿಶೀಲನೆ ಹಾಗೂ ಅನುಮೋದನೆಗಾಗಿ ನಿರೀಕ್ಷೆಯಲ್ಲಿದೆ ಎಂಬುದನ್ನು ನಿಮಗೆ ತಿಳಿಸಲು ಸಂತೋಷವಾಗುತ್ತಿದೆ.\n\n"
+            "ಈ ಹಂತದಲ್ಲಿ:\n\n"
+            "* ಖರೀದಿದಾರರು ಒಪ್ಪಂದವನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದ್ದಾರೆ.\n"
+            "* ಖರೀದಿದಾರರ ಪ್ರತಿಕ್ರಿಯೆ ಬಂದುವರೆಗೆ ನಿಮ್ಮಿಂದ ಯಾವುದೇ ಕ್ರಮ ಅಗತ್ಯವಿಲ್ಲ.\n"
+            "* ಅಗತ್ಯವಿದ್ದರೆ, ಖರೀದಿದಾರರು ಅನುಮೋದಿಸುವ ಮೊದಲು ನೀವು ಯಾವಾಗ ಬೇಕಾದರೂ ಒಪ್ಪಂದವನ್ನು ಅಳಿಸಬಹುದು.\n"
+            "* ಒಪ್ಪಂದವನ್ನು ಅಳಿಸಿದರೂ ಸಹ, ಅದು ದಾಖಲೆ ಮತ್ತು ಉಲ್ಲೇಖಕ್ಕಾಗಿ ನಿಮ್ಮ ಖಾತೆಯ “History” (ಇತಿಹಾಸ) ವಿಭಾಗದಲ್ಲಿ ಲಭ್ಯವಿರುತ್ತದೆ.\n"
+            "ಖರೀದಿದಾರರು ಒಪ್ಪಂದವನ್ನು ಅನುಮೋದಿಸಿದ ತಕ್ಷಣ ನಿಮಗೆ ತಕ್ಷಣ ಅಧಿಸೂಚನೆ ಕಳುಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಒಪ್ಪಂದವು ಒಪ್ಪಿಗೆಯಾದ ಷರತ್ತುಗಳಂತೆ ಮುಂದಿನ ಹಂತಕ್ಕೆ ಸಾಗುತ್ತದೆ.\n\nಹೃತ್ಪೂರ್ವಕ ವಂದನೆಗಳೊಂದಿಗೆ,\nAgriAI ತಂಡ\nಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ"
         )
 
         # Compose EmailMessage choosing single-language body according to `lang`
@@ -1963,6 +1962,84 @@ def ensure_deals_table():
             print('ensure_deals_table sqlite error:', e)
 
 
+def ensure_contract_b_table():
+    """Ensure the `contract_b` table exists in either MySQL or SQLite backend."""
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    if use_mysql:
+        try:
+            cfg = {
+                'host': os.environ.get('DB_HOST', 'localhost'),
+                'port': int(os.environ.get('DB_PORT', '3306')),
+                'user': os.environ.get('DB_USER', 'root'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'agri_ai'),
+            }
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS contract_b (
+                  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                  farmer_id BIGINT UNSIGNED DEFAULT NULL,
+                  farmer_name VARCHAR(255) DEFAULT NULL,
+                  farmer_state VARCHAR(100) DEFAULT NULL,
+                  farmer_region VARCHAR(50) DEFAULT NULL,
+                  farmer_email VARCHAR(255) DEFAULT NULL,
+                  contract_number VARCHAR(64) DEFAULT NULL,
+                  contract_datetime DATETIME DEFAULT CURRENT_TIMESTAMP,
+                  buyer_id BIGINT UNSIGNED DEFAULT NULL,
+                  buyer_name VARCHAR(255) DEFAULT NULL,
+                  buyer_state VARCHAR(100) DEFAULT NULL,
+                  buyer_region VARCHAR(50) DEFAULT NULL,
+                  buyer_email VARCHAR(255) DEFAULT NULL,
+                  total_quantity DECIMAL(12,3) DEFAULT NULL,
+                  total_amount DECIMAL(12,2) DEFAULT NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception as e:
+            print('ensure_contract_b_table mysql error:', e)
+    else:
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS contract_b (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    farmer_id INTEGER,
+                    farmer_name TEXT,
+                    farmer_state TEXT,
+                    farmer_region TEXT,
+                    farmer_email TEXT,
+                    contract_number TEXT,
+                    contract_datetime DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    buyer_id INTEGER,
+                    buyer_name TEXT,
+                    buyer_state TEXT,
+                    buyer_region TEXT,
+                    buyer_email TEXT,
+                    total_quantity REAL,
+                    total_amount REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception as e:
+            print('ensure_contract_b_table sqlite error:', e)
+
+
 def ensure_cart_table():
     """Create cart table to persist per-user cart items."""
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
@@ -2332,6 +2409,26 @@ def create_purchase_notifications():
     """
     ensure_purchase_notifications_table()
     data = request.get_json(silent=True) or {}
+    # Debug: log incoming contract-submitted payload to a file for diagnostics
+    try:
+        dbg_path = os.path.join(os.path.dirname(__file__), 'contract_requests.log')
+        with open(dbg_path, 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.datetime.utcnow().isoformat()} {request.remote_addr} {str(data)}\n")
+    except Exception:
+        pass
+    # Log incoming request for debugging
+    try:
+        dbg_path = os.path.join(os.path.dirname(__file__), 'contract_requests.log')
+        with open(dbg_path, 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.datetime.utcnow().isoformat()} {request.remote_addr} {str(data)}\n")
+    except Exception:
+        pass
+
+    # Ensure the contract_b table exists before inserting (SQLite or MySQL)
+    try:
+        ensure_contract_b_table()
+    except Exception:
+        pass
     buyer = data.get('buyer') or {}
     items = data.get('items') or []
     invoice_id = (data.get('invoice_id') or data.get('invoice') or buyer.get('invoice_id') or None)
@@ -2947,6 +3044,177 @@ def mark_notifications_read():
     except Exception as e:
         print('mark_notifications_read error:', e)
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/notifications/contract-submitted', methods=['POST'])
+def create_contract_record():
+    """Create a contract record in `contract_b` when a contract is confirmed.
+    Expects JSON keys (all optional except farmer_email or farmer_id):
+    { farmer_id, farmer_name, farmer_state, farmer_region, farmer_email,
+      buyer_id, buyer_name, buyer_state, buyer_region, buyer_email,
+      total_quantity, total_amount, lang }
+    Returns JSON with contract_number on success.
+    """
+    data = request.get_json(silent=True) or {}
+    farmer_id = data.get('farmer_id')
+    farmer_name = (data.get('farmer_name') or '').strip() or None
+    farmer_state = (data.get('farmer_state') or '').strip() or None
+    farmer_region = (data.get('farmer_region') or '').strip() or None
+    farmer_email = (data.get('farmer_email') or '').strip() or None
+
+    buyer_id = data.get('buyer_id')
+    buyer_name = (data.get('buyer_name') or '').strip() or None
+    buyer_state = (data.get('buyer_state') or '').strip() or None
+    buyer_region = (data.get('buyer_region') or '').strip() or None
+    buyer_email = (data.get('buyer_email') or '').strip() or None
+
+    total_quantity = data.get('total_quantity')
+    total_amount = data.get('total_amount')
+
+    # Require at least an email or id to associate the farmer
+    if not farmer_email and not farmer_id:
+        return jsonify({'ok': False, 'error': 'farmer_id_or_email_required'}), 400
+
+    # Generate contract number: CTR-YYYYMMDD-HHMMSS-<8hex>
+    now = datetime.datetime.utcnow()
+    import uuid as _uuid
+    contract_number = f"CTR-{now.strftime('%Y%m%d')}-{now.strftime('%H%M%S')}-{_uuid.uuid4().hex[:8].upper()}"
+    contract_datetime = now.strftime('%Y-%m-%d %H:%M:%S')
+
+    # Insert into DB (supports MySQL or SQLite)
+    try:
+        kind, conn = get_db_connection()
+        cur = get_cursor(kind, conn)
+        if kind == 'mysql':
+            sql = (
+                'INSERT INTO contract_b (farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, '
+                'buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'
+            )
+            params = (
+                (int(farmer_id) if farmer_id not in (None, '') else None),
+                farmer_name,
+                farmer_state,
+                farmer_region,
+                farmer_email,
+                (int(buyer_id) if buyer_id not in (None, '') else None),
+                buyer_name,
+                buyer_state,
+                buyer_region,
+                buyer_email,
+                (float(total_quantity) if total_quantity not in (None, '') else None),
+                (float(total_amount) if total_amount not in (None, '') else None),
+                contract_number,
+                contract_datetime,
+            )
+            cur.execute(sql, params)
+            try: conn.commit()
+            except Exception: pass
+            inserted_id = None
+            try:
+                inserted_id = cur.lastrowid
+            except Exception:
+                inserted_id = None
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        else:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            # sqlite paramstyle uses ?
+            sql = (
+                'INSERT INTO contract_b (farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, '
+                'buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime) '
+                'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            )
+            params = (
+                (int(farmer_id) if farmer_id not in (None, '') else None),
+                farmer_name,
+                farmer_state,
+                farmer_region,
+                farmer_email,
+                (int(buyer_id) if buyer_id not in (None, '') else None),
+                buyer_name,
+                buyer_state,
+                buyer_region,
+                buyer_email,
+                (float(total_quantity) if total_quantity not in (None, '') else None),
+                (float(total_amount) if total_amount not in (None, '') else None),
+                contract_number,
+                contract_datetime,
+            )
+            cur.execute(sql, params)
+            try: conn.commit()
+            except Exception: pass
+            inserted_id = cur.lastrowid if hasattr(cur, 'lastrowid') else None
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+
+        return jsonify({'ok': True, 'contract_number': contract_number, 'contract_datetime': contract_datetime, 'id': inserted_id}), 200
+    except Exception as e:
+        print('create_contract_record error:', e)
+        try:
+            cur.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+    @app.route('/farmer/contracts', methods=['GET'])
+    def farmer_contracts():
+        """Return contract rows from `contract_b` for the given farmer id or email.
+        Query params: farmer_id (int) or farmer_email (string). Returns JSON list.
+        """
+        try:
+            farmer_id = request.args.get('farmer_id') or request.args.get('id') or None
+            farmer_email = request.args.get('farmer_email') or request.args.get('email') or None
+            if not farmer_id and not farmer_email:
+                return jsonify({'ok': False, 'error': 'farmer_id_or_email_required'}), 400
+
+            kind, conn = get_db_connection()
+            cur = get_cursor(kind, conn)
+            rows = []
+            try:
+                if kind == 'mysql':
+                    if farmer_id:
+                        cur.execute('SELECT farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime FROM contract_b WHERE farmer_id=%s ORDER BY contract_datetime DESC', (int(farmer_id),))
+                    else:
+                        cur.execute('SELECT farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime FROM contract_b WHERE farmer_email=%s ORDER BY contract_datetime DESC', (farmer_email,))
+                    cols = [d[0] for d in cur.description]
+                    for r in cur.fetchall():
+                        rows.append(dict(zip(cols, r)))
+                else:
+                    if farmer_id:
+                        cur.execute('SELECT farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime FROM contract_b WHERE farmer_id=? ORDER BY contract_datetime DESC', (int(farmer_id),))
+                    else:
+                        cur.execute('SELECT farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime FROM contract_b WHERE farmer_email=? ORDER BY contract_datetime DESC', (farmer_email,))
+                    cols = [d[0] for d in cur.description]
+                    for r in cur.fetchall():
+                        rows.append(dict(zip(cols, r)))
+            finally:
+                try: cur.close()
+                except Exception: pass
+                try: conn.close()
+                except Exception: pass
+
+            return jsonify({'ok': True, 'contracts': rows}), 200
+        except Exception as e:
+            print('farmer_contracts error:', e)
+            try:
+                cur.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/cart/add', methods=['POST'])

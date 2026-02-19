@@ -167,6 +167,52 @@ CREATE TABLE `purchase_notifications` (
 -- Migration: add variety to existing purchase_notifications table if missing
 ALTER TABLE `purchase_notifications` ADD COLUMN IF NOT EXISTS `variety` VARCHAR(255) DEFAULT NULL;
 
+-- ========== Contracts table for buyer-side records (contract_b) ==========
+-- Stores summary contract records including farmer and buyer contact/region info
+DROP TABLE IF EXISTS `contract_b`;
+CREATE TABLE `contract_b` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `farmer_id` BIGINT UNSIGNED DEFAULT NULL,
+  `farmer_name` VARCHAR(255) DEFAULT NULL,
+  `farmer_state` VARCHAR(100) DEFAULT NULL,
+  `farmer_region` VARCHAR(50) DEFAULT NULL,
+  `farmer_email` VARCHAR(255) DEFAULT NULL,
+  `contract_number` VARCHAR(64) DEFAULT NULL,
+  `contract_datetime` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `buyer_id` BIGINT UNSIGNED DEFAULT NULL,
+  `buyer_name` VARCHAR(255) DEFAULT NULL,
+  `buyer_state` VARCHAR(100) DEFAULT NULL,
+  `buyer_region` VARCHAR(50) DEFAULT NULL,
+  `buyer_email` VARCHAR(255) DEFAULT NULL,
+  `total_quantity` DECIMAL(12,3) DEFAULT NULL,
+  `total_amount` DECIMAL(12,2) DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_contract_farmer` (`farmer_id`),
+  INDEX `idx_contract_buyer` (`buyer_id`),
+  INDEX `idx_contract_farmer_email` (`farmer_email`),
+  INDEX `idx_contract_buyer_email` (`buyer_email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Idempotent alters for `contract_b` (MySQL 8+)
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_id` BIGINT UNSIGNED DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_name` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_state` VARCHAR(100) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_region` VARCHAR(50) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_email` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `contract_number` VARCHAR(64) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `contract_datetime` DATETIME DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_id` BIGINT UNSIGNED DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_name` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_state` VARCHAR(100) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_region` VARCHAR(50) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_email` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `total_quantity` DECIMAL(12,3) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `total_amount` DECIMAL(12,2) DEFAULT NULL;
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE `contract_b` ADD INDEX IF NOT EXISTS `idx_contract_farmer` (`farmer_id`);
+ALTER TABLE `contract_b` ADD INDEX IF NOT EXISTS `idx_contract_buyer` (`buyer_id`);
+
 -- ========== Cart table ==========
 -- Stores cart items added by signed-in users. Each row represents a single item
 -- added to cart for a specific user (buyer or farmer). Backends should insert

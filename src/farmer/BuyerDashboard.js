@@ -7,6 +7,7 @@ function BuyerSearchBox() {
   const [region, setRegion] = React.useState('');
   const [state, setState] = React.useState('');
   const [stateOptions, setStateOptions] = React.useState([]);
+  const [address, setAddress] = React.useState('');
   const [regionOptions, setRegionOptions] = React.useState([]);
   const [cropOptions, setCropOptions] = React.useState([]);
   const [crop, setCrop] = React.useState('');
@@ -49,6 +50,7 @@ function BuyerSearchBox() {
     const q = new URLSearchParams();
     if (region) q.append('region', region);
     if (state) q.append('state', state);
+    if (address) q.append('address', address);
     if (crop) q.append('crop_name', crop);
   if (category) q.append('category', category);
   if (variety) q.append('variety', variety);
@@ -67,6 +69,7 @@ function BuyerSearchBox() {
             try {
               if (category && ((d.category || '').toString().trim().toLowerCase() !== category.toString().trim().toLowerCase())) return false;
               if (variety && ((d.variety || '').toString().trim().toLowerCase() !== variety.toString().trim().toLowerCase())) return false;
+              if (address && !((d.address || '').toString().toLowerCase().includes(address.toString().trim().toLowerCase()))) return false;
               if (crop && ((d.crop_name || '').toString().trim().toLowerCase() !== crop.toString().trim().toLowerCase())) return false;
             } catch (e) {}
             return true;
@@ -177,6 +180,7 @@ function BuyerSearchBox() {
         if (rawR && !regionMap.has(rKey)) { regionMap.set(rKey, rawR); regionArr.push(rawR); }
         // Only include state when region filter matches or not set
         if ((!region || rKey === (region || '').toString().trim().toLowerCase()) && rawS && !stateMap.has(sKey)) { stateMap.set(sKey, rawS); stateArr.push(rawS); }
+        
       } catch (e) {}
     });
 
@@ -185,6 +189,7 @@ function BuyerSearchBox() {
     stateArr.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     setRegionOptions(regionArr);
     setStateOptions(stateArr);
+    
 
     // Build category / crop / variety options from dealsSource (use values present in deals table)
     try {
@@ -288,7 +293,7 @@ function BuyerSearchBox() {
   </div>
 </div>
 
-        <div style={{display:'flex', gap:6, alignItems:'flex-start', flexWrap:'wrap', marginTop:30}}>
+        <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'nowrap', marginTop:30, overflowX:'auto', paddingBottom:8}}>
           <div style={{flex:'1 1 160px', minWidth:120}}>
             <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelRegion', lang)}</label>
             {regionOptions && regionOptions.length ? (
@@ -306,14 +311,24 @@ function BuyerSearchBox() {
               </select>
             )}
           </div>
-          <div style={{flex:'1 1 220px', minWidth:120}}>
+          <div style={{flex:'1 1 160px', minWidth:120}}>
             <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelState', lang)}</label>
             <select value={state} onChange={e => setState(e.target.value)} style={{width:'100%', padding:6}}>
               <option value=''>{t('selectState', lang)}</option>
               {stateOptions && stateOptions.length ? stateOptions.map(s => <option key={s} value={s}>{s}</option>) : null}
             </select>
           </div>
-          <div style={{flex:'1 1 180px', minWidth:140}}>
+          <div style={{flex:'1 1 160px', minWidth:120}}>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelAddress', lang)}</label>
+            <input
+              type="text"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              placeholder={t('labelAddress', lang)}
+              style={{width:'100%', padding:6}}
+            />
+          </div>
+          <div style={{flex:'1 1 180px', minWidth:140, marginLeft:12}}>
             <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelCategory', lang)}</label>
             <select value={category} onChange={e => { setCategory(e.target.value); setCrop(''); setVariety(''); }} style={{width:'100%', padding:6}}>
               <option value=''>{t('selectCategory', lang)}</option>

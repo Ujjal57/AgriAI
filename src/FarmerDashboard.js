@@ -9,11 +9,14 @@ function BuyerSearchBox() {
   const [region, setRegion] = React.useState('');
   const [state, setState] = React.useState('');
   const [stateOptions, setStateOptions] = React.useState([]);
+  const [address, setAddress] = React.useState('');
+  const [addressOptions, setAddressOptions] = React.useState([]);
   const [regionOptions, setRegionOptions] = React.useState([]);
   const [cropOptions, setCropOptions] = React.useState([]);
   // master lists (all distinct values from cropsSource)
   const [regionMaster, setRegionMaster] = React.useState([]);
   const [stateMaster, setStateMaster] = React.useState([]);
+  const [addressMaster, setAddressMaster] = React.useState([]);
   const [categoryMaster, setCategoryMaster] = React.useState([]);
   const [cropMaster, setCropMaster] = React.useState([]);
   const [varietyMaster, setVarietyMaster] = React.useState([]);
@@ -32,6 +35,9 @@ function BuyerSearchBox() {
   const [searchAnim, setSearchAnim] = React.useState(false);
   const [addAnimId, setAddAnimId] = React.useState(null);
   const navigate = useNavigate();
+  const addressRef = React.useRef(null);
+  const [showAddressSuggestions, setShowAddressSuggestions] = React.useState(false);
+  const [filteredAddressMatches, setFilteredAddressMatches] = React.useState([]);
   const [lang, setLang] = React.useState((typeof window !== 'undefined' && localStorage.getItem('agri_lang')) || 'en');
   React.useEffect(() => {
     const onLang = () => setLang((localStorage.getItem('agri_lang') || 'en'));
@@ -86,6 +92,7 @@ function BuyerSearchBox() {
     const q = new URLSearchParams();
     if (region) q.append('region', region);
     if (state) q.append('state', state);
+    if (address) q.append('address', address);
     if (category) q.append('category', category);
     if (crop) q.append('crop_name', crop);
     if (variety) q.append('variety', variety);
@@ -131,6 +138,7 @@ function BuyerSearchBox() {
     try {
       const r = new Map();
       const s = new Map();
+      const a = new Map();
       const c = new Map();
       const cr = new Map();
       const v = new Map();
@@ -138,11 +146,13 @@ function BuyerSearchBox() {
         try {
           const rRaw = (d.region || '').toString().trim();
           const sRaw = (d.state || '').toString().trim();
+          const aRaw = (d.address || d.seller_address || d._farmer_address || '').toString().trim();
           const catRaw = (d.category || '').toString().trim();
           const cnameRaw = (d.crop_name || '').toString().trim();
           const varRaw = (d.variety || '').toString().trim();
           if (rRaw) r.set(rRaw.toLowerCase(), rRaw);
           if (sRaw) s.set(sRaw.toLowerCase(), sRaw);
+          if (aRaw) a.set(aRaw.toLowerCase(), aRaw);
           if (catRaw) c.set(catRaw.toLowerCase(), catRaw);
           if (cnameRaw) cr.set(cnameRaw.toLowerCase(), cnameRaw);
           if (varRaw) v.set(varRaw.toLowerCase(), varRaw);
@@ -150,6 +160,7 @@ function BuyerSearchBox() {
       });
       setRegionMaster(Array.from(r.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
       setStateMaster(Array.from(s.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
+      setAddressMaster(Array.from(a.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
       setCategoryMaster(Array.from(c.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
       setCropMaster(Array.from(cr.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
       setVarietyMaster(Array.from(v.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
@@ -194,6 +205,7 @@ function BuyerSearchBox() {
     try {
       const seenRegion = new Map();
       const seenState = new Map();
+      const seenAddress = new Map();
       const seenCat = new Map();
       const seenCrop = new Map();
       const seenVar = new Map();
@@ -219,6 +231,7 @@ function BuyerSearchBox() {
         try {
           const rRaw = (d.region || '').toString().trim();
           const sRaw = (d.state || '').toString().trim();
+          const aRaw = (d.address || d.seller_address || d._farmer_address || '').toString().trim();
           const catRaw = (d.category || '').toString().trim();
           const cnameRaw = (d.crop_name || '').toString().trim();
           const varRaw = (d.variety || '').toString().trim();
@@ -226,6 +239,7 @@ function BuyerSearchBox() {
           if (matches(d)) {
             if (rRaw) seenRegion.set(rRaw.toLowerCase(), rRaw);
             if (sRaw) seenState.set(sRaw.toLowerCase(), sRaw);
+            if (aRaw) seenAddress.set(aRaw.toLowerCase(), aRaw);
             if (catRaw) seenCat.set(catRaw.toLowerCase(), catRaw);
             if (cnameRaw) seenCrop.set(cnameRaw.toLowerCase(), cnameRaw);
             if (varRaw) seenVar.set(varRaw.toLowerCase(), varRaw);
@@ -235,12 +249,14 @@ function BuyerSearchBox() {
 
       const regionArr = Array.from(seenRegion.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
       const stateArr = Array.from(seenState.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
+      const addrArr = Array.from(seenAddress.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
       const catArr2 = Array.from(seenCat.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
       const cropArr2 = Array.from(seenCrop.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
       const varArr2 = Array.from(seenVar.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
 
       setRegionOptions(regionArr);
       setStateOptions(stateArr);
+      setAddressOptions(addrArr);
       setCategoryOptions(catArr2);
       setCropOptions(cropArr2);
       setVarietyOptions(varArr2);
@@ -252,7 +268,22 @@ function BuyerSearchBox() {
       if (crop && cropArr2.length && !cropArr2.find(x => x.toString().trim().toLowerCase() === crop.toString().trim().toLowerCase())) { setCrop(''); setVariety(''); }
       if (variety && varArr2.length && !varArr2.find(x => x.toString().trim().toLowerCase() === variety.toString().trim().toLowerCase())) setVariety('');
     } catch (e) {}
-  }, [cropsSource, region, state, category, crop, variety]);
+  }, [cropsSource, region, state, address, category, crop, variety]);
+
+  // update filtered address suggestions as the user types
+  React.useEffect(() => {
+    try {
+      const q = (address || '').toString().trim().toLowerCase();
+      const pool = (addressMaster && addressMaster.length ? addressMaster : addressOptions) || [];
+      if (!q) {
+        setFilteredAddressMatches([]);
+        return;
+      }
+      const matches = pool.filter(x => (x || '').toString().toLowerCase().startsWith(q)).slice(0, 8);
+      setFilteredAddressMatches(matches);
+      setShowAddressSuggestions(!!matches.length);
+    } catch (e) { setFilteredAddressMatches([]); setShowAddressSuggestions(false); }
+  }, [address, addressMaster, addressOptions]);
   // Keep selections visible but mark incompatible options disabled; clear selection only if no matching crops exist
   const isOptionEnabled = React.useCallback((field, optionValue) => {
     try {
@@ -262,16 +293,19 @@ function BuyerSearchBox() {
         try {
           const r = (d.region || '').toString().trim().toLowerCase();
           const s = (d.state || '').toString().trim().toLowerCase();
+          const a = (d.address || d.seller_address || d._farmer_address || '').toString().trim().toLowerCase();
           const cat = (d.category || '').toString().trim().toLowerCase();
           const cname = (d.crop_name || '').toString().trim().toLowerCase();
           const varname = (d.variety || '').toString().trim().toLowerCase();
           if (field !== 'region' && region && region.toString().trim().toLowerCase() !== r) return false;
           if (field !== 'state' && state && state.toString().trim().toLowerCase() !== s) return false;
+          if (field !== 'address' && address && address.toString().trim().toLowerCase() !== a) return false;
           if (field !== 'category' && category && category.toString().trim().toLowerCase() !== cat) return false;
           if (field !== 'crop' && crop && crop.toString().trim().toLowerCase() !== cname) return false;
           if (field !== 'variety' && variety && variety.toString().trim().toLowerCase() !== varname) return false;
           if (field === 'region') return r === opt;
           if (field === 'state') return s === opt;
+          if (field === 'address') return a === opt;
           if (field === 'category') return cat === opt;
           if (field === 'crop') return cname === opt;
           if (field === 'variety') return varname === opt;
@@ -280,7 +314,7 @@ function BuyerSearchBox() {
       });
       return !!any;
     } catch (e) { return true; }
-  }, [cropsSource, region, state, category, crop, variety]);
+  }, [cropsSource, region, state, address, category, crop, variety]);
 
   // auto-clear selections that become invalid (not present in enabled options)
   React.useEffect(() => {
@@ -291,7 +325,7 @@ function BuyerSearchBox() {
       if (crop && !isOptionEnabled('crop', crop)) { setCrop(''); setVariety(''); }
       if (variety && !isOptionEnabled('variety', variety)) setVariety('');
     } catch (e) {}
-  }, [region, state, category, crop, variety, isOptionEnabled]);
+  }, [region, state, address, category, crop, variety, isOptionEnabled]);
 
   React.useEffect(() => {
     (async () => {
@@ -330,7 +364,7 @@ function BuyerSearchBox() {
     <div style={{display:'flex', alignItems:'center', justifyContent:'center', padding:'4.5rem 0rem 2rem 0rem'}}>
       <div style={{background:'#fff', padding:'1rem 5rem', boxShadow:'0 6px 12px rgba(0,0,0,0.06)', width:'100%', maxWidth:980, marginTop: '1.5rem'}}>
         <h3 style={{marginTop:0, color:'#236902', textAlign:'center', fontSize:26, lineHeight:1.2, paddingBottom:8}}>{t('findFarmersTitle', lang)}</h3>
-        <div style={{display:'flex', gap:6, alignItems:'flex-start', flexWrap:'wrap'}}>
+        <div style={{display:'flex', gap:6, alignItems:'flex-start', flexWrap:'nowrap', overflowX:'auto'}}>
           {/* Region, State, Category, Crop, Variety Dropdowns */}
           <div style={{flex:'1 1 160px', minWidth:120}}>
             <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelRegion', lang)}</label>
@@ -366,7 +400,17 @@ function BuyerSearchBox() {
               <input value={state} onChange={e => setState(e.target.value)} placeholder={t('placeholderState', lang) || t('placeholderState', 'en')} style={{width:'100%', padding:6}} />
             )}
           </div>
-          <div style={{flex:'1 1 180px', minWidth:110}}>
+          <div style={{flex:'1 1 160px', minWidth:120}}>
+                      <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelAddress', lang)}</label>
+                      <input
+                        type="text"
+                        value={address}
+                        onChange={e => setAddress(e.target.value)}
+                        placeholder={t('labelAddress', lang)}
+                        style={{width:'100%', padding:6}}
+                      />
+                    </div>
+          <div style={{flex:'1 1 180px', minWidth:120, marginLeft:12}}>
             <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelCategory', lang)}</label>
             <select value={category} onChange={e => { setCategory(e.target.value); setCrop(''); setVariety(''); }} style={{width:'100%', padding:6, whiteSpace:'normal'}}>
               <option value=''>{t('selectCategory', lang)}</option>
@@ -466,6 +510,10 @@ function BuyerSearchBox() {
                     if (state) {
                       const s = (ci._farmer_state || ci.state || '').toString().trim().toLowerCase();
                       if (s !== state.toString().trim().toLowerCase()) return false;
+                    }
+                    if (address) {
+                      const a = (ci._farmer_address || ci.address || ci.seller_address || '').toString().trim().toLowerCase();
+                      if (!a.includes(address.toString().trim().toLowerCase())) return false;
                     }
                     if (category) {
                       const cat = (ci.category || '').toString().trim().toLowerCase();
