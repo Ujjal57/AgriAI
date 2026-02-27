@@ -202,6 +202,10 @@ CREATE TABLE IF NOT EXISTS contracts (
   buyer_platform_fee DECIMAL(12,2) DEFAULT 0,
   buyer_gst DECIMAL(12,2) DEFAULT 0,
   delivery_cost VARCHAR(255) DEFAULT NULL,
+  digital_signature VARCHAR(1024) DEFAULT NULL,
+  signature_method VARCHAR(100) DEFAULT NULL,
+  signature_email VARCHAR(255) DEFAULT NULL,
+  signature_timestamp DATETIME DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -254,6 +258,12 @@ ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `delivery_date` DATE DEFAULT NULL;
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 -- Add an index on category for faster category-based aggregations and lookups
 ALTER TABLE `cart` ADD INDEX IF NOT EXISTS `idx_cart_category` (`category`);
+
+-- Add signature columns to contracts table if missing
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `digital_signature` VARCHAR(1024) DEFAULT NULL;
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `signature_method` VARCHAR(100) DEFAULT NULL;
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `signature_email` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `signature_timestamp` DATETIME DEFAULT NULL;
 
 -- Populate existing cart rows with the crop category when possible (one-time idempotent update)
 UPDATE `cart` c

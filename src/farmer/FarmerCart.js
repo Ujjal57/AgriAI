@@ -15,6 +15,17 @@ const FarmerCart = () => {
   const [contractHtml, setContractHtml] = React.useState('');
   const [showContractPreview, setShowContractPreview] = React.useState(false);
   const [contractMetadata, setContractMetadata] = React.useState(null);
+  
+  // Digital Signature & OTP State
+  const [showOtpModal, setShowOtpModal] = React.useState(false);
+  const [otpEmail, setOtpEmail] = React.useState('');
+  const [otpCode, setOtpCode] = React.useState('');
+  const [otpSent, setOtpSent] = React.useState(false);
+  const [otpLoading, setOtpLoading] = React.useState(false);
+  const [otpError, setOtpError] = React.useState('');
+  const [otpVerified, setOtpVerified] = React.useState(false);
+  const [digitalSignature, setDigitalSignature] = React.useState('');
+  const [pendingContractAction, setPendingContractAction] = React.useState(null);
 
   const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
 
@@ -136,6 +147,178 @@ const FarmerCart = () => {
   }, []);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+  // ============ Digital Signature & OTP Functions ============
+  const sendOtpToEmail = async (email) => {
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const response = await fetch(`${apiBase}/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email,
+          purpose: 'contract-signature'
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && data.ok) {
+        setOtpSent(true);
+        setOtpLoading(false);
+        return true;
+      } else {
+        setOtpError(data.error || 'Failed to send OTP. Please try again.');
+        setOtpLoading(false);
+        return false;
+      }
+    } catch (e) {
+      console.error('OTP send error:', e);
+      setOtpError('Network error. Please try again.');
+      setOtpLoading(false);
+      return false;
+    }
+  };
+
+  const verifyOtp = async (email, otp) => {
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const response = await fetch(`${apiBase}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email,
+          otp: otp,
+          purpose: 'contract-signature'
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && data.ok) {
+        // Generate digital signature
+        const signature = generateDigitalSignature(email, otp);
+        setDigitalSignature(signature);
+        setOtpVerified(true);
+        // update contract metadata with signature details so backend receives it
+        try {
+          setContractMetadata(prev => ({ ...(prev || {}), digital_signature: signature.signature_hash, signature_method: signature.signature_method, signature_email: signature.signer_email, signature_timestamp: signature.signature_timestamp }));
+        } catch (e) {}
+        setOtpLoading(false);
+        return signature;
+      } else {
+        setOtpError(data.error || 'Invalid OTP. Please try again.');
+        setOtpLoading(false);
+        return false;
+      }
+    } catch (e) {
+      console.error('OTP verification error:', e);
+      setOtpError('Network error. Please try again.');
+      setOtpLoading(false);
+      return false;
+    }
+  };
+
+  const injectSignatureIntoHtml = (signatureObj) => {
+    try {
+      if (!signatureObj) return;
+      const name = (contractMetadata && contractMetadata.farmer_name) || localStorage.getItem('agriai_name') || '';
+      const ts = signatureObj.signature_timestamp || new Date().toISOString();
+      const formatted = new Date(ts).toLocaleString('en-GB');
+      let updated = contractHtml || '';
+
+      // English block
+      updated = updated.replace(/<p>Farmer \/ Producer<\/p>\s*<p>Signature:[\s\S]*?<\/p>\s*<p>Date:[\s\S]*?<\/p>/m, `<p>Farmer / Producer</p>\n  <p>Signature: <strong>${name}</strong></p>\n  <p>Date: <strong>${formatted}</strong></p>`);
+
+      // Hindi block
+      updated = updated.replace(/<p>किसान \/ उत्पादक<\/p>\s*<p>हस्ताक्षर:[\s\S]*?<\/p>\s*<p>तिथि:[\s\S]*?<\/p>/m, `<p>किसान / उत्पादक</p>\n  <p>हस्ताक्षर: <strong>${name}</strong></p>\n  <p>तिथि: <strong>${formatted}</strong></p>`);
+
+      // Kannada block (if present)
+      updated = updated.replace(/<p>ಕಿಸಾನ್ \/ ಉತ್ಪಾದಕ<\/p>\s*<p>ಸಹಿ:[\s\S]*?<\/p>\s*<p>ದಿನಾಂಕ:[\s\S]*?<\/p>/m, `<p>Farmer / Producer</p>\n  <p>Signature: <strong>${name}</strong></p>\n  <p>Date: <strong>${formatted}</strong></p>`);
+
+      // Fallback: if no replacement occurred but template contains generic 'Signature: ______' lines
+      if (updated === contractHtml) {
+        updated = updated.replace(/Signature:\s*_{2,}/, `Signature: <strong>${name}</strong>`);
+        updated = updated.replace(/Date:\s*_{2,}/, `Date: <strong>${formatted}</strong>`);
+        updated = updated.replace(/हस्ताक्षर:\s*_{2,}/, `हस्ताक्षर: <strong>${name}</strong>`);
+        updated = updated.replace(/तिथि:\s*_{2,}/, `तिथि: <strong>${formatted}</strong>`);
+      }
+
+      setContractHtml(updated);
+    } catch (e) {
+      console.warn('injectSignatureIntoHtml failed', e);
+    }
+  };
+
+  const generateDigitalSignature = (email, otp) => {
+    // Create a digital signature using email, timestamp, and OTP verification
+    const timestamp = new Date().toISOString();
+    const signatureData = `${email}|${timestamp}|${otp.slice(0, 2)}***`;
+    
+    // Create a hash-like signature (in production, use proper cryptographic signing)
+    const hashString = btoa(signatureData);
+    
+    return {
+      signer_email: email,
+      signature_timestamp: timestamp,
+      signature_hash: hashString,
+      signature_method: 'OTP_VERIFIED'
+    };
+  };
+
+  const initOtpVerification = (actionCallback) => {
+    const farmerEmail = localStorage.getItem('agriai_email') || '';
+    if (!farmerEmail) {
+      alert('Email not found. Please update your profile.');
+      return;
+    }
+    setOtpEmail(farmerEmail);
+    setPendingContractAction(() => actionCallback);
+    setShowOtpModal(true);
+    setOtpSent(false);
+    setOtpCode('');
+    setOtpVerified(false);
+    setOtpError('');
+  };
+
+  const handleOtpSend = async () => {
+    if (!otpEmail) {
+      setOtpError('Email is required');
+      return;
+    }
+    const success = await sendOtpToEmail(otpEmail);
+    if (success) {
+      // Optional: Show success message
+    }
+  };
+
+  const handleOtpVerifyAndSign = async () => {
+    if (!otpCode || otpCode.length < 4) {
+      setOtpError('Please enter a valid OTP');
+      return;
+    }
+    const result = await verifyOtp(otpEmail, otpCode);
+    if (result && typeof result === 'object') {
+      // result is signature object
+      injectSignatureIntoHtml(result);
+      // close modal and show updated preview
+      setShowOtpModal(false);
+      setShowContractPreview(true);
+      // leave pendingContractAction intact so user may proceed to send
+    }
+  };
+
+  const resetOtpModal = () => {
+    setShowOtpModal(false);
+    setOtpCode('');
+    setOtpSent(false);
+    setOtpVerified(false);
+    setOtpError('');
+    setDigitalSignature('');
+    setPendingContractAction(null);
+  };
 
   const clearCart = () => {
     (async () => {
@@ -535,7 +718,14 @@ const FarmerCart = () => {
                 farmer_gst: contractMetadata.farmer_gst,
                 buyer_platform_fee: contractMetadata.buyer_platform_fee,
                 buyer_gst: contractMetadata.buyer_gst,
-                delivery_cost: contractMetadata.delivery_cost
+                delivery_cost: contractMetadata.delivery_cost,
+                // Digital Signature Fields
+                ...(digitalSignature && {
+                  digital_signature: digitalSignature.signature_hash,
+                  signature_method: digitalSignature.signature_method,
+                  signature_email: digitalSignature.signer_email,
+                  signature_timestamp: digitalSignature.signature_timestamp
+                })
               };
               
               let saveRes = null;
@@ -1882,8 +2072,178 @@ const FarmerCart = () => {
             </div>
               <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: contractHtml }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button onClick={() => { setPaymentMethod('contract'); setShowContractPreview(false); handleBuyNow(); }} style={{ padding: '8px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>{t('confirmAndSend', siteLang) || 'Confirm & Send'}</button>
+              <button onClick={() => {
+                setPaymentMethod('contract');
+                if (otpVerified && digitalSignature) {
+                  // already verified: proceed to send
+                  try { setShowContractPreview(false); } catch (e) {}
+                  if (typeof pendingContractAction === 'function') pendingContractAction(); else handleBuyNow();
+                } else {
+                  // start OTP flow
+                  initOtpVerification(() => {
+                    resetOtpModal();
+                    handleBuyNow();
+                  });
+                }
+              }} style={{ padding: '8px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>{t('confirmAndSend', siteLang) || 'Confirm & Send'}</button>
               <button onClick={() => setShowContractPreview(false)} style={{ padding: '8px 12px', background: '#ddd', border: 'none', borderRadius: 6 }}>{t('cancelButton', siteLang)}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Digital Signature OTP Verification Modal */}
+      {showOtpModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+          <div style={{ width: '90%', maxWidth: 500, background: '#fff', padding: 24, borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
+            <h2 style={{ margin: '0 0 16px 0', color: '#236902', fontSize: 20, textAlign: 'center' }}>
+              {otpVerified ? t('signatureVerified', siteLang) : t('verifyIdentity', siteLang)}
+            </h2>
+
+            <p style={{ color: '#666', marginBottom: 16, fontSize: 14 }}>
+              {otpVerified 
+                ? t('verifyIdentitySigned', siteLang)
+                : t('verifyIdentityDesc', siteLang)}
+            </p>
+
+            {otpVerified ? (
+              <div style={{ background: '#f0f7ff', border: '2px solid #236902', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>{t('signatureDetails', siteLang)}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#333' }}>
+                    <div>📧 {t('signatureEmailLabel', siteLang)}: {otpEmail}</div>
+                    <div>🕐 {t('signatureTimeLabel', siteLang)}: {digitalSignature.signature_timestamp}</div>
+                    <div>✔ {t('signatureMethodLabel', siteLang)}: {digitalSignature.signature_method}</div>
+                    <div style={{ marginTop: 8, wordBreak: 'break-all' }}>{t('signatureHashLabel', siteLang)}: {digitalSignature.signature_hash.substring(0, 40)}...</div>
+                  </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 14 }}>{t('signatureEmailLabel', siteLang)}</label>
+                  <input 
+                    type="email" 
+                    value={otpEmail} 
+                    disabled
+                    style={{ width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 6, fontSize: 14, background: '#f5f5f5' }} 
+                  />
+                </div>
+
+                {!otpSent ? (
+                  <div style={{ marginBottom: 16 }}>
+                    <button 
+                      onClick={handleOtpSend}
+                      disabled={otpLoading}
+                      style={{ 
+                        width: '100%', 
+                        padding: 10, 
+                        background: '#236902', 
+                        color: '#fff', 
+                        border: 'none', 
+                        borderRadius: 6, 
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: otpLoading ? 'not-allowed' : 'pointer',
+                        opacity: otpLoading ? 0.6 : 1
+                      }}
+                    >
+                      {otpLoading ? t('sendingOtp', siteLang) || 'Sending...' : t('sendOtpButton', siteLang)}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 14 }}>Enter OTP</label>
+                      <input 
+                        type="text" 
+                        placeholder={t('otpPlaceholder', siteLang)}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                        style={{ 
+                          width: '100%', 
+                          padding: 10, 
+                          border: '1px solid #ddd', 
+                          borderRadius: 6, 
+                          fontSize: 14,
+                          textAlign: 'center',
+                          letterSpacing: '4px',
+                          fontWeight: 'bold'
+                        }} 
+                      />
+                      <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{t('checkEmailMsg', siteLang)}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button 
+                        onClick={handleOtpVerifyAndSign}
+                        disabled={otpLoading || otpCode.length < 6}
+                        style={{ 
+                          flex: 1, 
+                          padding: 10, 
+                          background: '#236902', 
+                          color: '#fff', 
+                          border: 'none', 
+                          borderRadius: 6, 
+                          fontSize: 14,
+                          fontWeight: 600,
+                          cursor: (otpLoading || otpCode.length < 6) ? 'not-allowed' : 'pointer',
+                          opacity: (otpLoading || otpCode.length < 6) ? 0.6 : 1
+                        }}
+                      >
+                        {otpLoading ? t('verifying', siteLang) || 'Verifying...' : t('verifyAndSign', siteLang)}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {otpError && (
+              <div style={{ background: '#ffebee', border: '1px solid #d32f2f', color: '#d32f2f', padding: 10, borderRadius: 6, marginTop: 12, fontSize: 13 }}>
+                ⚠ {otpError}
+              </div>
+            )}
+
+            <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+              {otpVerified && (
+                <button 
+                  onClick={() => {
+                    // Contract already signed, proceed with sending
+                    if (pendingContractAction) {
+                      pendingContractAction();
+                    }
+                  }}
+                  style={{ 
+                    flex: 1, 
+                    padding: 10, 
+                    background: '#236902', 
+                    color: '#fff', 
+                    border: 'none', 
+                    borderRadius: 6, 
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Proceed to Send Contract
+                </button>
+              )}
+              <button 
+                onClick={resetOtpModal}
+                disabled={otpLoading}
+                style={{ 
+                  flex: 1, 
+                  padding: 10, 
+                  background: '#ddd', 
+                  border: 'none', 
+                  borderRadius: 6, 
+                  fontSize: 14,
+                  cursor: 'pointer'
+                }}
+              >
+                {otpVerified ? 'Cancel' : 'Close'}
+              </button>
             </div>
           </div>
         </div>

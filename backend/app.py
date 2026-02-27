@@ -137,6 +137,10 @@ except Exception:
 app = Flask(__name__)
 CORS(app)
 
+# Simple in-memory OTP store for email verification (email -> { otp, expires_at, purpose })
+OTP_STORE = {}
+OTP_TTL_SECONDS = 10 * 60  # 10 minutes
+
 
 def get_db_connection():
     """Return ('mysql', conn) or ('sqlite', conn). Prefers MySQL if driver available and DB_USE=mysql."""
@@ -886,6 +890,103 @@ def ensure_mysql_schema():
         db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
         conn = sqlite3.connect(db_path)
         return ('sqlite', conn)
+
+
+@app.route('/auth/send-otp', methods=['POST'])
+def send_otp():
+    """Send a one-time numeric OTP to the supplied email for a purpose (e.g. contract-signature)."""
+    try:
+        data = request.get_json() or {}
+        email = (data.get('email') or '').strip()
+        purpose = (data.get('purpose') or 'general').strip()
+        if not email:
+            return jsonify({'ok': False, 'error': 'email_required'}), 400
+
+        # Generate 6-digit OTP
+        import random
+        otp = f"{random.randint(0, 999999):06d}"
+        expires_at = int(time.time()) + OTP_TTL_SECONDS
+        OTP_STORE[email.lower()] = { 'otp': otp, 'expires_at': expires_at, 'purpose': purpose }
+
+        # Send email (simple plaintext)
+        try:
+            smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+            smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+            smtp_user = os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
+            smtp_password = os.environ.get('SMTP_PASSWORD')
+            from_addr = os.environ.get('SMTP_FROM', smtp_user)
+
+            msg = EmailMessage()
+            msg['Subject'] = f'Your AgriAI verification code'
+            msg['From'] = from_addr
+            msg['To'] = email
+            msg.set_content(f"Your verification code is: {otp}\nThis code is valid for {OTP_TTL_SECONDS // 60} minutes.\nPurpose: {purpose}")
+
+            context = ssl.create_default_context()
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+                try:
+                    server.ehlo()
+                    server.starttls(context=context)
+                    server.ehlo()
+                except Exception:
+                    pass
+                if smtp_password:
+                    try:
+                        server.login(smtp_user, smtp_password)
+                    except Exception as e:
+                        print('SMTP login failed for OTP send:', e)
+                try:
+                    server.send_message(msg)
+                except Exception as e:
+                    print('SMTP send failed for OTP:', e)
+        except Exception as e:
+            print('Error sending OTP email (non-fatal):', e)
+
+        return jsonify({'ok': True, 'message': 'otp_sent'}), 200
+    except Exception as e:
+        print('send_otp error:', e)
+        return jsonify({'ok': False, 'error': 'internal_error'}), 500
+
+
+@app.route('/auth/verify-otp', methods=['POST'])
+def verify_otp():
+    """Verify an OTP previously sent to an email. Returns ok:true on success."""
+    try:
+        data = request.get_json() or {}
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+        purpose = (data.get('purpose') or 'general').strip()
+
+        if not email or not otp:
+            return jsonify({'ok': False, 'error': 'email_and_otp_required'}), 400
+
+        row = OTP_STORE.get(email)
+        if not row:
+            return jsonify({'ok': False, 'error': 'no_otp_found'}), 404
+
+        now = int(time.time())
+        if now > row.get('expires_at', 0):
+            try:
+                del OTP_STORE[email]
+            except Exception:
+                pass
+            return jsonify({'ok': False, 'error': 'otp_expired'}), 400
+
+        if row.get('purpose') != purpose:
+            return jsonify({'ok': False, 'error': 'invalid_purpose'}), 400
+
+        if otp != row.get('otp'):
+            return jsonify({'ok': False, 'error': 'invalid_otp'}), 400
+
+        # On success, consume the OTP and return ok
+        try:
+            del OTP_STORE[email]
+        except Exception:
+            pass
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        print('verify_otp error:', e)
+        return jsonify({'ok': False, 'error': 'internal_error'}), 500
 
 
     def ensure_user_tables():
@@ -6726,6 +6827,12 @@ def save_contract():
             'buyer_platform_fee': buyer_platform_fee or 0,
             'buyer_gst': buyer_gst or 0,
             'delivery_cost': delivery_cost or None
+            ,
+            # optional signature fields (if present in payload and table)
+            'digital_signature': (data.get('digital_signature') or data.get('signature_hash') or None),
+            'signature_method': (data.get('signature_method') or None),
+            'signature_email': (data.get('signature_email') or None),
+            'signature_timestamp': (data.get('signature_timestamp') or None)
         }
 
         insert_cols = []
@@ -6749,7 +6856,64 @@ def save_contract():
         try:
             cur.execute(sql, tuple(insert_vals))
             conn.commit()
-            
+
+            # Attempt to email the buyer a simple contract notification if email available
+            try:
+                buyer_email_to_send = buyer_email or None
+                if buyer_email_to_send:
+                    try:
+                        smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+                        smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+                        smtp_user = os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
+                        smtp_password = os.environ.get('SMTP_PASSWORD')
+                        from_addr = os.environ.get('SMTP_FROM', smtp_user)
+
+                        subj = f"AgriAI Contract: {contract_number}"
+                        body_lines = [
+                            f"Dear {buyer_name or 'Buyer'},",
+                            "", 
+                            f"You have received a contract from {farmer_name or 'a Farmer'} via AgriAI.",
+                            f"Contract Number: {contract_number}",
+                            f"Crop: {crop_name}",
+                            f"Variety: {variety}",
+                            f"Quantity: {quantity}",
+                            f"Price per kg: {price_per_kg}",
+                            f"Total Amount: ₹{amount}",
+                            f"Start Date: {start_date_raw}",
+                            f"End Date: {end_date_raw}",
+                            "",
+                            "Please log in to your AgriAI account to view and accept the contract.",
+                            "Regards,",
+                            "AgriAI Team"
+                        ]
+                        msg = EmailMessage()
+                        msg['Subject'] = subj
+                        msg['From'] = from_addr
+                        msg['To'] = buyer_email_to_send
+                        msg.set_content('\n'.join(body_lines))
+
+                        context = ssl.create_default_context()
+                        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+                            try:
+                                server.ehlo()
+                                server.starttls(context=context)
+                                server.ehlo()
+                            except Exception:
+                                pass
+                            if smtp_password:
+                                try:
+                                    server.login(smtp_user, smtp_password)
+                                except Exception:
+                                    pass
+                            try:
+                                server.send_message(msg)
+                            except Exception as e:
+                                print('send contract email failed:', e)
+                    except Exception as e:
+                        print('send contract email outer error:', e)
+            except Exception:
+                pass
+
             try: cur.close()
             except Exception: pass
             try: conn.close()
