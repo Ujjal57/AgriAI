@@ -44,6 +44,8 @@ CREATE TABLE `farmer` (
   `password_hash` VARCHAR(255) NOT NULL,
   `region` VARCHAR(50) DEFAULT NULL,
   `state` VARCHAR(100) DEFAULT NULL,
+  `address` VARCHAR(255) DEFAULT NULL,
+  `lang` VARCHAR(10) DEFAULT 'en',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX `idx_farmer_phone` (`phone`),
@@ -60,6 +62,8 @@ CREATE TABLE `buyer` (
   `password_hash` VARCHAR(255) NOT NULL,
   `region` VARCHAR(50) DEFAULT NULL,
   `state` VARCHAR(100) DEFAULT NULL,
+  `address` VARCHAR(255) DEFAULT NULL,
+  `lang` VARCHAR(10) DEFAULT 'en',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX `idx_buyer_phone` (`phone`),
@@ -76,11 +80,21 @@ CREATE TABLE `admin` (
   `password_hash` VARCHAR(255) NOT NULL,
   `region` VARCHAR(50) DEFAULT NULL,
   `state` VARCHAR(100) DEFAULT NULL,
+  `address` VARCHAR(255) DEFAULT NULL,
+  `lang` VARCHAR(10) DEFAULT 'en',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX `idx_admin_phone` (`phone`),
   INDEX `idx_admin_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- add missing columns to existing user tables if necessary
+ALTER TABLE `farmer` ADD COLUMN IF NOT EXISTS `address` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `farmer` ADD COLUMN IF NOT EXISTS `lang` VARCHAR(10) DEFAULT 'en';
+ALTER TABLE `buyer` ADD COLUMN IF NOT EXISTS `address` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `buyer` ADD COLUMN IF NOT EXISTS `lang` VARCHAR(10) DEFAULT 'en';
+ALTER TABLE `admin` ADD COLUMN IF NOT EXISTS `address` VARCHAR(255) DEFAULT NULL;
+ALTER TABLE `admin` ADD COLUMN IF NOT EXISTS `lang` VARCHAR(10) DEFAULT 'en';
 
 -- Example users (password_hash fields are placeholders; do NOT use plaintext passwords):
 -- INSERT INTO `farmer` (name, phone, email, aadhar, password_hash) VALUES ('Farmer One','9000000000','farmer@example.com','123456789012','$2b$12$...');

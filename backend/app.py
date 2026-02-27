@@ -2,11 +2,13 @@ from flask import Flask, request, jsonify
 from flask import send_from_directory
 import openpyxl
 import os
+import re
 import requests
 from flask_cors import CORS
 import datetime
 import json
 import time
+import threading
 import sqlite3
 import smtplib
 import ssl
@@ -209,6 +211,16 @@ def ensure_user_tables():
                     ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
                 )
                 cur.execute(sql)
+            # ensure existing tables have the two new columns
+            for tbl in ('farmer', 'buyer', 'admin'):
+                try:
+                    cur.execute(f"ALTER TABLE `{tbl}` ADD COLUMN IF NOT EXISTS `address` VARCHAR(255) DEFAULT NULL")
+                except Exception:
+                    pass
+                try:
+                    cur.execute(f"ALTER TABLE `{tbl}` ADD COLUMN IF NOT EXISTS `lang` VARCHAR(10) DEFAULT 'en'")
+                except Exception:
+                    pass
             conn.commit()
         else:
             for tbl in ('farmer', 'buyer', 'admin'):
@@ -227,6 +239,16 @@ def ensure_user_tables():
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
+            # sqlite cannot use ADD COLUMN IF NOT EXISTS; try/except instead
+            for tbl in ('farmer', 'buyer', 'admin'):
+                try:
+                    cur.execute(f"ALTER TABLE {tbl} ADD COLUMN address TEXT")
+                except Exception:
+                    pass
+                try:
+                    cur.execute(f"ALTER TABLE {tbl} ADD COLUMN lang TEXT DEFAULT 'en'")
+                except Exception:
+                    pass
             conn.commit()
         try:
             cur.close()
@@ -6872,7 +6894,9 @@ def save_contract():
                         body_lines = [
                             f"Dear {buyer_name or 'Buyer'},",
                             "", 
-                            f"You have received a contract from {farmer_name or 'a Farmer'} via AgriAI.",
+                            f"You have received a new contract from {farmer_name or 'a Farmer'} via AgriAI.",
+                            "",
+                            "The contract details are as follows:",
                             f"Contract Number: {contract_number}",
                             f"Crop: {crop_name}",
                             f"Variety: {variety}",
@@ -6882,7 +6906,8 @@ def save_contract():
                             f"Start Date: {start_date_raw}",
                             f"End Date: {end_date_raw}",
                             "",
-                            "Please log in to your AgriAI account to view and accept the contract.",
+                            "Kindly log in to your AgriAI account to review and accept the contract at your earliest convenience.",
+                            "If you have any questions or require further clarification, please feel free to contact us.",
                             "Regards,",
                             "AgriAI Team"
                         ]
