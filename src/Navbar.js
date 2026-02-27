@@ -905,7 +905,7 @@ If no quality objection is raised within seven (7) working days from the date of
 
   const isBuyer = userRole === 'buyer';
 
-  return (
+  return (<>
     <nav className="navbar">
       <div className="navbar-logo-group">
         <span className="navbar-logo-circle">
@@ -1272,7 +1272,6 @@ If no quality objection is raised within seven (7) working days from the date of
         </div>
       )}
     </nav>
-    {/* Contract Modal for Buyers */}
     {showContractModal && (
       <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.5)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center'}}>
         <div style={{width:'90vw', maxWidth:800, height:'90vh', background:'#fff', borderRadius:8, boxShadow:'0 12px 40px rgba(0,0,0,0.25)', display:'flex', flexDirection:'column'}}>
@@ -1288,7 +1287,6 @@ If no quality objection is raised within seven (7) working days from the date of
                 <option value="mr">मराठी</option>
                 <option value="bn">বাংলা</option>
                 <option value="or">ଓଡ଼ିଆ</option>
-              </select>
               </select>
               <button onClick={() => {
                 const blob = new Blob([contractHtml], { type: 'text/html' });
@@ -1309,7 +1307,7 @@ If no quality objection is raised within seven (7) working days from the date of
         </div>
       </div>
     )}
-  );
+  </> );
 };
 
 export default Navbar;

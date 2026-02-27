@@ -2,176 +2,26 @@ from flask import Flask, request, jsonify
 from flask import send_from_directory
 import openpyxl
 import os
+import requests
 from flask_cors import CORS
 import datetime
-
-# Additional imports required by the backend logic
-import re
-import requests
-import threading
+import json
+import time
+import sqlite3
 import smtplib
 import ssl
-import sqlite3
 from email.message import EmailMessage
-import urllib.parse
-import uuid
-import mimetypes
 
 
-def send_purchase_email(to_email, buyer_name, items, total_price=None, lang='en', invoice_id=None):
-    """Best-effort send purchase confirmation to buyer in requested language.
-    lang: 'en'|'hi'|'kn' (defaults to 'en')
-    """
+def send_farmer_purchase_email(to_email, farmer_name='', crop_name='', variety='', quantity='', total_price=0, buyer_name='', lang='en'):
     try:
-        smtp_user = os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
-        smtp_pass = os.environ.get('SMTP_PASSWORD', None)
-        if not smtp_pass:
-            # if no password configured, do not attempt to send
-            print('send_purchase_email: SMTP_PASSWORD not set; skipping email')
-            return False
-
-        # build simple aggregated item info (use first item for single-item fields)
-        lines = []
-        farmer_name = ''
-        for it in items:
-            try:
-                cname = it.get('crop_name') or ''
-                var = it.get('variety') or it.get('Variety') or ''
-                qty = it.get('order_quantity') or it.get('quantity') or it.get('quantity_kg') or ''
-                price = it.get('total') or (float(it.get('price_per_kg') or 0) * float(qty or 0))
-                lines.append((cname, var, qty, price, (it.get('farmer_name') or it.get('seller_name') or '')))
-                if not farmer_name and (it.get('farmer_name') or it.get('seller_name')):
-                    farmer_name = it.get('farmer_name') or it.get('seller_name')
-            except Exception:
-                continue
-
-        # aggregate totals if not provided
-        if total_price is None:
-            try:
-                total_price = sum([float(x[3] or 0) for x in lines])
-            except Exception:
-                total_price = 0
-
-        # If invoice_id provided, try to fetch authoritative order total from buyer_orders (MySQL/XAMPP)
-        try:
-            if invoice_id:
-                try:
-                    kind, dbconn = get_db_connection()
-                    if kind == 'mysql':
-                        cur = dbconn.cursor()
-                        try:
-                            cur.execute('SELECT SUM(total) FROM buyer_orders WHERE invoice_id=%s', (invoice_id,))
-                            rr = cur.fetchone()
-                            if rr and rr[0] is not None:
-                                total_price = float(rr[0])
-                        except Exception:
-                            pass
-                        try: cur.close()
-                        except Exception: pass
-                        try: dbconn.close()
-                        except Exception: pass
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        # Build multilingual message bodies (English, Hindi, Kannada)
-        en_blocks = []
-        for cname, var, qty, price, fname in lines:
-            en_blocks.append(f"* Crop Name: {cname}\n* Variety: {var}\n* Quantity Purchased: {qty}\n* Total Price: ₹{float(total_price or 0):.2f}\n")
-        en_body = f"Dear {buyer_name or ''},\n\nThank you for submitting the contract on AgriAI.🌱\n\nWe would like to inform you that the contract has been successfully sent to the buyer and is currently awaiting the buyer’s review and approval.\n\nAt this stage:\n\n* No action is required from your side until the buyer responds.\n* You may delete the contract anytime before buyer approval, if needed.\n* The contract will remain visible in your “History” section for record and reference, even if deleted.\n\nOnce the buyer approves the contract, you will receive an immediate notification, and the contract will move to the next stage as per the agreed terms.\n\nThank you for choosing AgriAI – an AI-Enhanced Contract Farming and Farmer Advisory System. We are committed to ensuring secure, transparent, and fair contract farming for you.\n\nWarm regards,\nThe AgriAI Team\nAI-Enhanced Contract Farming and Farmer Advisory System."
-
-
-        hi_blocks = []
-        for cname, var, qty, price, fname in lines:
-            hi_blocks.append(f"* फसल का नाम: {cname}\n* किस्म: {var}\n* खरीदी गई मात्रा: {qty}\n* कुल मूल्य: ₹{float(total_price or 0):.2f}\n")
-        hi_body = (
-            f"प्रिय {buyer_name or ''},\n\n"
-            "AgriAI पर अनुबंध भेजने के लिए धन्यवाद। 🌱\n\n"
-            "हमें आपको यह सूचित करते हुए खुशी हो रही है कि अनुबंध सफलतापूर्वक खरीदार को भेज दिया गया है और वर्तमान में खरीदार की समीक्षा और स्वीकृति की प्रतीक्षा में है।\n\n"
-            "इस चरण में:\n\n"
-            "* खरीदार अनुबंध की समीक्षा कर रहा है।\n"
-            "* खरीदार की प्रतिक्रिया आने तक आपकी ओर से किसी कार्रवाई की आवश्यकता नहीं है।\n"
-            "* आवश्यकता होने पर आप खरीदार की स्वीकृति से पहले कभी भी अनुबंध को हटा सकते हैं।\n"
-            "* अनुबंध “History” (इतिहास) अनुभाग में रिकॉर्ड और संदर्भ के लिए उपलब्ध रहेगा, भले ही उसे हटा दिया जाए।\n\n"
-            "खरीदार द्वारा अनुबंध स्वीकृत होते ही आपको तुरंत सूचना प्राप्त होगी और अनुबंध सहमत शर्तों के अनुसार अगले चरण में चला जाएगा।\n\nAgriAI – एक एआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली को चुनने के लिए धन्यवाद। हम आपके लिए सुरक्षित, पारदर्शी और निष्पक्ष अनुबंध खेती सुनिश्चित करने के लिए प्रतिबद्ध हैं।\n\nसादर,\nAgriAI टीम\nएआई-सक्षम अनुबंध खेती और किसान परामर्श प्रणाली"
-        )
-
-        kn_blocks = []
-        for cname, var, qty, price, fname in lines:
-            kn_blocks.append(f"* ಬೆಳೆ ಹೆಸರು: {cname}\n* ಜಾತಿ: {var}\n* ಖರೀದಿಸಿದ ಪ್ರಮಾಣ: {qty}\n* ಒಟ್ಟು ಮೊತ್ತ: ₹{float(total_price or 0):.2f}\n")
-        kn_body = (
-            f"ಪ್ರಿಯ {buyer_name or ''},\n\n"
-            "AgriAI ನಲ್ಲಿ ಒಪ್ಪಂದವನ್ನು ಸಲ್ಲಿಸಿದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. 🌱\n\n"
-            "ಒಪ್ಪಂದವನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಖರೀದಿದಾರರಿಗೆ ಕಳುಹಿಸಲಾಗಿದೆ ಮತ್ತು ಪ್ರಸ್ತುತ ಅದು ಖರೀದಿದಾರರ ಪರಿಶೀಲನೆ ಹಾಗೂ ಅನುಮೋದನೆಗಾಗಿ ನಿರೀಕ್ಷೆಯಲ್ಲಿದೆ ಎಂಬುದನ್ನು ನಿಮಗೆ ತಿಳಿಸಲು ಸಂತೋಷವಾಗುತ್ತಿದೆ.\n\n"
-            "ಈ ಹಂತದಲ್ಲಿ:\n\n"
-            "* ಖರೀದಿದಾರರು ಒಪ್ಪಂದವನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದ್ದಾರೆ.\n"
-            "* ಖರೀದಿದಾರರ ಪ್ರತಿಕ್ರಿಯೆ ಬಂದುವರೆಗೆ ನಿಮ್ಮಿಂದ ಯಾವುದೇ ಕ್ರಮ ಅಗತ್ಯವಿಲ್ಲ.\n"
-            "* ಅಗತ್ಯವಿದ್ದರೆ, ಖರೀದಿದಾರರು ಅನುಮೋದಿಸುವ ಮೊದಲು ನೀವು ಯಾವಾಗ ಬೇಕಾದರೂ ಒಪ್ಪಂದವನ್ನು ಅಳಿಸಬಹುದು.\n"
-            "* ಒಪ್ಪಂದವನ್ನು ಅಳಿಸಿದರೂ ಸಹ, ಅದು ದಾಖಲೆ ಮತ್ತು ಉಲ್ಲೇಖಕ್ಕಾಗಿ ನಿಮ್ಮ ಖಾತೆಯ “History” (ಇತಿಹಾಸ) ವಿಭಾಗದಲ್ಲಿ ಲಭ್ಯವಿರುತ್ತದೆ.\n"
-            "ಖರೀದಿದಾರರು ಒಪ್ಪಂದವನ್ನು ಅನುಮೋದಿಸಿದ ತಕ್ಷಣ ನಿಮಗೆ ತಕ್ಷಣ ಅಧಿಸೂಚನೆ ಕಳುಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಒಪ್ಪಂದವು ಒಪ್ಪಿಗೆಯಾದ ಷರತ್ತುಗಳಂತೆ ಮುಂದಿನ ಹಂತಕ್ಕೆ ಸಾಗುತ್ತದೆ.\n\nಹೃತ್ಪೂರ್ವಕ ವಂದನೆಗಳೊಂದಿಗೆ,\nAgriAI ತಂಡ\nಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ"
-        )
-
-        # Compose EmailMessage choosing single-language body according to `lang`
-        msg = EmailMessage()
-        # localized subject
-        subj_map = {'en': 'Crop Purchase Confirmation – AgriAI', 'hi': 'फसल खरीद की पुष्टि – AgriAI', 'kn': 'ಬೆಳೆ ಖರೀದಿ ದೃಢೀಕರಣ – AgriAI'}
-        subject = subj_map.get((lang or 'en').lower()[:2], 'AgriAI Purchase Confirmation')
-        msg['Subject'] = subject
-        msg['From'] = f"AgriAI Team <{smtp_user}>"
-        msg['To'] = to_email
-        chosen = (lang or 'en').lower()[:2]
-        if chosen == 'hi':
-            body = hi_body
-        elif chosen == 'kn':
-            body = kn_body
-        else:
-            body = en_body
-        # No additional order-total append; each item block already shows the Order Total above.
-        msg.set_content(body)
-
-        # send via Gmail SMTP (STARTTLS)
-        context = ssl.create_default_context()
-        try:
-            with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as server:
-                server.ehlo()
-                server.starttls(context=context)
-                server.ehlo()
-                server.login(smtp_user, smtp_pass)
-                server.send_message(msg)
-            print('send_purchase_email: sent to', to_email)
-            return True
-        except Exception as e:
-            print('send_purchase_email error:', e)
-            return False
-    except Exception as e:
-        print('send_purchase_email outer error:', e)
-        return False
-
-
-def send_farmer_purchase_email(to_email, farmer_name, crop_name, variety, quantity, total_price, buyer_name, lang='en'):
-    """Send purchase notification email to farmer in their language (en/hi/kn)."""
-    try:
-        smtp_user = os.environ.get('SMTP_USER', 'agriai.team7@gmail.com')
-        smtp_pass = os.environ.get('SMTP_PASSWORD', None)
-        if not smtp_pass:
-            print('send_farmer_purchase_email: SMTP_PASSWORD not set; skipping email')
-            return False
-
-        # Build localized bodies exactly as requested
         en_body = f"""
-Dear {farmer_name},
-
-Congratulations! 🎉
-
-We are pleased to inform you that your crop has been successfully purchased by a buyer on AgriAI. The transaction has been confirmed, and the details have been securely recorded on our platform.
-
-**Sale Details:**
+Dear {buyer_name},
 
 * Crop Name: {crop_name}
 * Variety: {variety}
 * Quantity Sold: {quantity}
-* Buyer Name: {buyer_name}
+* Total Price: ₹{float(total_price or 0):.2f}
 
 The buyer has completed the purchase, and you may now proceed with the next steps as per the agreed terms. You can view complete transaction details and records from the “Notification” section of your account.
 
@@ -227,7 +77,7 @@ AgriAI टीम
 
 ಖರೀದಿದಾರರು ಖರೀದಿಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಿದ್ದು, ನೀವು ಒಪ್ಪಿಗೆಯಾದ ಷರತ್ತುಗಳ ಪ್ರಕಾರ ಮುಂದಿನ ಕ್ರಮಗಳನ್ನು ಕೈಗೊಳ್ಳಬಹುದು. ನಿಮ್ಮ ಖಾತೆಯ "Notification" (ಅಧಿಸೂಚನೆಗಳು) ವಿಭಾಗದಿಂದ ಸಂಪೂರ್ಣ ವ್ಯವಹಾರ ವಿವರಗಳು ಮತ್ತು ದಾಖಲೆಗಳನ್ನು ವೀಕ್ಷಿಸಬಹುದು.
 ಯಾವುದೇ ಸಮನ್ವಯ, ಪರಿಶೀಲನೆ ಅಥವಾ ಸಹಾಯ ಅಗತ್ಯವಿದ್ದರೆ, ನಮ್ಮ ತಂಡವು ನಿಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸುತ್ತದೆ.
-ಯಾವುದೇ ಪ್ರಶ್ನೆಗಳು ಅಥವಾ ಸಹಾಯಕ್ಕಾಗಿ, ದಯವಿಟ್ಟು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಇರುವ “Contact Us” (ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ) ವಿಭಾಗದ ಮೂಲಕ ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ.
+ಯಾವುದೇ ಪ್ರಶ್ನೆಗಳು ಅಥವಾ ಸಹಾಯಕ್ಕಾಗಿ, ದಯವಿಟ್ಟು ನಮ್ಮ ವೇದಿಕೆಯಲ್ಲಿ ಇರುವ “Contact Us” (ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ) ವಿಭಾಗದ ಮೂಲಕ մերನ್ನು ಸಂಪರ್ಕಿಸಿ.
 
 AgriAI – ಎಐ ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ಮತ್ತು ರೈತ ಸಲಹಾ ವ್ಯವಸ್ಥೆ ಅನ್ನು ಆಯ್ಕೆ ಮಾಡಿಕೊಂಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಖರೀದಿದಾರರೊಂದಿಗೆ ನಿಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ ಸುಗಮ ಹಾಗೂ ಪಾರದರ್ಶಕ ವ್ಯವಹಾರಗಳನ್ನು ಖಚಿತಪಡಿಸಲು ನಾವು ಹೆಮ್ಮೆಪಡುತ್ತೇವೆ.
 ಹೃತ್ಪೂರ್ವಕ ವಂದನೆಗಳೊಂದಿಗೆ,
@@ -1962,8 +1812,9 @@ def ensure_deals_table():
             print('ensure_deals_table sqlite error:', e)
 
 
-def ensure_contract_b_table():
-    """Ensure the `contract_b` table exists in either MySQL or SQLite backend."""
+
+def ensure_contracts_table():
+    """Ensure the `contracts` table exists in MySQL (primary) or SQLite (fallback)."""
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
     if use_mysql:
         try:
@@ -1978,25 +1829,39 @@ def ensure_contract_b_table():
             cur = conn.cursor()
             cur.execute(
                 """
-                CREATE TABLE IF NOT EXISTS contract_b (
+                CREATE TABLE IF NOT EXISTS contracts (
                   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                  contract_number VARCHAR(100) NOT NULL,
                   farmer_id BIGINT UNSIGNED DEFAULT NULL,
                   farmer_name VARCHAR(255) DEFAULT NULL,
+                  farmer_address VARCHAR(500) DEFAULT NULL,
                   farmer_state VARCHAR(100) DEFAULT NULL,
-                  farmer_region VARCHAR(50) DEFAULT NULL,
-                  farmer_email VARCHAR(255) DEFAULT NULL,
-                  contract_number VARCHAR(64) DEFAULT NULL,
-                  contract_datetime DATETIME DEFAULT CURRENT_TIMESTAMP,
                   buyer_id BIGINT UNSIGNED DEFAULT NULL,
                   buyer_name VARCHAR(255) DEFAULT NULL,
+                  buyer_address VARCHAR(500) DEFAULT NULL,
                   buyer_state VARCHAR(100) DEFAULT NULL,
-                  buyer_region VARCHAR(50) DEFAULT NULL,
-                  buyer_email VARCHAR(255) DEFAULT NULL,
-                  total_quantity DECIMAL(12,3) DEFAULT NULL,
-                  total_amount DECIMAL(12,2) DEFAULT NULL,
+                  crop_name VARCHAR(255) NOT NULL,
+                  variety VARCHAR(255) DEFAULT NULL,
+                  quantity_kg DECIMAL(12,3) NOT NULL,
+                  price_per_kg DECIMAL(12,3) NOT NULL,
+                  amount DECIMAL(12,2) DEFAULT NULL,
+                  contract_nature VARCHAR(100) DEFAULT 'post-harvest',
+                  contract_duration VARCHAR(100) DEFAULT 'one-time',
+                  start_date DATE DEFAULT NULL,
+                  end_date DATE DEFAULT NULL,
+                  duration INT DEFAULT 0,
+                  farmer_platform_fee DECIMAL(12,2) DEFAULT 0,
+                  farmer_gst DECIMAL(12,2) DEFAULT 0,
+                  buyer_platform_fee DECIMAL(12,2) DEFAULT 0,
+                  buyer_gst DECIMAL(12,2) DEFAULT 0,
+                  delivery_cost VARCHAR(255) DEFAULT NULL,
                   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  PRIMARY KEY (id)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                  PRIMARY KEY (id),
+                  INDEX idx_farmer_id (farmer_id),
+                  INDEX idx_buyer_id (buyer_id),
+                  INDEX idx_created_at (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """
             )
             conn.commit()
@@ -2005,30 +1870,41 @@ def ensure_contract_b_table():
             try: conn.close()
             except Exception: pass
         except Exception as e:
-            print('ensure_contract_b_table mysql error:', e)
+            print('ensure_contracts_table mysql error:', e)
     else:
         try:
             db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
             cur.execute('''
-                CREATE TABLE IF NOT EXISTS contract_b (
+                CREATE TABLE IF NOT EXISTS contracts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    farmer_id INTEGER,
-                    farmer_name TEXT,
-                    farmer_state TEXT,
-                    farmer_region TEXT,
-                    farmer_email TEXT,
-                    contract_number TEXT,
-                    contract_datetime DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    buyer_id INTEGER,
-                    buyer_name TEXT,
-                    buyer_state TEXT,
-                    buyer_region TEXT,
-                    buyer_email TEXT,
-                    total_quantity REAL,
-                    total_amount REAL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    contract_number TEXT NOT NULL,
+                    farmer_id INTEGER DEFAULT NULL,
+                    farmer_name TEXT DEFAULT NULL,
+                    farmer_address TEXT DEFAULT NULL,
+                    farmer_state TEXT DEFAULT NULL,
+                    buyer_id INTEGER DEFAULT NULL,
+                    buyer_name TEXT DEFAULT NULL,
+                    buyer_address TEXT DEFAULT NULL,
+                    buyer_state TEXT DEFAULT NULL,
+                    crop_name TEXT NOT NULL,
+                    variety TEXT DEFAULT NULL,
+                    quantity_kg REAL NOT NULL,
+                    price_per_kg REAL NOT NULL,
+                    amount REAL DEFAULT NULL,
+                    contract_nature TEXT DEFAULT 'post-harvest',
+                    contract_duration TEXT DEFAULT 'one-time',
+                    start_date DATE DEFAULT NULL,
+                    end_date DATE DEFAULT NULL,
+                    duration INTEGER DEFAULT 0,
+                    farmer_platform_fee REAL DEFAULT 0,
+                    farmer_gst REAL DEFAULT 0,
+                    buyer_platform_fee REAL DEFAULT 0,
+                    buyer_gst REAL DEFAULT 0,
+                    delivery_cost TEXT DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             conn.commit()
@@ -2037,7 +1913,7 @@ def ensure_contract_b_table():
             try: conn.close()
             except Exception: pass
         except Exception as e:
-            print('ensure_contract_b_table sqlite error:', e)
+            print('ensure_contracts_table sqlite error:', e)
 
 
 def ensure_cart_table():
@@ -2424,11 +2300,6 @@ def create_purchase_notifications():
     except Exception:
         pass
 
-    # Ensure the contract_b table exists before inserting (SQLite or MySQL)
-    try:
-        ensure_contract_b_table()
-    except Exception:
-        pass
     buyer = data.get('buyer') or {}
     items = data.get('items') or []
     invoice_id = (data.get('invoice_id') or data.get('invoice') or buyer.get('invoice_id') or None)
@@ -3048,113 +2919,92 @@ def mark_notifications_read():
 
 @app.route('/notifications/contract-submitted', methods=['POST'])
 def create_contract_record():
-    """Create a contract record in `contract_b` when a contract is confirmed.
-    Expects JSON keys (all optional except farmer_email or farmer_id):
-    { farmer_id, farmer_name, farmer_state, farmer_region, farmer_email,
-      buyer_id, buyer_name, buyer_state, buyer_region, buyer_email,
-      total_quantity, total_amount, lang }
-    Returns JSON with contract_number on success.
+    """DEPRECATED: This endpoint is no longer used. 
+    All contracts should be saved via /contracts/save endpoint instead.
+    Kept for backward compatibility - returns mock success.
     """
-    data = request.get_json(silent=True) or {}
-    farmer_id = data.get('farmer_id')
-    farmer_name = (data.get('farmer_name') or '').strip() or None
-    farmer_state = (data.get('farmer_state') or '').strip() or None
-    farmer_region = (data.get('farmer_region') or '').strip() or None
-    farmer_email = (data.get('farmer_email') or '').strip() or None
+    # Just return success without doing anything
+    contract_number = f"CNT{int(datetime.datetime.now().timestamp())}"
+    return jsonify({'ok': True, 'contract_number': contract_number}), 200
 
-    buyer_id = data.get('buyer_id')
-    buyer_name = (data.get('buyer_name') or '').strip() or None
-    buyer_state = (data.get('buyer_state') or '').strip() or None
-    buyer_region = (data.get('buyer_region') or '').strip() or None
-    buyer_email = (data.get('buyer_email') or '').strip() or None
 
-    total_quantity = data.get('total_quantity')
-    total_amount = data.get('total_amount')
-
-    # Require at least an email or id to associate the farmer
-    if not farmer_email and not farmer_id:
-        return jsonify({'ok': False, 'error': 'farmer_id_or_email_required'}), 400
-
-    # Generate contract number: CTR-YYYYMMDD-HHMMSS-<8hex>
-    now = datetime.datetime.utcnow()
-    import uuid as _uuid
-    contract_number = f"CTR-{now.strftime('%Y%m%d')}-{now.strftime('%H%M%S')}-{_uuid.uuid4().hex[:8].upper()}"
-    contract_datetime = now.strftime('%Y-%m-%d %H:%M:%S')
-
-    # Insert into DB (supports MySQL or SQLite)
+@app.route('/farmer/contracts', methods=['GET'])
+def farmer_contracts():
+    """Return contract rows from `contracts` table for the given farmer id or email.
+    Query params: farmer_id (int) or farmer_email (string). Returns JSON list.
+    """
     try:
+        farmer_id = request.args.get('farmer_id') or request.args.get('id') or None
+        farmer_email = request.args.get('farmer_email') or request.args.get('email') or None
+        if not farmer_id and not farmer_email:
+            return jsonify({'ok': False, 'error': 'farmer_id_or_email_required'}), 400
+
         kind, conn = get_db_connection()
         cur = get_cursor(kind, conn)
-        if kind == 'mysql':
-            sql = (
-                'INSERT INTO contract_b (farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, '
-                'buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime) '
-                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'
-            )
-            params = (
-                (int(farmer_id) if farmer_id not in (None, '') else None),
-                farmer_name,
-                farmer_state,
-                farmer_region,
-                farmer_email,
-                (int(buyer_id) if buyer_id not in (None, '') else None),
-                buyer_name,
-                buyer_state,
-                buyer_region,
-                buyer_email,
-                (float(total_quantity) if total_quantity not in (None, '') else None),
-                (float(total_amount) if total_amount not in (None, '') else None),
-                contract_number,
-                contract_datetime,
-            )
-            cur.execute(sql, params)
-            try: conn.commit()
-            except Exception: pass
-            inserted_id = None
-            try:
-                inserted_id = cur.lastrowid
-            except Exception:
-                inserted_id = None
-            try: cur.close()
-            except Exception: pass
-            try: conn.close()
-            except Exception: pass
-        else:
-            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
-            # sqlite paramstyle uses ?
-            sql = (
-                'INSERT INTO contract_b (farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, '
-                'buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime) '
-                'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-            )
-            params = (
-                (int(farmer_id) if farmer_id not in (None, '') else None),
-                farmer_name,
-                farmer_state,
-                farmer_region,
-                farmer_email,
-                (int(buyer_id) if buyer_id not in (None, '') else None),
-                buyer_name,
-                buyer_state,
-                buyer_region,
-                buyer_email,
-                (float(total_quantity) if total_quantity not in (None, '') else None),
-                (float(total_amount) if total_amount not in (None, '') else None),
-                contract_number,
-                contract_datetime,
-            )
-            cur.execute(sql, params)
-            try: conn.commit()
-            except Exception: pass
-            inserted_id = cur.lastrowid if hasattr(cur, 'lastrowid') else None
+        rows = []
+        try:
+            print(f"🔍 farmer_contracts: farmer_id={farmer_id}, farmer_email={farmer_email}")
+            
+            if kind == 'mysql':
+                if farmer_id:
+                    cur.execute('''
+                        SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
+                               quantity_kg as total_quantity, amount as total_amount, contract_number, created_at as contract_datetime
+                        FROM contracts 
+                        WHERE farmer_id=%s 
+                        ORDER BY created_at DESC
+                    ''', (int(farmer_id),))
+                else:
+                    cur.execute('''
+                        SELECT c.farmer_id, c.farmer_name, c.farmer_state, c.buyer_id, c.buyer_name, c.buyer_state,
+                               c.quantity_kg as total_quantity, c.amount as total_amount, c.contract_number, c.created_at as contract_datetime
+                        FROM contracts c
+                        WHERE c.farmer_id IN (SELECT id FROM farmer WHERE email=%s LIMIT 1)
+                        ORDER BY c.created_at DESC
+                    ''', (farmer_email,))
+                cols = [d[0] for d in cur.description]
+                fetched = cur.fetchall()
+                print(f"   MySQL found {len(fetched)} rows")
+                for r in fetched:
+                    rows.append(dict(zip(cols, r)))
+            else:
+                if farmer_id:
+                    cur.execute('''
+                        SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
+                               quantity_kg as total_quantity, amount as total_amount, contract_number, created_at as contract_datetime
+                        FROM contracts 
+                        WHERE farmer_id=? 
+                        ORDER BY created_at DESC
+                    ''', (int(farmer_id),))
+                else:
+                    cur.execute('''
+                        SELECT c.farmer_id, c.farmer_name, c.farmer_state, c.buyer_id, c.buyer_name, c.buyer_state,
+                               c.quantity_kg as total_quantity, c.amount as total_amount, c.contract_number, c.created_at as contract_datetime
+                        FROM contracts c
+                        WHERE c.farmer_id IN (SELECT id FROM farmer WHERE email=? LIMIT 1)
+                        ORDER BY c.created_at DESC
+                    ''', (farmer_email,))
+                cols = [d[0] for d in cur.description]
+                fetched = cur.fetchall()
+                print(f"   SQLite found {len(fetched)} rows")
+                for r in fetched:
+                    rows.append(dict(zip(cols, r)))
+            
+            print(f"✅ farmer_contracts returning {len(rows)} contracts")
+            for r in rows:
+                print(f"   - {r.get('contract_number', 'UNKNOWN')} (farmer_id={r.get('farmer_id')})")
+                
+        finally:
             try: cur.close()
             except Exception: pass
             try: conn.close()
             except Exception: pass
 
-        return jsonify({'ok': True, 'contract_number': contract_number, 'contract_datetime': contract_datetime, 'id': inserted_id}), 200
+        return jsonify({'ok': True, 'contracts': rows}), 200
     except Exception as e:
-        print('create_contract_record error:', e)
+        print(f'❌ farmer_contracts error: {e}')
+        import traceback
+        traceback.print_exc()
         try:
             cur.close()
         except Exception:
@@ -3166,55 +3016,90 @@ def create_contract_record():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
-    @app.route('/farmer/contracts', methods=['GET'])
-    def farmer_contracts():
-        """Return contract rows from `contract_b` for the given farmer id or email.
-        Query params: farmer_id (int) or farmer_email (string). Returns JSON list.
-        """
+@app.route('/contracts/get/<contract_number>', methods=['GET'])
+def get_contract(contract_number):
+    """Fetch a single contract by contract_number from the contracts table."""
+    try:
+        kind, conn = get_db_connection()
+        cur = get_cursor(kind, conn)
         try:
-            farmer_id = request.args.get('farmer_id') or request.args.get('id') or None
-            farmer_email = request.args.get('farmer_email') or request.args.get('email') or None
-            if not farmer_id and not farmer_email:
-                return jsonify({'ok': False, 'error': 'farmer_id_or_email_required'}), 400
+            # Log the search attempt
+            print(f"🔍 get_contract: Looking for contract_number='{contract_number}' (type={type(contract_number).__name__})")
+            
+            if kind == 'mysql':
+                cur.execute('SELECT * FROM contracts WHERE contract_number = %s LIMIT 1', (contract_number,))
+            else:
+                cur.execute('SELECT * FROM contracts WHERE contract_number = ? LIMIT 1', (contract_number,))
+            
+            cols = [d[0] for d in cur.description]
+            row = cur.fetchone()
+            
+            # Log result
+            if not row:
+                print(f"❌ get_contract: No contract found for '{contract_number}'")
+                # Try to see what contracts exist
+                try:
+                    if kind == 'mysql':
+                        cur.execute('SELECT contract_number FROM contracts LIMIT 5')
+                    else:
+                        cur.execute('SELECT contract_number FROM contracts LIMIT 5')
+                    all_contracts = [r[0] for r in cur.fetchall()]
+                    print(f"   Available contracts in database: {all_contracts}")
+                except Exception as e:
+                    print(f"   Error listing contracts: {e}")
+                
+                return jsonify({'ok': False, 'error': 'contract_not_found'}), 404
+            
+            contract = dict(zip(cols, row))
+            print(f"✅ get_contract: Found contract {contract_number}")
+            return jsonify({'ok': True, 'contract': contract}), 200
+        finally:
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+    except Exception as e:
+        print(f'❌ get_contract error: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
-            kind, conn = get_db_connection()
-            cur = get_cursor(kind, conn)
+
+@app.route('/contracts/debug/<farmer_id>', methods=['GET'])
+def debug_farmer_contracts(farmer_id):
+    """DEBUGGING: List all contracts for a farmer to verify data."""
+    try:
+        farmer_id = int(farmer_id)
+        kind, conn = get_db_connection()
+        cur = get_cursor(kind, conn)
+        
+        print(f"🔍 debug_farmer_contracts: farmer_id={farmer_id}")
+        
+        try:
+            if kind == 'mysql':
+                cur.execute('SELECT contract_number, farmer_id, buyer_id, crop_name, amount, created_at FROM contracts WHERE farmer_id = %s ORDER BY created_at DESC', (farmer_id,))
+            else:
+                cur.execute('SELECT contract_number, farmer_id, buyer_id, crop_name, amount, created_at FROM contracts WHERE farmer_id = ? ORDER BY created_at DESC', (farmer_id,))
+            
+            cols = [d[0] for d in cur.description]
             rows = []
-            try:
-                if kind == 'mysql':
-                    if farmer_id:
-                        cur.execute('SELECT farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime FROM contract_b WHERE farmer_id=%s ORDER BY contract_datetime DESC', (int(farmer_id),))
-                    else:
-                        cur.execute('SELECT farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime FROM contract_b WHERE farmer_email=%s ORDER BY contract_datetime DESC', (farmer_email,))
-                    cols = [d[0] for d in cur.description]
-                    for r in cur.fetchall():
-                        rows.append(dict(zip(cols, r)))
-                else:
-                    if farmer_id:
-                        cur.execute('SELECT farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime FROM contract_b WHERE farmer_id=? ORDER BY contract_datetime DESC', (int(farmer_id),))
-                    else:
-                        cur.execute('SELECT farmer_id, farmer_name, farmer_state, farmer_region, farmer_email, buyer_id, buyer_name, buyer_state, buyer_region, buyer_email, total_quantity, total_amount, contract_number, contract_datetime FROM contract_b WHERE farmer_email=? ORDER BY contract_datetime DESC', (farmer_email,))
-                    cols = [d[0] for d in cur.description]
-                    for r in cur.fetchall():
-                        rows.append(dict(zip(cols, r)))
-            finally:
-                try: cur.close()
-                except Exception: pass
-                try: conn.close()
-                except Exception: pass
-
-            return jsonify({'ok': True, 'contracts': rows}), 200
-        except Exception as e:
-            print('farmer_contracts error:', e)
-            try:
-                cur.close()
-            except Exception:
-                pass
-            try:
-                conn.close()
-            except Exception:
-                pass
-            return jsonify({'ok': False, 'error': str(e)}), 500
+            for row in cur.fetchall():
+                rows.append(dict(zip(cols, row)))
+            
+            print(f"✅ Found {len(rows)} contracts for farmer {farmer_id}")
+            for r in rows:
+                print(f"   - {r}")
+            
+            return jsonify({'ok': True, 'farmer_id': farmer_id, 'count': len(rows), 'contracts': rows}), 200
+        finally:
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+    except Exception as e:
+        print(f'❌ debug_farmer_contracts error: {e}')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/cart/add', methods=['POST'])
@@ -3391,6 +3276,35 @@ def cart_add():
 
                 # Read category from payload if present; fallback to None. Compute per-item totals
                 category = it.get('category') or it.get('Category') or None
+                
+                # Fetch delivery_date from deals table based on crop_id or crop_name
+                delivery_date = None
+                try:
+                    if crop_id is not None:
+                        cur_deals = conn.cursor()
+                        # Primary: try to fetch by crop_id
+                        cur_deals.execute('SELECT delivery_date FROM deals WHERE crop_id=%s AND delivery_date IS NOT NULL ORDER BY created_at DESC LIMIT 1', (int(crop_id),))
+                        deals_row = cur_deals.fetchone()
+                        
+                        # Fallback: if crop_id didn't work, try by crop_name
+                        if not deals_row and crop_name:
+                            cur_deals.execute('SELECT delivery_date FROM deals WHERE crop_name=%s AND delivery_date IS NOT NULL ORDER BY created_at DESC LIMIT 1', (crop_name,))
+                            deals_row = cur_deals.fetchone()
+                        
+                        try: cur_deals.close()
+                        except Exception: pass
+                        
+                        if deals_row and deals_row[0] is not None:
+                            delivery_date = deals_row[0]
+                            print(f'delivery_date fetched for crop_id {crop_id}: {delivery_date}')
+                        else:
+                            print(f'No delivery_date found in deals for crop_id {crop_id} or crop_name {crop_name}')
+                except Exception as e:
+                    print(f'Error fetching delivery_date from deals: {e}')
+                    import traceback
+                    traceback.print_exc()
+                    pass
+                
                 try:
                     qty_val = float(qty) if qty is not None else 0.0
                 except Exception:
@@ -3402,7 +3316,7 @@ def cart_add():
                 item_total_price = round(qty_val * price_val, 2)
 
                 cur.execute(
-                    f'INSERT INTO {table_name} (user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                    f'INSERT INTO {table_name} (user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, delivery_date) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                     (
                         user_type,
                         insert_user_id if insert_user_id is not None else None,
@@ -3416,7 +3330,8 @@ def cart_add():
                         image,
                         category,
                         qty_val,
-                        item_total_price
+                        item_total_price,
+                        delivery_date
                     )
                 )
                 try:
@@ -3495,6 +3410,35 @@ def cart_add():
 
                 # Read category from payload if present; fallback to None. Compute per-item totals (store item-level total_price and total_quantity)
                 category = it.get('category') or it.get('Category') or None
+                
+                # Fetch delivery_date from deals table based on crop_id or crop_name
+                delivery_date = None
+                try:
+                    if crop_id is not None:
+                        cur_deals = conn.cursor()
+                        # Primary: try to fetch by crop_id
+                        cur_deals.execute('SELECT delivery_date FROM deals WHERE crop_id=? AND delivery_date IS NOT NULL ORDER BY created_at DESC LIMIT 1', (int(crop_id),))
+                        deals_row = cur_deals.fetchone()
+                        
+                        # Fallback: if crop_id didn't work, try by crop_name
+                        if not deals_row and crop_name:
+                            cur_deals.execute('SELECT delivery_date FROM deals WHERE crop_name=? AND delivery_date IS NOT NULL ORDER BY created_at DESC LIMIT 1', (crop_name,))
+                            deals_row = cur_deals.fetchone()
+                        
+                        try: cur_deals.close()
+                        except Exception: pass
+                        
+                        if deals_row and deals_row[0] is not None:
+                            delivery_date = deals_row[0]
+                            print(f'delivery_date fetched for crop_id {crop_id}: {delivery_date}')
+                        else:
+                            print(f'No delivery_date found in deals for crop_id {crop_id} or crop_name {crop_name}')
+                except Exception as e:
+                    print(f'Error fetching delivery_date from deals: {e}')
+                    import traceback
+                    traceback.print_exc()
+                    pass
+                
                 try:
                     qty_val = float(qty) if qty is not None else 0.0
                 except Exception:
@@ -3504,7 +3448,7 @@ def cart_add():
                 except Exception:
                     price_val = 0.0
                 item_total_price = round(qty_val * price_val, 2)
-                cur.execute(f'INSERT INTO {table_name} (user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', (
+                cur.execute(f'INSERT INTO {table_name} (user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, delivery_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (
                     user_type,
                     insert_user_id if insert_user_id is not None else None,
                     insert_buyer_id if insert_buyer_id is not None else None,
@@ -3517,7 +3461,9 @@ def cart_add():
                     image,
                     category,
                     qty_val,
-                    item_total_price
+                    item_total_price,
+                    delivery_date
+
                 ))
                 inserted_id = cur.lastrowid
                 inserted.append({'id': inserted_id, 'crop_id': crop_id, 'crop_name': crop_name})
@@ -3566,7 +3512,7 @@ def cart_list():
                 where.append('user_id=%s'); params.append(user_id)
             if user_phone:
                 where.append('user_phone=%s'); params.append(user_phone)
-            sql = f'SELECT id, user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, added_at FROM {table_name}'
+            sql = f'SELECT id, user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, delivery_date, added_at FROM {table_name}'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC'
@@ -3577,7 +3523,7 @@ def cart_list():
                     results.append(r)
                 else:
                     results.append({
-                        'id': r[0], 'user_type': r[1], 'user_id': r[2], 'buyer_id': r[3], 'user_phone': r[4], 'crop_id': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'price_per_kg': r[9], 'image_path': r[10], 'category': r[11], 'total_quantity': r[12], 'total_price': r[13], 'added_at': r[14]
+                        'id': r[0], 'user_type': r[1], 'user_id': r[2], 'buyer_id': r[3], 'user_phone': r[4], 'crop_id': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'price_per_kg': r[9], 'image_path': r[10], 'category': r[11], 'total_quantity': r[12], 'total_price': r[13], 'delivery_date': r[14], 'added_at': r[15]
                     })
             try: cur.close()
             except Exception: pass
@@ -3600,7 +3546,7 @@ def cart_list():
                 where.append('user_id=?'); params.append(user_id)
             if user_phone:
                 where.append('user_phone=?'); params.append(user_phone)
-            sql = f'SELECT id, user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, added_at FROM {table_name}'
+            sql = f'SELECT id, user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, delivery_date, added_at FROM {table_name}'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC'
@@ -3608,7 +3554,7 @@ def cart_list():
             rows = cur.fetchall()
             for r in rows:
                 results.append({
-                    'id': r[0], 'user_type': r[1], 'user_id': r[2], 'buyer_id': r[3], 'user_phone': r[4], 'crop_id': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'price_per_kg': r[9], 'image_path': r[10], 'category': r[11], 'total_quantity': r[12], 'total_price': r[13], 'added_at': r[14]
+                    'id': r[0], 'user_type': r[1], 'user_id': r[2], 'buyer_id': r[3], 'user_phone': r[4], 'crop_id': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'price_per_kg': r[9], 'image_path': r[10], 'category': r[11], 'total_quantity': r[12], 'total_price': r[13], 'delivery_date': r[14], 'added_at': r[15]
                 })
             try: cur.close()
             except Exception: pass
@@ -6615,6 +6561,313 @@ def profile_update():
     return jsonify({'success': True}), 200
 
 
+@app.route('/contracts/save', methods=['POST'])
+def save_contract():
+    """Save contract details to the contracts table."""
+    ensure_contracts_table()
+    data = request.get_json(silent=True) or {}
+    # Log incoming contract save request for debugging
+    try:
+        dbg_path = os.path.join(os.path.dirname(__file__), 'contracts_save.log')
+        with open(dbg_path, 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.datetime.utcnow().isoformat()} {request.remote_addr} SAVE_CONTRACT_PAYLOAD: {json.dumps(data, default=str)}\n")
+    except Exception:
+        pass
+    
+    # Extract contract details from request
+    contract_number = (data.get('contract_number') or f"CNT{int(datetime.datetime.now().timestamp())}").strip()
+    original_contract_number = contract_number
+    farmer_id = (data.get('farmer_id') or '').strip()
+    farmer_name = (data.get('farmer_name') or '').strip()
+    farmer_address = (data.get('farmer_address') or '').strip()
+    farmer_state = (data.get('farmer_state') or '').strip()
+    farmer_email = (data.get('farmer_email') or '').strip()
+    buyer_id = (data.get('buyer_id') or '').strip()
+    buyer_name = (data.get('buyer_name') or '').strip()
+    buyer_address = (data.get('buyer_address') or '').strip()
+    buyer_state = (data.get('buyer_state') or '').strip()
+    buyer_email = (data.get('buyer_email') or '').strip()
+    crop_name = (data.get('crop_name') or '').strip()
+    variety = (data.get('variety') or '').strip()
+    quantity = float(data.get('quantity') or data.get('quantity_kg') or 0)
+    price_per_kg = float(data.get('price_per_kg') or 0)
+    amount = float(data.get('amount') or (quantity * price_per_kg))
+    contract_nature = (data.get('contract_nature') or 'post-harvest').strip()
+    contract_duration = (data.get('contract_duration') or 'one-time').strip()
+    start_date_raw = (data.get('start_date') or '').strip()
+    end_date_raw = (data.get('end_date') or '').strip()
+    duration = int(data.get('duration') or 0)
+    farmer_platform_fee = float(data.get('farmer_platform_fee') or 0)
+    farmer_gst = float(data.get('farmer_gst') or 0)
+    buyer_platform_fee = float(data.get('buyer_platform_fee') or 0)
+    buyer_gst = float(data.get('buyer_gst') or 0)
+    delivery_cost = float(data.get('delivery_cost') or 0)
+    
+    # Convert dates from DD/MM/YYYY format to YYYY-MM-DD
+    def convert_date_format(date_str):
+        """Convert DD/MM/YYYY or MM/DD/YYYY to YYYY-MM-DD"""
+        if not date_str:
+            return None
+        try:
+            parts = date_str.split('/')
+            if len(parts) == 3:
+                # Try DD/MM/YYYY first (en-GB format)
+                try:
+                    d = int(parts[0])
+                    m = int(parts[1])
+                    y = int(parts[2])
+                    if 1 <= d <= 31 and 1 <= m <= 12 and y > 1900:
+                        return f"{y:04d}-{m:02d}-{d:02d}"
+                except:
+                    pass
+        except:
+            pass
+        return None
+    
+    start_date = convert_date_format(start_date_raw) or None
+    end_date = convert_date_format(end_date_raw) or None
+    
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    
+    try:
+        # open connection
+        if use_mysql:
+            cfg = {
+                'host': os.environ.get('DB_HOST', 'localhost'),
+                'port': int(os.environ.get('DB_PORT', '3306')),
+                'user': os.environ.get('DB_USER', 'root'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'agri_ai'),
+            }
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+        else:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+
+        # Fetch farmer_state and farmer_email from farmer table if not provided
+        if (not farmer_state or not farmer_email) and farmer_id:
+            try:
+                if use_mysql:
+                    cur.execute("SELECT state, email FROM farmer WHERE id = %s", (int(farmer_id),))
+                else:
+                    cur.execute("SELECT state, email FROM farmer WHERE id = ?", (int(farmer_id),))
+                result = cur.fetchone()
+                if result:
+                    if not farmer_state and result[0]:
+                        farmer_state = result[0].strip()
+                    if not farmer_email and result[1]:
+                        farmer_email = result[1].strip()
+            except Exception as e:
+                pass  # If query fails, values remain empty
+
+        # Fetch buyer_state and buyer_email from buyer table if not provided
+        if (not buyer_state or not buyer_email) and buyer_id:
+            try:
+                if use_mysql:
+                    cur.execute("SELECT state, email FROM buyer WHERE id = %s", (int(buyer_id),))
+                else:
+                    cur.execute("SELECT state, email FROM buyer WHERE id = ?", (int(buyer_id),))
+                result = cur.fetchone()
+                if result:
+                    if not buyer_state and result[0]:
+                        buyer_state = result[0].strip()
+                    if not buyer_email and result[1]:
+                        buyer_email = result[1].strip()
+            except Exception as e:
+                pass  # If query fails, values remain empty
+
+        # determine columns present in contracts table
+        try:
+            if use_mysql:
+                cur.execute('SHOW COLUMNS FROM contracts')
+                cols = [r[0] for r in cur.fetchall()]
+            else:
+                cur.execute("PRAGMA table_info(contracts)")
+                cols = [r[1] for r in cur.fetchall()]
+        except Exception as e:
+            try:
+                dbg_path = os.path.join(os.path.dirname(__file__), 'contracts_save.log')
+                with open(dbg_path, 'a', encoding='utf-8') as f:
+                    f.write(f"{datetime.datetime.utcnow().isoformat()} {request.remote_addr} SAVE_CONTRACT_TABLE_INFO_ERROR: {str(e)}\n")
+            except Exception:
+                pass
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': False, 'error': 'table_info_error', 'details': str(e)}), 500
+
+        # map payload to possible columns
+        payload_map = {
+            'contract_number': contract_number,
+            'farmer_id': farmer_id or None,
+            'farmer_name': farmer_name or None,
+            'farmer_address': farmer_address or None,
+            'farmer_state': farmer_state or None,
+            'buyer_id': buyer_id or None,
+            'buyer_name': buyer_name or None,
+            'buyer_address': buyer_address or None,
+            'buyer_state': buyer_state or None,
+            'crop_name': crop_name or None,
+            'variety': variety or None,
+            'quantity_kg': quantity or 0,
+            'quantity': quantity or 0,
+            'price_per_kg': price_per_kg or 0,
+            'amount': amount or (quantity * price_per_kg),
+            'contract_nature': contract_nature or None,
+            'contract_duration': contract_duration or None,
+            'start_date': start_date or None,
+            'end_date': end_date or None,
+            'duration': duration or 0,
+            'farmer_platform_fee': farmer_platform_fee or 0,
+            'farmer_gst': farmer_gst or 0,
+            'buyer_platform_fee': buyer_platform_fee or 0,
+            'buyer_gst': buyer_gst or 0,
+            'delivery_cost': delivery_cost or None
+        }
+
+        insert_cols = []
+        insert_vals = []
+        for k, v in payload_map.items():
+            if k in cols:
+                insert_cols.append(k)
+                insert_vals.append(v)
+
+        if not insert_cols:
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': False, 'error': 'no_matching_columns'}), 500
+
+        placeholders = ','.join(['%s'] * len(insert_cols)) if use_mysql else ','.join(['?'] * len(insert_cols))
+        col_list_sql = ','.join(insert_cols)
+        sql = f"INSERT INTO contracts ({col_list_sql}) VALUES ({placeholders})"
+
+        try:
+            cur.execute(sql, tuple(insert_vals))
+            conn.commit()
+            
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': True, 'contract_number': contract_number}), 200
+        except Exception as db_e:
+            try:
+                dbg_path = os.path.join(os.path.dirname(__file__), 'contracts_save.log')
+                with open(dbg_path, 'a', encoding='utf-8') as f:
+                    f.write(f"{datetime.datetime.utcnow().isoformat()} {request.remote_addr} SAVE_CONTRACT_DB_ERROR: {str(db_e)}\n")
+            except Exception:
+                pass
+            msg = str(db_e).lower()
+            if ('duplicate' in msg) or ('unique' in msg) or ('1062' in msg) or ('unique constraint' in msg):
+                try:
+                    new_cn = f"{original_contract_number}-{int(time.time()*1000)}"
+                    if 'contract_number' in insert_cols:
+                        idx = insert_cols.index('contract_number')
+                        insert_vals[idx] = new_cn
+                    cur.execute(sql, tuple(insert_vals))
+                    conn.commit()
+                    try: cur.close()
+                    except Exception: pass
+                    try: conn.close()
+                    except Exception: pass
+                    return jsonify({'ok': True, 'contract_number': new_cn, 'note': 'contract_number_modified_due_to_duplicate'}), 200
+                except Exception as retry_e:
+                    try:
+                        with open(dbg_path, 'a', encoding='utf-8') as f:
+                            f.write(f"{datetime.datetime.utcnow().isoformat()} {request.remote_addr} SAVE_CONTRACT_RETRY_FAILED: {str(retry_e)}\n")
+                    except Exception:
+                        pass
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': False, 'error': 'db_error', 'details': str(db_e)}), 500
+    except Exception as e:
+        print('save_contract error:', e)
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/deals/reduce-quantity', methods=['POST'])
+def reduce_deal_quantity():
+    """Reduce the quantity of a buyer deal after contract confirmation."""
+    ensure_deals_table()
+    data = request.get_json(silent=True) or {}
+    
+    deal_id = data.get('deal_id', None)
+    quantity_to_reduce = float(data.get('quantity_to_reduce') or 0)
+    
+    if not deal_id or quantity_to_reduce <= 0:
+        return jsonify({'ok': False, 'error': 'deal_id and quantity_to_reduce required'}), 400
+    
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    
+    try:
+        if use_mysql:
+            cfg = {
+                'host': os.environ.get('DB_HOST', 'localhost'),
+                'port': int(os.environ.get('DB_PORT', '3306')),
+                'user': os.environ.get('DB_USER', 'root'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'agri_ai'),
+            }
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            # Get current quantity
+            cur.execute('SELECT quantity_kg FROM deals WHERE id = %s', (deal_id,))
+            row = cur.fetchone()
+            if not row:
+                try: cur.close()
+                except Exception: pass
+                try: conn.close()
+                except Exception: pass
+                return jsonify({'ok': False, 'error': 'deal_not_found'}), 404
+            
+            current_qty = float(row[0])
+            new_qty = max(0, current_qty - quantity_to_reduce)
+            
+            # Update quantity
+            cur.execute('UPDATE deals SET quantity_kg = %s WHERE id = %s', (new_qty, deal_id))
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': True, 'new_quantity': new_qty}), 200
+        else:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            # Get current quantity
+            cur.execute('SELECT quantity_kg FROM deals WHERE id = ?', (deal_id,))
+            row = cur.fetchone()
+            if not row:
+                try: cur.close()
+                except Exception: pass
+                try: conn.close()
+                except Exception: pass
+                return jsonify({'ok': False, 'error': 'deal_not_found'}), 404
+            
+            current_qty = float(row[0])
+            new_qty = max(0, current_qty - quantity_to_reduce)
+            
+            # Update quantity
+            cur.execute('UPDATE deals SET quantity_kg = ? WHERE id = ?', (new_qty, deal_id))
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+            return jsonify({'ok': True, 'new_quantity': new_qty}), 200
+    except Exception as e:
+        print('reduce_deal_quantity error:', e)
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("GROQ_API_KEY loaded:", os.getenv("GROQ_API_KEY"))  
     init_contact_excel()
@@ -6634,6 +6887,11 @@ if __name__ == '__main__':
         ensure_deals_table()
     except Exception as e:
         print('ensure_deals_table error:', e)
+    # Ensure contracts table exists (MySQL and SQLite fallback)
+    try:
+        ensure_contracts_table()
+    except Exception as e:
+        print('ensure_contracts_table error:', e)
     # Ensure purchase notifications table exists
     try:
         ensure_purchase_notifications_table()

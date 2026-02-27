@@ -1,0 +1,12 @@
+
+> my-assistant@0.1.0 build
+> react-scripts build
+
+Creating an optimized production build...
+Failed to compile.
+
+[eslint] 
+src\farmer\FarmerCart.js
+Syntax error: Missing catch or finally clause. (854:4) (854:4)
+
+

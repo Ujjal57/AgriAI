@@ -8,33 +8,22 @@ const FarmerCart = () => {
   const [editingId, setEditingId] = React.useState(null);
   const [editVal, setEditVal] = React.useState('');
   const [editPrice, setEditPrice] = React.useState('');
-  const [paymentMethod, setPaymentMethod] = React.useState('contract');
+  const [paymentMethod, setPaymentMethod] = React.useState('');
   const [paymentError, setPaymentError] = React.useState('');
-  const [contractType, setContractType] = React.useState('one-time');
+  const [contractNature, setContractNature] = React.useState('post-harvest');
+  const [contractDuration, setContractDuration] = React.useState('one-time');
   const [contractHtml, setContractHtml] = React.useState('');
   const [showContractPreview, setShowContractPreview] = React.useState(false);
-  const [showDeliveryInfoModal, setShowDeliveryInfoModal] = React.useState(false);
+  const [contractMetadata, setContractMetadata] = React.useState(null);
 
   const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
 
   const [siteLang, setSiteLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
-    const [contractLang, setContractLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
   React.useEffect(() => {
     const onLang = (e) => { const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); setSiteLang(l); };
     try { window.addEventListener('agri:lang:change', onLang); } catch (e) {}
     return () => { try { window.removeEventListener('agri:lang:change', onLang); } catch (e) {} };
   }, []);
-
-  // Keep the generated contract HTML's language line in sync with the `siteLang` selector
-  React.useEffect(() => {
-    try {
-      if (!showContractPreview || !contractHtml) return;
-      const langMap = { en: 'English', hi: 'Hindi', kn: 'Kannada', ta: 'Tamil', te: 'Telugu', mr: 'Marathi', bn: 'Bengali', or: 'Odia' };
-      const contractLanguage = (langMap[contractLang] || contractLang || 'English');
-      const updated = contractHtml.replace(/This Agreement has been explained and translated to the Farmer in[\s\S]*?\(Language\)/, `This Agreement has been explained and translated to the Farmer in ${contractLanguage} (Language)`);
-      if (updated && updated !== contractHtml) setContractHtml(updated);
-    } catch (e) {}
-  }, [contractLang, showContractPreview, contractHtml]);
 
   React.useEffect(() => {
     // Try to load server-backed farmer cart when signed in; otherwise fall back to localStorage
@@ -51,7 +40,7 @@ const FarmerCart = () => {
             const res = await fetch(`${apiBase}/cart/list?${qp}`);
             if (res && res.ok) {
               const j = await res.json().catch(() => null);
-                if (j && j.ok && Array.isArray(j.cart)) {
+              if (j && j.ok && Array.isArray(j.cart)) {
                 const mapped = j.cart.map(r => ({
                   id: r.crop_id || r.id,
                   cart_id: r.id,
@@ -147,22 +136,6 @@ const FarmerCart = () => {
   }, []);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-
-  // Compute labour charge (INR) based on total weight in kilograms
-  const computeLabourCharge = (weightKg) => {
-    const w = Number(weightKg || 0) || 0;
-    if (w <= 40) return 80;
-    if (w <= 200) return 200;
-    if (w <= 500) return 300;
-    if (w <= 1500) return 550; // 1.5 ton
-    if (w <= 5000) return 1000; // 5 ton
-    if (w <= 10000) return 1500; // 10 ton
-    if (w <= 20000) return 2500; // 20 ton
-    if (w <= 40000) return 4000; // 40 ton
-    // For weights above 40 ton, charge multiples of the 40-ton slab
-    const blocks = Math.ceil(w / 40000);
-    return 4000 * blocks;
-  };
 
   const clearCart = () => {
     (async () => {
@@ -309,14 +282,12 @@ const FarmerCart = () => {
       const fields = [it && it.category, it && it.cat, it && it._category, it && it.category_name, it && it.categoryName, it && it.tags, it && it.tag].filter(Boolean).join(' ');
       const catRaw = (fields || (it && it.crop_name) || '').toString().trim().toLowerCase();
       const name = (it && it.crop_name || '').toString().toLowerCase();
-
       // Prefer exact category values chosen in `MyCrops` select
       // Map common exact values to internal groups
       const exact = (it && (it.category || it.cat) || '').toString().trim().toLowerCase();
       if (exact === 'food crops' || exact === 'food crop' || exact === 'food' || exact === 'crops') return 'crop';
       if (exact === 'fruits and vegetables' || exact === 'fruits & vegetables' || exact === 'fruits' || exact === 'fruits and veg') return 'fruitveg';
       if (exact === 'masalas' || exact === 'masala' || exact === 'spices' || exact === 'spice') return 'masala';
-
       // Fallback keyword matching (includes plurals and some local words)
       const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ'];
       const fruitKeywords = ['fruit', 'fruits', 'फल', 'ಹಣ್ಣು'];
@@ -346,22 +317,21 @@ const FarmerCart = () => {
     // Tiered commission rates (percent) by group and category subtotal
     let commissionRate = 0;
     if (group === 'crop') {
-      if (categoryTotal < 200001) commissionRate = 2.0;
-      else if (categoryTotal < 600001) commissionRate = 2.5;
+      if (categoryTotal < 200001) commissionRate = 1.0;
+      else if (categoryTotal < 600001) commissionRate = 1.8;
+      else if (categoryTotal < 1000001) commissionRate = 2.5;
+      else commissionRate = 3.0;
+    } else if (group === 'fruitveg') {
+      if (categoryTotal < 200001) commissionRate = 1.8;
+      else if (categoryTotal < 600001) commissionRate = 2.4;
       else if (categoryTotal < 1000001) commissionRate = 3.0;
       else commissionRate = 3.4;
-    } else if (group === 'fruitveg') {
-      if (categoryTotal < 200001) commissionRate = 2.5;
-      else if (categoryTotal < 600001) commissionRate = 3.0;
-      else if (categoryTotal < 1000001) commissionRate = 3.4;
-      else commissionRate = 4.0;
     } else if (group === 'masala') {
-      if (categoryTotal < 200001) commissionRate = 3.0;
-      else if (categoryTotal < 600001) commissionRate = 3.4;
-      else if (categoryTotal < 1000001) commissionRate = 4.0;
-      else commissionRate = 4.4;
+      if (categoryTotal < 200001) commissionRate = 2.4;
+      else if (categoryTotal < 600001) commissionRate = 3.0;
+      else if (categoryTotal < 1000001) commissionRate = 3.5;
+      else commissionRate = 4.0;
     }
-
     // Platform fee (amount) = total * commissionRate%; cap at 100000
       let commissionAmt = round2((total * (commissionRate / 100)) || 0);
     if (!Number.isFinite(commissionAmt) || commissionAmt < 0) commissionAmt = 0;
@@ -370,8 +340,7 @@ const FarmerCart = () => {
     // GST is 18% on the platform fee
     const gstRate = 18;
       const gstAmt = round2((commissionAmt * gstRate) / 100);
-
-    return { gstRate, commissionRate, gstAmt, commissionAmt, lineTotal: total, group, categoryTotal };
+      return { gstRate, commissionRate, gstAmt, commissionAmt, lineTotal: total, group, categoryTotal };
   };
 
   const totals = items.reduce(
@@ -384,10 +353,10 @@ const FarmerCart = () => {
     },
     { subtotal: 0, gst: 0, commission: 0 }
   );
-  // Compute buyer-side platform fee and GST using requested tiered rates per category group
-  const computeBuyerTotals = (itemsList) => {
+  
+  // Calculate buyer platform fees with different rates
+  const buyerTotals = (() => {
     const round2 = (v) => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
-    // reuse group detection logic (same as in calculateGstAndCommission)
     const getGroupFromItem = (it) => {
       const fields = [it && it.category, it && it.cat, it && it._category, it && it.category_name, it && it.categoryName, it && it.tags, it && it.tag].filter(Boolean).join(' ');
       const catRaw = (fields || (it && it.crop_name) || '').toString().trim().toLowerCase();
@@ -405,65 +374,58 @@ const FarmerCart = () => {
       if (hasAny(catRaw, ['crop', 'crops', 'food'])) return 'crop';
       return 'crop';
     };
-
-    // Sum line totals by group
-    const categoryTotals = (itemsList || []).reduce((acc, it) => {
-      try {
-        const q = Number(it.order_quantity || 0) || 0;
-        const p = Number(it.price_per_kg || 0) || 0;
-        const line = round2(q * p);
-        const g = getGroupFromItem(it);
-        acc[g] = (acc[g] || 0) + line;
-      } catch (e) {}
-      return acc;
-    }, { crop: 0, fruitveg: 0, masala: 0 });
-
-    // Determine buyer-side commission rates per group and compute commission/GST per group
-    const ratesForGroup = (group, categoryTotal) => {
-      // thresholds: <200001, <600001, <1000001, >=1000001
+    
+    let buyerCommission = 0;
+    let buyerGst = 0;
+    
+    items.forEach(it => {
+      const qty = Number(it.order_quantity || 0) || 0;
+      const price = Number(it.price_per_kg || 0) || 0;
+      const lineTotal = round2(qty * price);
+      
+      const categoryTotals = items.reduce((acc, itm) => {
+        try {
+          const q = Number(itm.order_quantity || 0) || 0;
+          const p = Number(itm.price_per_kg || 0) || 0;
+          const line = round2(q * p);
+          const g = getGroupFromItem(itm);
+          acc[g] = (acc[g] || 0) + line;
+        } catch (e) {}
+        return acc;
+      }, { crop: 0, fruitveg: 0, masala: 0 });
+      
+      const group = getGroupFromItem(it);
+      const categoryTotal = round2(categoryTotals[group] || 0);
+      
+      let buyerCommissionRate = 0;
       if (group === 'crop') {
-        if (categoryTotal < 200001) return 1.5;
-        if (categoryTotal < 600001) return 2.0;
-        if (categoryTotal < 1000001) return 2.5;
-        return 3.0;
+        if (categoryTotal < 200001) buyerCommissionRate = 1.0;
+        else if (categoryTotal < 600001) buyerCommissionRate = 1.8;
+        else if (categoryTotal < 1000001) buyerCommissionRate = 2.5;
+        else buyerCommissionRate = 3.0;
+      } else if (group === 'fruitveg') {
+        if (categoryTotal < 200001) buyerCommissionRate = 1.8;
+        else if (categoryTotal < 600001) buyerCommissionRate = 2.4;
+        else if (categoryTotal < 1000001) buyerCommissionRate = 3.0;
+        else buyerCommissionRate = 3.8;
+      } else if (group === 'masala') {
+        if (categoryTotal < 200001) buyerCommissionRate = 2.4;
+        else if (categoryTotal < 600001) buyerCommissionRate = 3.2;
+        else if (categoryTotal < 1000001) buyerCommissionRate = 3.8;
+        else buyerCommissionRate = 4.4;
       }
-      if (group === 'masala') {
-        if (categoryTotal < 200001) return 2.5;
-        if (categoryTotal < 600001) return 3.0;
-        if (categoryTotal < 1000001) return 3.5;
-        return 4.0;
-      }
-      // fruitveg
-      if (group === 'fruitveg') {
-        if (categoryTotal < 200001) return 2.0;
-        if (categoryTotal < 600001) return 2.5;
-        if (categoryTotal < 1000001) return 3.0;
-        return 3.5;
-      }
-      return 0;
-    };
-
-    const gstRate = 18;
-    let buyerCommissionTotal = 0;
-    let buyerGstTotal = 0;
-    // cap per-group commission similar to existing logic
-    const capAmt = 100000;
-    Object.keys(categoryTotals).forEach(g => {
-      const catTotal = round2(categoryTotals[g] || 0);
-      if (!catTotal) return;
-      const rate = ratesForGroup(g, catTotal) || 0;
-      let commissionAmt = round2((catTotal * (rate / 100)) || 0);
-      if (!Number.isFinite(commissionAmt) || commissionAmt < 0) commissionAmt = 0;
-      if (commissionAmt > capAmt) commissionAmt = capAmt;
-      const gstAmt = round2((commissionAmt * gstRate) / 100);
-      buyerCommissionTotal += commissionAmt;
-      buyerGstTotal += gstAmt;
+      
+      let buyerCommissionAmt = round2((lineTotal * (buyerCommissionRate / 100)) || 0);
+      if (!Number.isFinite(buyerCommissionAmt) || buyerCommissionAmt < 0) buyerCommissionAmt = 0;
+      if (buyerCommissionAmt > 100000) buyerCommissionAmt = 100000;
+      
+      buyerCommission += buyerCommissionAmt;
+      buyerGst += round2((buyerCommissionAmt * 18) / 100);
     });
-
-    return { commission: round2(buyerCommissionTotal), gst: round2(buyerGstTotal) };
-  };
-
-  const buyerTotals = computeBuyerTotals(items);
+    
+    return { commission: round2(buyerCommission), gst: round2(buyerGst) };
+  })();
+  
   const grandTotal = Math.round((totals.subtotal - totals.commission - totals.gst + Number.EPSILON) * 100) / 100;
   const totalAvailableQty = items.reduce((s, it) => s + (Number(it.quantity_kg || 0) || 0), 0);
   const totalOrderedQty = items.reduce((s, it) => s + (Number(it.order_quantity || 0) || 0), 0);
@@ -486,7 +448,7 @@ const FarmerCart = () => {
       return;
     }
     try {
-        const orderItems = items.map(it => {
+      const orderItems = items.map(it => {
         const qty = Number(it.order_quantity || 0);
         const price = Number(it.price_per_kg || 0);
         const lineTotal = Math.round((qty * price + Number.EPSILON) * 100) / 100;
@@ -495,7 +457,6 @@ const FarmerCart = () => {
         return {
           id: it.id,
           crop_name: it.crop_name,
-          variety: it.variety || it.var || it.crop_variety || '',
           category: it.category || it.cat || '',
           price_per_kg: price,
           order_quantity: qty,
@@ -515,98 +476,13 @@ const FarmerCart = () => {
       }, { subtotal: 0, gst: 0, platform_fee: 0 });
       const grand_total = Math.round((summary.subtotal - summary.platform_fee - summary.gst + Number.EPSILON) * 100) / 100;
 
-      const invoiceId = 'ORD' + Date.now();
       const createdAt = new Date().toISOString();
 
-      const orderRecord = {
-        invoice_id: invoiceId,
-        created_at: createdAt,
-        payment_method: 'contract',
-        buyer,
-        items: orderItems,
-        totals: { ...summary, grand_total }
-      };
+      // DON'T create ORD... invoice_id yet - wait for contract to be saved to database
+      // so we can use the actual contract_number from the contracts table
+      
+      let savedContractNumber = null; // Will store the contract_number returned from database
 
-      // Compute additional contract-level fields to persist to history and send to backend
-      const totalContractQty = (orderItems || []).reduce((s, it) => s + (Number(it.order_quantity || 0) || 0), 0);
-      const totalCropTradeValue = (orderItems || []).reduce((s, it) => s + ((Number(it.order_quantity || 0) || 0) * (Number(it.price_per_kg || 0) || 0)), 0);
-      const avgPricePerKg = totalContractQty > 0 ? (totalCropTradeValue / totalContractQty) : 0;
-      const buyerFeeTotal = (buyerTotals.commission || 0) + (buyerTotals.gst || 0);
-      const totalAmountPayableByBuyer = Math.round((totalCropTradeValue + buyerFeeTotal + Number.EPSILON) * 100) / 100;
-      const qtyKg = Math.round(totalContractQty || 0);
-      const labourCharge = computeLabourCharge(qtyKg);
-      // delivery rate display (reuse same banding as in generateContract)
-      const qtyRateMap = [
-        { min: 0, max: 40, rates: [12, 18, 22] },
-        { min: 41, max: 400, rates: [18, 22, 28] },
-        { min: 401, max: 1500, rates: [22, 28, 35] },
-        { min: 1501, max: 5000, rates: [28, 35, 45] },
-        { min: 5001, max: 10000, rates: [35, 45, 60] },
-        { min: 10001, max: 20000, rates: [40] },
-        { min: 20001, max: 40000, rates: [75] }
-      ];
-      let matching = qtyRateMap.find(r => qtyKg >= r.min && qtyKg <= r.max);
-      if (!matching) matching = qtyRateMap[qtyRateMap.length - 1];
-      const formatRates = (arr) => {
-        const parts = (arr || []).map(v => `₹${v} / km`);
-        if (parts.length === 0) return '₹-- / km';
-        if (parts.length === 1) return parts[0];
-        if (parts.length === 2) return `${parts[0]} or ${parts[1]}`;
-        return `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}`;
-      };
-      const deliveryRateDisplay = `${formatRates(matching.rates)}`;
-
-      // Contract duration and dates: use current defaults (can be overridden elsewhere)
-      const startDateObj = new Date();
-      const startDate = startDateObj.toLocaleDateString('en-GB');
-      let days = contractType === 'one-time' ? 30 : (contractType === 'seasonal' ? 90 : 365);
-      // compute end date based on days
-      const endDateObj = new Date(Date.now() + (days * 24 * 3600 * 1000));
-      const endDate = endDateObj.toLocaleDateString('en-GB');
-
-      // Short description and variety summary
-      const description = orderItems.map(it => `${it.crop_name || ''} x ${it.order_quantity || 0}kg`).join('; ');
-      const variety = orderItems.map(it => it.variety || '').filter(Boolean).join(', ');
-
-      // Farmer settlement calculations
-      const farmerPlatformFee = (totals.commission || 0);
-      const farmerGstOnFee = (totals.gst || 0);
-      const netAmountPayableToFarmer = Math.round((totalCropTradeValue - (farmerPlatformFee + farmerGstOnFee) + Number.EPSILON) * 100) / 100;
-
-      // Attach these fields to the order record so history immediately reflects them
-      orderRecord.contract_meta = {
-        startDate,
-        start_date_iso: startDateObj.toISOString(),
-        endDate,
-        end_date_iso: endDateObj.toISOString(),
-        days,
-        contract_type: contractType,
-        variety,
-        description,
-        totalContractQty,
-        totalCropTradeValue,
-        avgPricePerKg,
-        buyerFeeTotal,
-        totalAmountPayableByBuyer,
-        deliveryRateDisplay,
-        labourCharge,
-        qtyKg,
-        farmerPlatformFee,
-        farmerGstOnFee,
-        netAmountPayableToFarmer
-      };
-      // include buyer and farmer totals for precise breakdowns
-      try {
-        orderRecord.contract_meta.buyer_totals = buyerTotals || { commission: 0, gst: 0 };
-        orderRecord.contract_meta.farmer_totals = { commission: (totals && (totals.commission || totals.platform_fee)) || 0, gst: (totals && totals.gst) || 0 };
-      } catch (e) {}
-
-      try {
-        const rawHist = localStorage.getItem('agriai_history_farmer');
-        const hist = rawHist ? JSON.parse(rawHist) : [];
-        const nextHist = [orderRecord, ...(Array.isArray(hist) ? hist : [])];
-        localStorage.setItem('agriai_history_farmer', JSON.stringify(nextHist));
-      } catch (e) {}
       // best-effort notify counterparties (reuse same endpoint)
       try {
         fetch(`${apiBase}/notifications/purchase`, {
@@ -615,216 +491,6 @@ const FarmerCart = () => {
           body: JSON.stringify({ buyer, items: orderItems.map(({ id, crop_name, order_quantity }) => ({ id, crop_name, order_quantity })) })
         }).catch(() => {});
       } catch (e) {}
-      // Also add local notifications so buyer sees the contract/details immediately
-      try {
-        const localKey = 'agriai_notifications';
-        const rawLocal = localStorage.getItem(localKey);
-        const localArr = rawLocal ? JSON.parse(rawLocal) : [];
-        const contractNotif = {
-          id: `C${Date.now()}`,
-          invoice_id: invoiceId,
-          created_at: createdAt,
-          buyer_id: buyer.id || null,
-          farmer_name: localStorage.getItem('agriai_name') || '',
-          farmer_id: localStorage.getItem('agriai_id') || null,
-          items: orderItems,
-          quantity_kg: totalContractQty,
-          _subtotal: totalCropTradeValue,
-          crop_name: orderItems[0] ? orderItems[0].crop_name : 'Contract',
-          contract_meta: orderRecord.contract_meta
-        };
-        localArr.unshift(contractNotif);
-        try { localStorage.setItem(localKey, JSON.stringify(localArr)); } catch (e) {}
-        try { window.dispatchEvent(new Event('agriai:notifications:local:update')); } catch (e) {}
-      } catch (e) { /* ignore */ }
-      // Store contract record in backend contract_b table (include buyer fields when available)
-      try {
-        const role = localStorage.getItem('agriai_role') || '';
-        const farmerId = role === 'farmer' ? localStorage.getItem('agriai_id') : null;
-        const farmerName = localStorage.getItem('agriai_name') || '';
-        const farmerEmail = localStorage.getItem('agriai_email') || '';
-        let farmerState = localStorage.getItem('agriai_state') || '';
-        let farmerRegion = localStorage.getItem('agriai_region') || '';
-
-        // If localStorage lacks state/region, try to fetch authoritative profile
-        try {
-          if ((!farmerState || !farmerRegion)) {
-            const farmPhone = localStorage.getItem('agriai_phone') || '';
-            const farmEmail = localStorage.getItem('agriai_email') || '';
-            if (farmPhone || farmEmail) {
-              const resp = await fetch(`${apiBase}/profile/get`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: farmPhone || undefined, email: farmEmail || undefined }) });
-              if (resp && resp.ok) {
-                const j = await resp.json().catch(() => null);
-                if (j && j.user) {
-                  farmerState = farmerState || (j.user.state || '');
-                  farmerRegion = farmerRegion || (j.user.region || '');
-                }
-              }
-            }
-          }
-        } catch (e) { console.warn('profile/get failed when preparing contract payload (handleBuyNow)', e); }
-
-        // helper to fetch first non-empty localStorage key
-        const fetchFirstLocal = (keys, fallback) => {
-          for (let k of keys) {
-            try {
-              const v = localStorage.getItem(k);
-              if (v && v.toString().trim()) return v.toString().trim();
-            } catch (e) { continue; }
-          }
-          return fallback;
-        };
-
-        // Determine buyer fields: prefer buyer_id on items, then localStorage keys
-        const buyerIdFromItems = (items && Array.isArray(items) && items.find(it => it && it.buyer_id)) ? String(items.find(it => it && it.buyer_id).buyer_id) : '';
-        let buyer_id = buyerIdFromItems || fetchFirstLocal(['contract_buyer_id', 'agriai_buyer_id', 'buyer_id', 'selected_buyer_id'], '') || undefined;
-        let buyer_name = fetchFirstLocal(['contract_buyer_name', 'agriai_buyer_name', 'buyer_name', 'selected_buyer_name'], '') || undefined;
-        let buyer_email = fetchFirstLocal(['contract_buyer_email', 'agriai_buyer_email', 'buyer_email', 'selected_buyer_email'], '') || undefined;
-        let buyer_state = fetchFirstLocal(['contract_buyer_state', 'agriai_buyer_state', 'buyer_state', 'selected_buyer_state'], '') || undefined;
-        let buyer_region = fetchFirstLocal(['contract_buyer_region', 'agriai_buyer_region', 'buyer_region', 'selected_buyer_region'], '') || undefined;
-
-        // If we have a buyer_id, try to fetch authoritative buyer details
-        try {
-          if (buyer_id) {
-            const resB = await fetch(`${apiBase}/buyer/get?id=${encodeURIComponent(buyer_id)}`);
-            if (resB && resB.ok) {
-              const jb = await resB.json().catch(() => null);
-              if (jb && jb.ok && jb.buyer) {
-                buyer_id = jb.buyer.id ? String(jb.buyer.id) : buyer_id;
-                buyer_name = jb.buyer.name || buyer_name;
-                buyer_email = jb.buyer.email || buyer_email;
-                buyer_state = jb.buyer.state || buyer_state;
-                buyer_region = jb.buyer.region || buyer_region;
-              }
-            }
-          }
-        } catch (e) { console.warn('buyer/get failed when preparing contract payload', e); }
-
-        const payload = {
-          farmer_id: farmerId || undefined,
-          farmer_name: farmerName || undefined,
-          farmer_email: farmerEmail || undefined,
-          farmer_state: farmerState || undefined,
-          farmer_region: farmerRegion || undefined,
-          buyer_id: buyer_id || undefined,
-          buyer_name: buyer_name || undefined,
-          buyer_state: buyer_state || undefined,
-          buyer_region: buyer_region || undefined,
-          buyer_email: buyer_email || undefined,
-          total_quantity: totalOrderedQty,
-          total_amount: grand_total,
-          // include detailed computed contract meta for accurate history rendering
-          contract_meta: {
-            start_date: orderRecord.contract_meta && orderRecord.contract_meta.startDate,
-            end_date: orderRecord.contract_meta && orderRecord.contract_meta.endDate,
-            duration_days: orderRecord.contract_meta && orderRecord.contract_meta.days,
-            variety: orderRecord.contract_meta && orderRecord.contract_meta.variety,
-            description: orderRecord.contract_meta && orderRecord.contract_meta.description,
-            total_contract_qty: orderRecord.contract_meta && orderRecord.contract_meta.totalContractQty,
-            total_crop_trade_value: orderRecord.contract_meta && orderRecord.contract_meta.totalCropTradeValue,
-            avg_price_per_kg: orderRecord.contract_meta && orderRecord.contract_meta.avgPricePerKg,
-            buyer_fee_total: orderRecord.contract_meta && orderRecord.contract_meta.buyerFeeTotal,
-            total_amount_payable_by_buyer: orderRecord.contract_meta && orderRecord.contract_meta.totalAmountPayableByBuyer,
-            delivery_rate_display: orderRecord.contract_meta && orderRecord.contract_meta.deliveryRateDisplay,
-            labour_charge: orderRecord.contract_meta && orderRecord.contract_meta.labourCharge,
-            qty_kg: orderRecord.contract_meta && orderRecord.contract_meta.qtyKg,
-            farmer_platform_fee: orderRecord.contract_meta && orderRecord.contract_meta.farmerPlatformFee,
-            farmer_gst_on_fee: orderRecord.contract_meta && orderRecord.contract_meta.farmerGstOnFee,
-            net_amount_payable_to_farmer: orderRecord.contract_meta && orderRecord.contract_meta.netAmountPayableToFarmer,
-            buyer_totals: orderRecord.contract_meta && orderRecord.contract_meta.buyer_totals,
-            farmer_totals: orderRecord.contract_meta && orderRecord.contract_meta.farmer_totals
-          },
-          lang: contractLang || siteLang || 'en'
-        };
-
-        (async () => {
-          try {
-            console.log('contract-submitted payload:', payload);
-            const res = await fetch(`${apiBase}/notifications/contract-submitted`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!res) {
-              console.warn('No response from contract-submitted');
-              alert('Contract request failed: no response from server');
-              return;
-            }
-            const text = await res.text().catch(() => '');
-            let j = null;
-            try { j = text ? JSON.parse(text) : null; } catch (e) { j = null; }
-            console.log('contract-submitted response:', res.status, text, j);
-                if (res.ok && j && j.ok) {
-              const cn = j.contract_number || j.contractNumber || '';
-              const cdt = j.contract_datetime || j.contractDatetime || null;
-              try {
-                // Update local history entry (match by invoiceId) to store contract_number, contract_datetime and all payload fields
-                const rawHist = localStorage.getItem('agriai_history_farmer');
-                if (rawHist) {
-                  try {
-                    const hist = JSON.parse(rawHist) || [];
-                    let updated = hist.map(h => {
-                      try {
-                        if (h && h.invoice_id && h.invoice_id === invoiceId) {
-                          return {
-                            ...h,
-                            contract_number: cn || h.contract_number,
-                            contract_datetime: cdt || new Date().toISOString(),
-                              contract_meta: (payload && payload.contract_meta) || orderRecord.contract_meta || h.contract_meta || h.contractMeta || undefined,
-                            // persist authoritative contract fields we sent to server so History can render them
-                            farmer_id: payload && payload.farmer_id || h.farmer_id || undefined,
-                            farmer_name: payload && payload.farmer_name || h.farmer_name || undefined,
-                            farmer_email: payload && payload.farmer_email || h.farmer_email || undefined,
-                            farmer_state: payload && payload.farmer_state || h.farmer_state || undefined,
-                            farmer_region: payload && payload.farmer_region || h.farmer_region || undefined,
-                            buyer_id: payload && payload.buyer_id || h.buyer_id || undefined,
-                            buyer_name: payload && payload.buyer_name || h.buyer_name || undefined,
-                            buyer_email: payload && payload.buyer_email || h.buyer_email || undefined,
-                            buyer_state: payload && payload.buyer_state || h.buyer_state || undefined,
-                            buyer_region: payload && payload.buyer_region || h.buyer_region || undefined,
-                            total_quantity: payload && payload.total_quantity || (h.totals && h.totals.order_quantity) || h.total_quantity || undefined,
-                            total_amount: payload && payload.total_amount || (h.totals && h.totals.grand_total) || h.total_amount || undefined,
-                            lang: payload && payload.lang || h.lang || undefined
-                          };
-                        }
-                      } catch (e) {}
-                      return h;
-                    });
-                    // upload contract HTML to backend to create PDF/HTML file
-                    try {
-                      (async () => {
-                        try {
-                          const apiBase = (window.__AGRIAI_API_BASE__ || '');
-                          const url = apiBase ? (apiBase + '/notifications/contract-pdf') : '/notifications/contract-pdf';
-                          const resp2 = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contract_number: cn, contract_html: contractHtml }) });
-                          if (resp2 && resp2.ok) {
-                            const jr = await resp2.json().catch(() => null);
-                            if (jr && jr.ok) {
-                              const pdfUrl = jr.pdf_url || jr.html_url || null;
-                              if (pdfUrl) {
-                                updated = updated.map(h => {
-                                  try { if (h && h.invoice_id === invoiceId) { return { ...h, contract_pdf_url: pdfUrl }; } } catch (e) {}
-                                  return h;
-                                });
-                                localStorage.setItem('agriai_history_farmer', JSON.stringify(updated));
-                              } else {
-                                localStorage.setItem('agriai_history_farmer', JSON.stringify(updated));
-                              }
-                            } else {
-                              localStorage.setItem('agriai_history_farmer', JSON.stringify(updated));
-                            }
-                          } else {
-                            localStorage.setItem('agriai_history_farmer', JSON.stringify(updated));
-                          }
-                        } catch (e) { console.warn('contract-pdf upload failed', e); localStorage.setItem('agriai_history_farmer', JSON.stringify(updated)); }
-                      })();
-                    } catch (e) { localStorage.setItem('agriai_history_farmer', JSON.stringify(updated)); }
-                  } catch (e) {}
-                }
-                alert((t('contractSaved', siteLang) || 'Contract saved') + (cn ? '\n' + cn : ''));
-              } catch (e) {}
-            } else {
-              alert('Contract request failed: ' + (j && j.error ? j.error : ('HTTP ' + res.status)));
-            }
-          } catch (e) { console.warn('contract-submitted POST failed', e); alert('Contract request failed: ' + e); }
-        })();
-      } catch (e) { console.warn('contract record creation error', e); }
       // If signed in and server rows exist, remove them on server
       try {
         const userRole = localStorage.getItem('agriai_role') || '';
@@ -838,6 +504,125 @@ const FarmerCart = () => {
         }
       } catch (e) { console.warn(e); }
 
+      // Save contract(s) to database and reduce buyer crop quantities
+      try {
+        const failedSaves = [];
+        if (contractMetadata && contractMetadata.crops && Array.isArray(contractMetadata.crops)) {
+          for (const crop of contractMetadata.crops) {
+            try {
+              // Save contract to database
+              const contractPayload = {
+                contract_number: contractMetadata.contract_number,
+                farmer_id: contractMetadata.farmer_id,
+                farmer_name: contractMetadata.farmer_name,
+                farmer_address: contractMetadata.farmer_address,
+                farmer_state: contractMetadata.farmer_state,
+                buyer_id: contractMetadata.buyer_id || crop.buyer_id,
+                buyer_name: contractMetadata.buyer_name,
+                buyer_address: contractMetadata.buyer_address,
+                buyer_state: contractMetadata.buyer_state,
+                crop_name: crop.crop_name,
+                variety: crop.variety,
+                quantity: crop.quantity,
+                price_per_kg: crop.price_per_kg,
+                amount: crop.amount,
+                contract_nature: contractMetadata.contract_nature,
+                contract_duration: contractMetadata.contract_duration,
+                start_date: contractMetadata.start_date,
+                end_date: contractMetadata.end_date,
+                duration: contractMetadata.duration,
+                farmer_platform_fee: contractMetadata.farmer_platform_fee,
+                farmer_gst: contractMetadata.farmer_gst,
+                buyer_platform_fee: contractMetadata.buyer_platform_fee,
+                buyer_gst: contractMetadata.buyer_gst,
+                delivery_cost: contractMetadata.delivery_cost
+              };
+              
+              let saveRes = null;
+              try {
+                saveRes = await fetch(`${apiBase}/contracts/save`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(contractPayload)
+                });
+                const text = await (saveRes.text ? saveRes.text() : Promise.resolve(null)).catch(() => null);
+                let bodyJson = null;
+                try { bodyJson = text ? JSON.parse(text) : null; } catch (e) { }
+                if (saveRes && saveRes.ok) {
+                  console.log('✅ Contract saved successfully', bodyJson || text || saveRes.status);
+                  // IMPORTANT: Capture contract_number from database response
+                  if (bodyJson && bodyJson.contract_number && !savedContractNumber) {
+                    savedContractNumber = bodyJson.contract_number;
+                    console.log('📌 Using contract_number from database:', savedContractNumber);
+                  }
+                } else {
+                  console.warn('❌ Failed to save contract:', saveRes ? saveRes.status : 'no-response', bodyJson || text);
+                  failedSaves.push({ payload: contractPayload, status: saveRes ? saveRes.status : 'no-response', body: bodyJson || text });
+                }
+              } catch (e) {
+                console.warn('❌ Error saving contract (fetch failed):', e);
+                failedSaves.push({ payload: contractPayload, status: 'fetch-error', body: String(e) });
+              }
+            } catch (e) {
+              console.warn('Error saving contract:', e);
+            }
+
+            // Reduce buyer crop quantity
+            try {
+              if (crop.buyer_id) {
+                const reduceRes = await fetch(`${apiBase}/deals/reduce-quantity`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    deal_id: crop.id,
+                    quantity_to_reduce: crop.quantity
+                  })
+                });
+                
+                if (reduceRes && reduceRes.ok) {
+                  console.log('Buyer crop quantity reduced successfully');
+                } else {
+                  console.warn('Failed to reduce buyer crop quantity:', reduceRes?.status);
+                }
+              }
+            } catch (e) {
+              console.warn('Error reducing buyer crop quantity:', e);
+            }
+          }
+        }
+        if (failedSaves.length) {
+          console.warn('Some contract rows failed to save:', failedSaves);
+          try { alert(`${failedSaves.length} contract row(s) failed to save to server — check console for details.`); } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('Error processing contracts/quantities:', e);
+      }
+
+      // NOW save order to localStorage AFTER contracts are successfully saved to database
+      // Use the contract_number from the database (CNT...) instead of local ORD... number
+      try {
+        const contractNumberToUse = savedContractNumber || contractMetadata.contract_number || ('CNT' + Date.now());
+        console.log('📝 Saving order to history with contract_number:', contractNumberToUse);
+        
+        const orderRecord = {
+          contract_number: contractNumberToUse,
+          invoice_id: contractNumberToUse,
+          created_at: createdAt,
+          payment_method: 'contract',
+          buyer,
+          items: orderItems,
+          totals: { ...summary, grand_total }
+        };
+        
+        const rawHist = localStorage.getItem('agriai_history_farmer');
+        const hist = rawHist ? JSON.parse(rawHist) : [];
+        const nextHist = [orderRecord, ...(Array.isArray(hist) ? hist : [])];
+        localStorage.setItem('agriai_history_farmer', JSON.stringify(nextHist));
+        console.log('✓ Order saved to history with database contract_number');
+      } catch (e) {
+        console.warn('Warning: Failed to save order to localStorage:', e);
+      }
+
       // clear cart locally
       localStorage.setItem('agriai_cart_farmer', JSON.stringify([]));
       setItems([]);
@@ -849,8 +634,7 @@ const FarmerCart = () => {
       alert(t('purchaseFailed', siteLang));
     }
   };
-
-  const generateContract = async () => {
+   const generateContract = async () => {
     try {
       // Attempt to obtain buyer and farmer details from localStorage / items
       let farmerName = localStorage.getItem('agriai_name') || '';
@@ -870,7 +654,7 @@ const FarmerCart = () => {
         }
         return fallback;
       };
- 
+
       // Buye
       // r info: check a list of commonly-used keys, then fall back to placeholders
       let buyerName = fetchFirst(['contract_buyer_name', 'agriai_buyer_name', 'buyer_name', 'selected_buyer_name'], '[Buyer Name]');
@@ -905,10 +689,9 @@ const FarmerCart = () => {
 
       // Prefer buyer id from cart items; fall back to storage keys. If we have a buyer id,
       // fetch authoritative buyer details from backend `/buyer/get?id=...`.
-      let resolvedBuyerId = '';
       try {
         const buyerIdFromItems = (items && Array.isArray(items) && items.find(it => it && it.buyer_id)) ? String(items.find(it => it && it.buyer_id).buyer_id) : '';
-        resolvedBuyerId = buyerIdFromItems || buyerIdFromStorage || '';
+        const resolvedBuyerId = buyerIdFromItems || buyerIdFromStorage || '';
         if (resolvedBuyerId) {
           try {
             const resB = await fetch(`${apiBase}/buyer/get?id=${encodeURIComponent(resolvedBuyerId)}`);
@@ -931,90 +714,191 @@ const FarmerCart = () => {
         console.warn('buyer lookup failed', e);
       }
 
-      const startDateObj = new Date();
-      const startDate = startDateObj.toLocaleDateString('en-GB');
-      // default days based on contractType
-      let days = contractType === 'one-time' ? 30 : (contractType === 'seasonal' ? 90 : 365);
-      // default end date based on days
-      let endDateObj = new Date(Date.now() + days * 24 * 3600 * 1000);
-
-      // If we have a resolved buyer id, try to fetch recent deals for that buyer and use delivery_date
+      const startDate = new Date().toLocaleDateString('en-GB');
+      let endDate = null;
+      let days = contractDuration === 'one-time' ? 30 : (contractDuration === 'seasonal' ? 90 : 365);
+      if (contractNature === 'pre-harvest') days = 120;
+      if (contractNature === 'post-harvest' && contractDuration === 'one-time') days = 45;
+      
+      // Try to fetch delivery date from crop metadata first
       try {
-        const buyerIdForDeals = (resolvedBuyerId) ? resolvedBuyerId : (buyerId || '');
-        if (buyerIdForDeals) {
-          // prefer narrowing by crop_name of first item if available
-          const firstCrop = (items && items.length && items[0] && (items[0].crop_name || items[0].id)) ? encodeURIComponent(items[0].crop_name || items[0].id) : '';
-          const q = `${apiBase}/deals/list?buyer_id=${encodeURIComponent(buyerIdForDeals)}${firstCrop ? '&crop_name=' + firstCrop : ''}`;
-          const rd = await fetch(q);
-          if (rd && rd.ok) {
-            const jd = await rd.json().catch(() => null);
-            if (jd && jd.ok && Array.isArray(jd.deals) && jd.deals.length) {
-              // take most recent deal (list_deals orders by created_at desc)
-              const deal = jd.deals[0];
-              if (deal && deal.delivery_date) {
-                // parse delivery_date which may be 'YYYY-MM-DD' or ISO
-                const parsed = new Date(deal.delivery_date);
-                if (!isNaN(parsed.getTime())) {
-                  endDateObj = parsed;
-                  // compute days difference from startDateObj to endDateObj (round up)
-                  const diffMs = endDateObj.setHours(0,0,0,0) - new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate()).getTime();
-                  const computedDays = Math.ceil(diffMs / (24 * 3600 * 1000));
-                  if (Number.isFinite(computedDays) && computedDays > 0) days = computedDays;
+        const firstCropId = (items && items.length && items[0] && items[0].id) ? items[0].id : null;
+        if (firstCropId) {
+          // Fetch from crop details endpoint
+          const cropRes = await fetch(`${apiBase}/crops/${encodeURIComponent(firstCropId)}`);
+          if (cropRes && cropRes.ok) {
+            const cropData = await cropRes.json().catch(() => null);
+            if (cropData && cropData.ok && cropData.crop) {
+              const cropDeliveryDate = cropData.crop.delivery_date || cropData.crop.deliveryDate || null;
+              if (cropDeliveryDate) {
+                const deliveryDateObj = new Date(cropDeliveryDate);
+                if (!isNaN(deliveryDateObj.getTime())) {
+                  endDate = deliveryDateObj.toLocaleDateString('en-GB');
+                  // Calculate days between start and end date
+                  const startDateObj = new Date();
+                  startDateObj.setHours(0, 0, 0, 0);
+                  const endDateObj = new Date(deliveryDateObj);
+                  endDateObj.setHours(0, 0, 0, 0);
+                  const diffMs = endDateObj.getTime() - startDateObj.getTime();
+                  const calculatedDays = Math.ceil(diffMs / (24 * 3600 * 1000));
+                  if (Number.isFinite(calculatedDays) && calculatedDays > 0) {
+                    days = calculatedDays;
+                  }
+                  console.log('Delivery date fetched from crop metadata:', endDate, 'Days:', days);
+                  return; // Exit early if we found the date
                 }
               }
             }
           }
         }
       } catch (e) {
-        console.warn('deals lookup for delivery_date failed', e);
+        console.warn('Failed to fetch delivery date from crop metadata, trying deals table', e);
       }
-
-      const endDate = endDateObj.toLocaleDateString('en-GB');
-
-      // Build commodity rows from items (separate from the big template to avoid nested template parsing issues)
-      const rowsHtml = (items || []).map((it, idx) => {
+      
+      // Fallback: Fetch delivery date from deals table if not found in crop metadata
+      try {
+        const firstCropId = (items && items.length && items[0] && items[0].id) ? items[0].id : null;
+        if (firstCropId && !endDate) {
+          const dealsRes = await fetch(`${apiBase}/deals/list?crop_id=${encodeURIComponent(firstCropId)}`);
+          if (dealsRes && dealsRes.ok) {
+            const dealsData = await dealsRes.json().catch(() => null);
+            if (dealsData && dealsData.ok && Array.isArray(dealsData.deals) && dealsData.deals.length) {
+              const mostRecentDeal = dealsData.deals[0]; // Assumes API returns deals ordered by date
+              if (mostRecentDeal && mostRecentDeal.delivery_date) {
+                const deliveryDateObj = new Date(mostRecentDeal.delivery_date);
+                if (!isNaN(deliveryDateObj.getTime())) {
+                  endDate = deliveryDateObj.toLocaleDateString('en-GB');
+                  // Calculate days between start and end date
+                  const startDateObj = new Date();
+                  startDateObj.setHours(0, 0, 0, 0);
+                  const endDateObj = new Date(deliveryDateObj);
+                  endDateObj.setHours(0, 0, 0, 0);
+                  const diffMs = endDateObj.getTime() - startDateObj.getTime();
+                  const calculatedDays = Math.ceil(diffMs / (24 * 3600 * 1000));
+                  if (Number.isFinite(calculatedDays) && calculatedDays > 0) {
+                    days = calculatedDays;
+                  }
+                  console.log('Delivery date fetched from deals table:', endDate, 'Days:', days);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch delivery date from deals table', e);
+      }
+      
+      // Fallback: use default calculated end date if not fetched from either source
+      if (!endDate) {
+        endDate = new Date(Date.now() + days * 24 * 3600 * 1000).toLocaleDateString('en-GB');
+        console.log('Using default calculated end date:', endDate, 'Days:', days);
+      }
+      
+      // Calculate pricing information for section 5.1
+      const totalContractQty = items.reduce((sum, it) => sum + (Number(it.order_quantity || 0) || 0), 0);
+      const totalCropTradeValue = items.reduce((sum, it) => {
         const qty = Number(it.order_quantity || 0) || 0;
-        const variety = it.variety || it.crop_variety || it.var || '';
         const price = Number(it.price_per_kg || 0) || 0;
-        const amount = Math.round((qty * price + Number.EPSILON) * 100) / 100;
-        return `<tr>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${idx + 1}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${it.crop_name || ''}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${variety}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${qty.toLocaleString('en-IN')} kg</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${formatCurrency(price)}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${formatCurrency(amount)}</td>
-        </tr>`;
-      }).join('');
-      const rowsPlaceholder = rowsHtml && rowsHtml.trim() ? rowsHtml : `<tr><td colspan="6" style="padding:8px;border:1px solid #ddd;text-align:center">${t('noItems', siteLang)}</td></tr>`;
-
-      // compute totals for contract summary
-      const totalContractQty = (items || []).reduce((s, it) => s + (Number(it.order_quantity || 0) || 0), 0);
-      const totalCropTradeValue = (items || []).reduce((s, it) => s + ((Number(it.order_quantity || 0) || 0) * (Number(it.price_per_kg || 0) || 0)), 0);
+        return sum + (qty * price);
+      }, 0);
       const avgPricePerKg = totalContractQty > 0 ? (totalCropTradeValue / totalContractQty) : 0;
-      // buyer fee total (commission + gst) and final payable by buyer (excluding delivery)
-      const buyerFeeTotal = (buyerTotals.commission || 0) + (buyerTotals.gst || 0);
-      const totalAmountPayableByBuyer = Math.round((totalCropTradeValue + buyerFeeTotal + Number.EPSILON) * 100) / 100;
-
-      // Determine delivery rate options per km based on total contracted quantity (kg)
+      
+      // Calculate platform fee and GST for the contract
+      const round2 = (v) => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
+      let totalPlatformFee = 0;
+      let totalGst = 0;
+      items.forEach(it => {
+        const { gstAmt, commissionAmt } = calculateGstAndCommission(it);
+        totalPlatformFee += commissionAmt;
+        totalGst += gstAmt;
+      });
+      totalPlatformFee = round2(totalPlatformFee);
+      totalGst = round2(totalGst);
+      const totalAmountInvoice = round2(totalCropTradeValue - totalPlatformFee - totalGst);
+      
+      // Calculate buyer platform fee and GST with buyer-specific commission rates
+      const getGroupFromItem = (it) => {
+        const fields = [it && it.category, it && it.cat, it && it._category, it && it.category_name, it && it.categoryName, it && it.tags, it && it.tag].filter(Boolean).join(' ');
+        const catRaw = (fields || (it && it.crop_name) || '').toString().trim().toLowerCase();
+        const name = (it && it.crop_name || '').toString().toLowerCase();
+        const exact = (it && (it.category || it.cat) || '').toString().trim().toLowerCase();
+        if (exact === 'food crops' || exact === 'food crop' || exact === 'food' || exact === 'crops') return 'crop';
+        if (exact === 'fruits and vegetables' || exact === 'fruits & vegetables' || exact === 'fruits' || exact === 'fruits and veg') return 'fruitveg';
+        if (exact === 'masalas' || exact === 'masala' || exact === 'spices' || exact === 'spice') return 'masala';
+        const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ'];
+        const fruitKeywords = ['fruit', 'fruits', 'फल', 'ಹಣ್ಣು'];
+        const vegKeywords = ['vegetable', 'vegetables', 'veg', 'veggie', 'veget', 'सब्जी', 'ತರಕಾರಿ'];
+        const hasAny = (str, arr) => arr.some(k => str.includes(k));
+        if (hasAny(catRaw, masalaKeywords) || hasAny(name, masalaKeywords)) return 'masala';
+        if (hasAny(catRaw, fruitKeywords) || hasAny(name, fruitKeywords) || hasAny(catRaw, vegKeywords) || hasAny(name, vegKeywords)) return 'fruitveg';
+        if (hasAny(catRaw, ['crop', 'crops', 'food'])) return 'crop';
+        return 'crop';
+      };
+      
+      let buyerPlatformFee = 0;
+      let buyerGst = 0;
+      items.forEach(it => {
+        const qty = Number(it.order_quantity || 0) || 0;
+        const price = Number(it.price_per_kg || 0) || 0;
+        const lineTotal = round2(qty * price);
+        
+        // Calculate category totals for buyer rates
+        const categoryTotals = items.reduce((acc, itm) => {
+          try {
+            const q = Number(itm.order_quantity || 0) || 0;
+            const p = Number(itm.price_per_kg || 0) || 0;
+            const line = round2(q * p);
+            const g = getGroupFromItem(itm);
+            acc[g] = (acc[g] || 0) + line;
+          } catch (e) {}
+          return acc;
+        }, { crop: 0, fruitveg: 0, masala: 0 });
+        
+        const group = getGroupFromItem(it);
+        const categoryTotal = round2(categoryTotals[group] || 0);
+        
+        // Buyer-specific tiered commission rates
+        let buyerCommissionRate = 0;
+        if (group === 'crop') {
+          if (categoryTotal < 200001) buyerCommissionRate = 2.0;
+          else if (categoryTotal < 600001) buyerCommissionRate = 2.5;
+          else if (categoryTotal < 1000001) buyerCommissionRate = 3.0;
+          else buyerCommissionRate = 3.4;
+        } else if (group === 'fruitveg') {
+          if (categoryTotal < 200001) buyerCommissionRate = 2.5;
+          else if (categoryTotal < 600001) buyerCommissionRate = 3.0;
+          else if (categoryTotal < 1000001) buyerCommissionRate = 3.4;
+          else buyerCommissionRate = 4.0;
+        } else if (group === 'masala') {
+          if (categoryTotal < 200001) buyerCommissionRate = 3.0;
+          else if (categoryTotal < 600001) buyerCommissionRate = 3.4;
+          else if (categoryTotal < 1000001) buyerCommissionRate = 4.0;
+          else buyerCommissionRate = 4.4;
+        }
+        
+        let buyerCommissionAmt = round2((lineTotal * (buyerCommissionRate / 100)) || 0);
+        if (!Number.isFinite(buyerCommissionAmt) || buyerCommissionAmt < 0) buyerCommissionAmt = 0;
+        if (buyerCommissionAmt > 100000) buyerCommissionAmt = 100000;
+        
+        const buyerGstAmt = round2((buyerCommissionAmt * 18) / 100);
+        buyerPlatformFee += buyerCommissionAmt;
+        buyerGst += buyerGstAmt;
+      });
+      buyerPlatformFee = round2(buyerPlatformFee);
+      buyerGst = round2(buyerGst);
+      const buyerTotalAmount = round2(totalCropTradeValue + buyerPlatformFee + buyerGst);
+      
+      // Calculate delivery rate display
       const qtyKg = Math.round(totalContractQty || 0);
-      const labourCharge = computeLabourCharge(qtyKg);
-      // Map quantity bands to possible per-km rates (INR)
       const qtyRateMap = [
         { min: 0, max: 40, rates: [12, 18, 22] },
         { min: 41, max: 400, rates: [18, 22, 28] },
         { min: 401, max: 1500, rates: [22, 28, 35] },
         { min: 1501, max: 5000, rates: [28, 35, 45] },
-        { min: 5001, max: 10000, rates: [35, 45, 60] },
-        { min: 10001, max: 20000, rates: [40] },
-        { min: 20001, max: 40000, rates: [75] }
+        { min: 5001, max: 10000, rates: [35, 45, 60] }
       ];
-
-      // find the matching band; if none found, fall back to last band rates
       let matching = qtyRateMap.find(r => qtyKg >= r.min && qtyKg <= r.max);
       if (!matching) matching = qtyRateMap[qtyRateMap.length - 1];
-
-      // Build a human-friendly rates string: "₹12 / km or ₹18 / km or ₹22 / km"
       const formatRates = (arr) => {
         const parts = (arr || []).map(v => `₹${v} / km`);
         if (parts.length === 0) return '₹-- / km';
@@ -1022,11 +906,825 @@ const FarmerCart = () => {
         if (parts.length === 2) return `${parts[0]} or ${parts[1]}`;
         return `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}`;
       };
-
       const deliveryRateDisplay = `${formatRates(matching.rates)}`;
-
-      // Map language codes to display names for the contract
       
+      // Build commodity rows from items (separate from the big template to avoid nested template parsing issues)
+      const rowsHtml = (items || []).map((it, idx) => {
+        const qty = Number(it.order_quantity || 0) || 0;
+        const price = Number(it.price_per_kg || 0) || 0;
+        const amount = qty * price;
+        const variety = it.variety || it.crop_variety || it.var || '';
+        return `<tr>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${idx + 1}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${it.crop_name || ''}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${variety}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${qty.toLocaleString('en-IN')} kg</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">₹${price.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">₹${amount.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+        </tr>`;
+        }).join('');
+      const rowsPlaceholder = rowsHtml && rowsHtml.trim() ? rowsHtml : `<tr><td colspan="6" style="padding:8px;border:1px solid #ddd;text-align:center">${t('noItems', siteLang)}</td></tr>`;
+      
+      // Hindi contract HTML
+      const htmlHi = `<!doctype html>
+      <html>
+<head>
+  <meta charset="utf-8" />
+  <title>Procurement Contract</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #111;
+      padding: 24px;
+      line-height: 1.6;
+    }
+       h1 {
+      text-align: center;
+      color: #236902;
+      margin: 0;
+    }
+       h2 {
+      margin-top: 18px;
+    }
+       .section {
+      margin-top: 16px;
+    }
+      table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 12px;
+    }
+      th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+      th {
+      background: #f7f7f7;
+      text-align: left;
+    }
+      pre {
+      white-space: pre-wrap;
+      font-family: 'Times New Roman', Times, serif;
+    }
+  </style>
+</head>
+<body>
+<div style="text-align:center; margin-bottom:20px;">
+    <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
+    <h1>
+                 एग्री एआई<br/>
+      संविदा कृषि अनुबंध
+    </h1>
+    
+  </div>
+  <section class="section">
+  <h2>पक्षकार</h2>
+  <p><strong>पक्ष A – खरीदार / कंपनी</strong></p>
+  <p><b>नाम:</b> ${buyerName}</p>
+  <p><b>खरीदार आईडी: </b> ${buyerId || '[Buyer ID]'}</p>
+  <p><b>पता:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
+  <p><strong>पक्ष B – किसान / उत्पादक</strong></p>
+  <p><b>नाम: </b> ${farmerName}</p>
+  <p><b>किसान आईडी:</b> ${farmerId}</p>
+  <p><b>पता:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
+   <p>
+      पक्ष A और पक्ष B को सामूहिक रूप से “पक्षकार” कहा जाएगा।
+      एग्री एआई केवल एक डिजिटल सुविधा मंच के रूप में कार्य करता है और किसी भी पक्ष का खरीदार, विक्रेता, परिवहनकर्ता, बीमाकर्ता या एजेंट नहीं है।
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>1. अनुबंध का उद्देश्य</h2>
+    <p>
+      यह अनुबंध उन शर्तों और नियमों को परिभाषित करता है जिनके अंतर्गत किसान कृषि उपज का उत्पादन एवं आपूर्ति करेगा तथा खरीदार पूर्व-निर्धारित मूल्य पर उसे खरीदेगा, जिससे:
+    </p>
+    <ul>
+      <li>किसान को सुनिश्चित बाज़ार उपलब्ध हो</li>
+      <li>निष्पक्ष एवं पारदर्शी मूल्य निर्धारण हो</li>
+      <li>समय पर और सुरक्षित भुगतान हो</li>
+      <li>बिचौलियों पर निर्भरता कम हो</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>2. अनुबंध का प्रकार एवं अवधि</h2>
+    <p>अनुबंध का प्रकार: ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p>
+    <p>अनुबंध अवधि: ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p>
+    <p>प्रारंभ तिथि: ${startDate}</p>
+    <p>समाप्ति तिथि: ${endDate}</p>
+    <p>कुल अवधि: ${days} Days</p>
+    <p>
+     कटाई उपरांत क्रय अनुबंध के अंतर्गत उपज पहले से उत्पादित या कटाई की जा चुकी है। इस अनुबंध के अंतर्गत कोई उत्पादन दायित्व उत्पन्न नहीं होगा।
+    </p>
+    <h3>2.1 अनुबंध स्वीकृति एवं वार्ता अवधि</h3>
+    <p>
+      यह अनुबंध किसान द्वारा डिजिटल रूप से भेजे जाने के 48 घंटों तक वैध रहेगा।
+    </p>
+    <p>
+      इस अवधि में खरीदार को निम्न में से एक कार्य करना होगा:
+    </p>
+    <ul>
+      <li>अनुबंध स्वीकार करना</li>
+      <li>अनुबंध अस्वीकार करना</li>
+      <li>मूल्य वार्ता का अनुरोध करना</li>
+    </ul>
+    <p>
+      यदि 48 घंटों के भीतर कोई कार्यवाही नहीं की जाती है, तो अनुबंध स्वतः निरस्त माना जाएगा।
+    </p>
+    
+  </section>
+
+  <section class="section">
+    <h2>3. डेटा गोपनीयता एवं प्लेटफ़ॉर्म अनुपालन</h2>
+    <p>
+      एग्री एआई द्वारा संकलित सभी व्यक्तिगत, कृषि एवं लेनदेन संबंधी डेटा:
+    </p>
+    <ul>
+      <li>सुरक्षित रूप से संग्रहीत किए जाएंगे</li>
+      <li>केवल अनुबंध निष्पादन, भुगतान निपटान, बीमा सुविधा एवं कानूनी अनुपालन हेतु उपयोग किए जाएंगे</li>
+    </ul>
+    <p>
+      यह अनुबंध डिजिटल पर्सनल डेटा प्रोटेक्शन अधिनियम, 2023 के अनुरूप है।
+    </p>
+  </section>
+
+  <section class="section">
+  <h2>4. वस्तु विवरण</h2>
+  <table style="border-collapse:collapse;width:100%;margin-top:12px;">
+    <thead>
+      <tr>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">क्रम सं.</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">फसल का नाम</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">किस्म</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">मात्रा</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">मूल्य (₹/किग्रा)</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">कुल राशि</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+</section>
+
+  <section class="section">
+  <h2>5. मूल्य एवं भुगतान शर्तें</h2>
+
+  <p><strong>5.1 किसान</strong></p>
+  <p>कुल मात्रा: ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
+  <p>मूल्य: ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
+  <p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(totalPlatformFee)}</p>
+  <p>प्लेटफ़ॉर्म शुल्क पर जीएसटी: ${formatCurrency(totalGst)}</p>
+  <p><strong>कुल देय राशि (कटौती पश्चात): ${formatCurrency(totalAmountInvoice)}</strong></p>
+
+  <p><strong>5.2 खरीदार</strong></p>
+  <p>कुल मात्रा: ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
+  <p>मूल्य: ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
+  <p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(buyerPlatformFee)}</p>
+  <p>प्लेटफ़ॉर्म शुल्क पर जीएसटी: ${formatCurrency(buyerGst)}</p>
+  <p><strong>कुल देय राशि (जोड़कर): ${formatCurrency(buyerTotalAmount)}</strong></p>
+  <p>डिलीवरी / लॉजिस्टिक्स शुल्क (डिलीवरी के पश्चात देय): ${deliveryRateDisplay}</p>
+
+  <p><strong>5.3 भुगतान अनुसूची</strong></p>
+  <p>कुल फसल व्यापार मूल्य का 25% खरीदार द्वारा अनुबंध पुष्टि के समय एग्रीएआई प्लेटफ़ॉर्म के माध्यम से अग्रिम के रूप में भुगतान किया जाएगा।</p>
+  <p>कुल फसल व्यापार मूल्य का 50% सफल डिलीवरी के तुरंत बाद भुगतान किया जाएगा।</p>
+  <p>शेष 25% गुणवत्ता निरीक्षण एवं औपचारिक स्वीकृति के 7 (सात) कार्य दिवसों के भीतर भुगतान किया जाएगा।</p>
+
+  <p><strong>5.4 भुगतान का तरीका</strong></p>
+  <p>बैंक ट्रांसफर / यूपीआई / चेक</p>
+  <p>खरीदार इस अनुबंध के अंतर्गत किए गए सभी भुगतानों के लिए डिजिटल या भौतिक रसीद जारी करेगा।</p>
+
+</section>
+  <section class="section">
+  <h2>6. डिलीवरी, लॉजिस्टिक्स एवं परिवहन</h2>
+
+  <p><strong>6.1 एग्रीएआई की भूमिका</strong></p>
+  <p>
+    एग्रीएआई केवल एक डिजिटल प्रौद्योगिकी प्लेटफ़ॉर्म के रूप में कार्य करता है, जो खरीदारों और किसानों के बीच लेनदेन को सुगम बनाता है।
+    एग्रीएआई को किसी भी स्थिति में खरीदार, विक्रेता, व्यापारी, कमीशन एजेंट, परिवहनकर्ता या माल का संरक्षक नहीं माना जाएगा।
+    बिक्री एवं खरीद से संबंधित सभी दायित्व पूर्णतः पक्षकारों के बीच ही रहेंगे।
+  </p>
+
+  <p><strong>6.2 डिलीवरी सुविधा</strong></p>
+  <p>
+    परिवहन एग्रीएआई प्लेटफ़ॉर्म पर उपलब्ध या अनुमोदित तृतीय-पक्ष लॉजिस्टिक्स सेवा प्रदाताओं के माध्यम से कराया जाएगा।
+    लॉजिस्टिक्स प्रदाता एवं वाहन का चयन फसल की प्रकृति, मात्रा, दूरी तथा संभाल आवश्यकताओं के आधार पर किया जाएगा।
+  </p>
+
+  <p><strong>6.3 डिलीवरी शुल्क</strong></p>
+  <p>
+    डिलीवरी शुल्क तृतीय-पक्ष लॉजिस्टिक्स प्रदाता द्वारा वास्तविक दूरी, वाहन के प्रकार, लोडिंग आवश्यकताओं एवं स्थान के आधार पर निर्धारित किया जाएगा।
+    यह शुल्क सीधे खरीदार द्वारा लॉजिस्टिक्स प्रदाता को भुगतान किया जाएगा।
+    एग्रीएआई डिलीवरी शुल्क निर्धारित करने या उसके संबंध में किसी भी प्रकार की वार्ता करने के लिए उत्तरदायी नहीं होगा।
+  </p>
+
+  <p><strong>6.4 जोखिम का हस्तांतरण</strong></p>
+  <p>
+    परिवहन के दौरान उपज का जोखिम एवं उत्तरदायित्व लॉजिस्टिक्स प्रदाता के पास रहेगा।
+    सफल डिलीवरी तथा हस्ताक्षरित डिलीवरी प्रमाण (Proof of Delivery - POD) के पश्चात जोखिम खरीदार को हस्तांतरित होगा।
+  </p>
+
+  <p><strong>6.5 विलंब, क्षति एवं हानि</strong></p>
+  <p>
+    परिवहन के दौरान होने वाली किसी भी प्रकार की देरी, क्षति, कमी या हानि लॉजिस्टिक्स प्रदाता के नियमों एवं शर्तों के अनुसार नियंत्रित होगी।
+    एग्रीएआई ऐसे किसी भी दावे के लिए उत्तरदायी नहीं होगा।
+  </p>
+
+  <p><strong>6.6 डिलीवरी का प्रमाण</strong></p>
+  <p>
+    डिलीवरी की पुष्टि भौतिक रसीद, डिजिटल पुष्टि और/या एग्रीएआई प्लेटफ़ॉर्म पर दर्ज इलेक्ट्रॉनिक POD के माध्यम से की जाएगी।
+    एग्रीएआई द्वारा सुरक्षित रखे गए डिजिटल अभिलेख डिलीवरी के वैध साक्ष्य माने जाएंगे।
+  </p>
+
+</section>
+
+  <section class="section">
+  <h2>7. गुणवत्ता मानक, निरीक्षण एवं स्वीकृति</h2>
+
+  <p>
+    आपूर्ति की गई उपज इस अनुबंध में उल्लिखित पारस्परिक रूप से सहमत विनिर्देशों के अनुरूप होगी।
+  </p>
+
+  <p>
+    खरीदार डिलीवरी की तिथि से 3 (तीन) कार्य दिवसों के भीतर गुणवत्ता निरीक्षण पूर्ण करेगा।
+  </p>
+
+  <p>
+    किसी भी अस्वीकृति को निरीक्षण अवधि के भीतर एग्रीएआई प्लेटफ़ॉर्म के माध्यम से लिखित रूप में दर्ज करना अनिवार्य होगा,
+    जिसमें स्पष्ट, वैध एवं सत्यापन योग्य कारणों का उल्लेख होना चाहिए।
+  </p>
+
+  <p>
+    यदि 3 कार्य दिवसों के भीतर कोई विवाद या आपत्ति दर्ज नहीं की जाती है, तो उपज को स्वीकृत माना जाएगा।
+  </p>
+
+  <p>
+    यदि अस्वीकृति उचित एवं प्रमाणित पाई जाती है, तो वापसी परिवहन व्यय खरीदार द्वारा वहन किया जाएगा,
+    जब तक कि यह सिद्ध न हो जाए कि दोष प्रेषण (डिस्पैच) से पूर्व उत्पन्न हुआ था।
+  </p>
+
+</section>
+
+  <section class="section">
+  <h2>8. जोखिम, दायित्व एवं बीमा</h2>
+
+  <p>
+    किसान मानक कृषि एवं कटाई उपरांत (पोस्ट-हार्वेस्ट) प्रथाओं का पालन करेगा।
+  </p>
+
+  <p>
+    प्रेषण (डिस्पैच) से पूर्व प्राकृतिक आपदा या अप्रत्याशित परिस्थितियों (फोर्स मेज्योर) के कारण फसल हानि की स्थिति में,
+    पक्षकार आपसी सहमति से दायित्वों की समीक्षा कर सकते हैं।
+    यदि फसल बीमा सरकार की योजनाओं जैसे 
+    <strong>प्रधानमंत्री फसल बीमा योजना (PMFBY)</strong> या किसी अनुमोदित बीमाकर्ता के अंतर्गत लागू है,
+    तो वह किसान के नाम पर ही रहेगा।
+  </p>
+
+  <p>
+    किसी भी बीमा दावे के अंतर्गत प्राप्त क्षतिपूर्ति राशि पर पूर्ण अधिकार केवल किसान का होगा।
+  </p>
+
+  <p>
+    सफल डिलीवरी एवं स्वीकृति के पश्चात उपज से संबंधित सभी जोखिम, स्वामित्व एवं दायित्व पूर्णतः खरीदार को हस्तांतरित हो जाएंगे।
+  </p>
+
+</section>
+
+
+  <section class="section">
+  <h2>9. अप्रत्याशित परिस्थितियाँ (Force Majeure)</h2>
+
+  <p>
+    किसी भी पक्ष को ऐसी परिस्थितियों के कारण हुई विफलता या विलंब के लिए उत्तरदायी नहीं ठहराया जाएगा,
+    जो उसके उचित नियंत्रण से परे हों, जिनमें प्राकृतिक आपदाएँ, सरकारी प्रतिबंध, युद्ध, हड़ताल,
+    परिवहन व्यवधान या अन्य अप्रत्याशित आपदाएँ शामिल हैं।
+  </p>
+
+  <p>
+    ऐसी परिस्थितियों के समाप्त होते ही अनुबंध के दायित्व पुनः प्रभावी हो जाएंगे।
+  </p>
+</section>
+
+<section class="section">
+  <h2>10. विवाद समाधान एवं अधिकार क्षेत्र</h2>
+
+  <p>
+    इस अनुबंध से उत्पन्न किसी भी विवाद को सर्वप्रथम एग्रीएआई प्लेटफ़ॉर्म के माध्यम से आपसी चर्चा द्वारा सौहार्दपूर्ण तरीके से सुलझाने का प्रयास किया जाएगा।
+  </p>
+
+  <p>
+    यदि 15 (पंद्रह) दिनों के भीतर विवाद का समाधान नहीं होता है, तो इसे मध्यस्थता एवं सुलह अधिनियम, 1996 के अंतर्गत मध्यस्थता के लिए संदर्भित किया जाएगा।
+    मध्यस्थता का स्थान (Seat of Arbitration) एग्रीएआई द्वारा निर्धारित किया जाएगा।
+  </p>
+
+  <p>
+    मध्यस्थता के अधीन रहते हुए, इस अनुबंध से संबंधित प्रवर्तन एवं अन्य कानूनी कार्यवाहियों के लिए
+    <strong>बेंगलुरु, कर्नाटक</strong> की न्यायालयों को विशेष (Exclusive) अधिकार क्षेत्र प्राप्त होगा।
+  </p>
+</section>
+
+  <section class="section">
+  <h2>11. समाप्ति</h2>
+
+  <p>
+    किसी भी पक्ष द्वारा इस अनुबंध की किसी महत्वपूर्ण शर्त के उल्लंघन की स्थिति में,
+    जिसमें भुगतान न करना, डिलीवरी न करना, मिथ्या प्रस्तुतीकरण (Misrepresentation) या सहमत शर्तों का उल्लंघन शामिल है,
+    यह अनुबंध समाप्त किया जा सकता है।
+  </p>
+
+  <p>
+    सहमत समयसीमा से परे भुगतान में चूक की स्थिति में, चूक करने वाले पक्ष के विरुद्ध
+    खाता निलंबन, दंडात्मक शुल्क तथा विधि द्वारा अनुमत वसूली कार्यवाही की जा सकती है।
+  </p>
+</section>
+
+<section class="section">
+  <h2>12. अनुबंध की भाषा</h2>
+
+  <p>
+    यह अनुबंध किसान को ${siteLang === 'en' ? 'English' : (siteLang === 'hi' ? 'हिंदी' : (siteLang === 'kn' ? 'ಕನ್ನಡ' : 'English'))} (भाषा) में समझाया एवं अनुवादित किया गया है।
+    किसी भी असंगति की स्थिति में अंग्रेज़ी संस्करण प्रभावी एवं मान्य होगा।
+  </p>
+</section>
+
+<section class="section">
+  <h2>13. निष्पादन एवं डिजिटल स्वीकृति</h2>
+
+  <p>
+    यह अनुबंध एग्रीएआई प्लेटफ़ॉर्म के माध्यम से इलेक्ट्रॉनिक रूप से निष्पादित किया जा सकता है।
+    पंजीकृत क्रेडेंशियल्स के माध्यम से दी गई डिजिटल स्वीकृति विधिक रूप से बाध्यकारी सहमति मानी जाएगी।
+  </p>
+
+  <p>खरीदार / अधिकृत प्रतिनिधि</p>
+  <p>हस्ताक्षर: ___________________________</p>
+  <p>तिथि: ___________________________</p>
+
+  <p>किसान / उत्पादक</p>
+  <p>हस्ताक्षर: ___________________________</p>
+  <p>तिथि: ___________________________</p>
+
+  <p>गवाह 1: ___________________________</p>
+  <p>गवाह 2: ___________________________</p>
+</section>
+
+</body>
+</html>`;
+
+      // Select template based on language
+      const html = siteLang === 'hi' ? htmlHi : `<!doctype html>
+      <html>
+<head>
+  <meta charset="utf-8" />
+  <title>Procurement Contract</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #111;
+      padding: 24px;
+      line-height: 1.6;
+    }
+       h1 {
+      text-align: center;
+      color: #236902;
+      margin: 0;
+    }
+       h2 {
+      margin-top: 18px;
+    }
+       .section {
+      margin-top: 16px;
+    }
+      table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 12px;
+    }
+      th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+      th {
+      background: #f7f7f7;
+      text-align: left;
+    }
+      pre {
+      white-space: pre-wrap;
+      font-family: 'Times New Roman', Times, serif;
+    }
+  </style>
+</head>
+<body>
+<div style="text-align:center; margin-bottom:20px;">
+    <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
+    <h1>
+      Agri AI<br/>
+      CONTRACT FARMING AGREEMENT
+    </h1>
+    
+  </div>
+  <section class="section">
+  <h2>PARTIES</h2>
+  <p><strong>Party A – Buyer / Company</strong></p>
+  <p><b>Name:</b> ${buyerName}</p>
+  <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
+  <p><b>Address:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
+  <p><strong>Party B – Farmer / Producer</strong></p>
+  <p><b>Name:</b> ${farmerName}</p>
+  <p><b>Farmer ID:</b> ${farmerId}</p>
+  <p><b>Address:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
+   <p>
+      Party A and Party B are collectively referred to as “the Parties.”
+      AgriAI acts solely as a digital facilitation platform and is not a buyer, seller, transporter, insurer, or agent of either Party.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>1. PURPOSE OF AGREEMENT</h2>
+    <p>
+      This Agreement defines the terms and conditions under which the Farmer agrees to produce
+      and supply agricultural produce to the Buyer, and the Buyer agrees to procure such produce
+      at a pre-determined price, ensuring:
+    </p>
+    <ul>
+      <li>Assured market access to the Farmer</li>
+      <li>Fair and transparent pricing</li>
+      <li>Timely and secure payment</li>
+      <li>Reduced dependency on intermediaries</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>2. CONTRACT TYPE & DURATION</h2>
+    <p>Contract Nature: ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p>
+    <p>Contract Duration: ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p>
+    <p>Start Date: ${startDate}</p>
+    <p>End Date: ${endDate}</p>
+    <p>Duration: ${days} Days</p>
+    <p>
+      Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract. Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract.
+    </p>
+  
+    <h3><strong>2.1 Contract Acceptance &amp; Negotiation Window</strong></h3>
+    <p>
+      This procurement contract shall remain valid for acceptance for a period of forty-eight (48) hours from the time it is digitally sent by the Farmer to the Buyer through the AgriAI platform.
+    </p>
+    <p>
+      Within this 48-hour period, the Buyer must take one of the following actions through the platform:
+    </p>
+    <ul>
+      <li>Accept the contract in its current form; or</li>
+      <li>Reject the contract; or</li>
+      <li>Request a price negotiation.</li>
+    </ul>
+    <p>
+      If the Buyer does not take any action within the 48-hour validity period, the contract shall automatically expire and shall have no legal or binding effect on either Party.
+    </p>
+    <p>
+      Any request for price negotiation shall be time-bound and must be concluded within forty-eight (48) hours from the time the negotiation is initiated. If no agreement is reached within this period, the negotiation shall automatically lapse, and the contract shall stand cancelled.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>3. DATA PRIVACY & PLATFORM COMPLIANCE</h2>
+    <p>
+      All personal, agricultural, and transactional data collected through the AgriAI platform shall be:
+    </p>
+    <ul>
+      <li>Stored securely</li>
+      <li>Used strictly for:</li>
+      <li>Contract execution and renewal</li>
+      <li>Payment settlement</li>
+      <li>Insurance facilitation</li>
+      <li>Legal and regulatory compliance</li>
+    </ul>
+    <p>
+      This Agreement is fully compliant with the Digital Personal Data Protection Act, 2023.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>4. COMMODITY DETAILS</h2>
+    <table style="border-collapse:collapse;width:100%;margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Sl. No</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Crop Name</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Variety</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Quantity</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Price (₹/kg)</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>5. PRICE & PAYMENT TERMS</h2>
+    <p><strong>5.1 Farmer </strong></p>
+    <p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p>
+    <p>Price: ${formatCurrency(avgPricePerKg)} per kg</p>
+    <p>Platform Fee: ${formatCurrency(totalPlatformFee)}</p>
+    <p>GST on Platform Fee: ${formatCurrency(totalGst)}</p>
+    <p><strong>Total Amount (After Deduction): ${formatCurrency(totalAmountInvoice)}</strong></p>
+ 
+    <p><strong>5.2 Buyer</strong></p>
+    <p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p>
+    <p>Price: ${formatCurrency(avgPricePerKg)} per kg</p>
+    <p>Platform Fee: ${formatCurrency(buyerPlatformFee)}</p>
+    <p>GST on Platform Fee: ${formatCurrency(buyerGst)}</p>
+    <p><strong>Total Amount (After Addition): ${formatCurrency(buyerTotalAmount)}</strong></p>
+    <p>Delivery / Logistics Charges (Payable After Delivery): ${deliveryRateDisplay}</p>
+
+    <p><strong>5.3 Payment Schedule</strong></p>
+    <p>25% of the Total Crop Trade Value shall be paid by the Buyer as an advance at the time of contract confirmation through the AgriAI platform.</p>
+    <p>50% of the Total Crop Trade Value shall be paid immediately upon successful delivery of the produce.</p>
+    <p>50% of the Total Crop Trade Value shall be paid immediately upon successful delivery of the produce.</p>
+    <p>The remaining 25% shall be paid within 7 (seven) working days after quality inspection and formal acceptance of the produce.</p>
+    <p><strong>5.4 Mode of Payment</strong></p>
+    <p>Bank Transfer / UPI / Cheque</p>
+    <p>The Buyer shall issue digital or physical receipts for all payments made under this Agreement.</p>
+
+
+
+
+
+  </section>
+  <section class="section">
+    <h2>6. DELIVERY, LOGISTICS & TRANSPORTATION</h2>
+
+  <p><strong>6.1 Role of AgriAI</strong></p>
+  <p>
+    AgriAI operates solely as a digital technology platform facilitating transactions between Buyers and Farmers.
+    AgriAI shall not be deemed a buyer, seller, trader, commission agent, transporter, or custodian of goods.
+    All obligations relating to sale and purchase remain strictly between the Parties.
+  </p>
+
+  <p><strong>6.2 Delivery Facilitation</strong></p>
+  <p>
+    Transportation shall be facilitated through third-party logistics service providers available on or approved by the AgriAI platform.
+    The selection of logistics provider and vehicle type shall be based on crop nature, quantity, distance, and handling requirements.
+  </p>
+
+  <p><strong>6.3 Delivery Charges</strong></p>
+  <p>
+    Delivery charges shall be determined by the third-party logistics provider based on actual distance, vehicle type, loading requirements, and location.
+    Such charges shall be paid directly by the Buyer to the logistics provider.
+    AgriAI shall not be responsible for determining or negotiating delivery pricing.
+  </p>
+
+  <p><strong>6.4 Transfer of Risk</strong></p>
+  <p>
+    Risk and responsibility for the produce shall remain with the logistics provider during transit.
+    Risk shall transfer to the Buyer only upon successful delivery and signed Proof of Delivery (POD).
+  </p>
+
+  <p><strong>6.5 Delay, Damage & Loss</strong></p>
+  <p>
+    Any delay, damage, shortage, or loss occurring during transit shall be governed by the logistics provider’s terms and conditions.
+    AgriAI shall not be liable for any such claims.
+  </p>
+
+  <p><strong>6.6 Proof of Delivery</strong></p>
+  <p>
+    Delivery shall be confirmed through physical receipt, digital confirmation, and/or electronic POD recorded on the AgriAI platform.
+    Digital records maintained by AgriAI shall constitute valid evidence of delivery.
+  </p>
+  </section>
+
+  <section class="section">
+    <h2>7. QUALITY STANDARDS, INSPECTION & ACCEPTANCE</h2>
+
+  <p>
+    The produce supplied shall meet the mutually agreed specifications mentioned in this Agreement.
+  </p>
+
+  <p>
+    The Buyer shall complete quality inspection within 3 (three) working days from the date of delivery.
+  </p>
+
+  <p>
+    Any rejection must be raised in writing through the AgriAI platform within the inspection period,
+    clearly stating valid and verifiable reasons.
+  </p>
+
+  <p>
+    If no dispute is raised within 3 working days, the produce shall be deemed accepted.
+  </p>
+
+  <p>
+    In case of justified rejection, return transportation costs shall be borne by the Buyer unless the defect is proven to have originated prior to dispatch.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>8. RISK, LIABILITY & INSURANCE</h2>
+
+  <p>
+    The Farmer shall follow standard agricultural and post-harvest practices.
+  </p>
+
+  <p>
+    In case of crop loss due to natural calamities or force majeure before dispatch, obligations may be reviewed mutually.
+    Crop insurance, if applicable under government schemes such as PMFBY or other approved insurers, shall remain in the Farmer’s name.
+  </p>
+
+  <p>
+    Any insurance compensation received shall belong solely to the Farmer.
+  </p>
+
+  <p>
+    After delivery and deemed acceptance, all risks, ownership, and liabilities shall transfer entirely to the Buyer.
+  </p>
+</section>
+
+
+  <section class="section">
+    <h2>9. FORCE MAJEURE</h2>
+
+  <p>
+    Neither Party shall be liable for failure or delay caused by events beyond reasonable control,
+    including natural disasters, government restrictions, war, strikes, transportation disruptions, or unforeseen calamities.
+  </p>
+
+  <p>
+    Obligations shall resume once such conditions cease to exist.
+  </p>
+</section>
+
+  <h2>10. DISPUTE RESOLUTION & JURISDICTION</h2>
+
+  <p>
+    Any dispute arising out of this Agreement shall first be resolved amicably through discussion via the AgriAI platform.
+  </p>
+
+  <p>
+    If unresolved within 15 days, disputes shall be referred to arbitration under the Arbitration and Conciliation Act, 1996.
+    The seat of arbitration shall be determined by AgriAI.
+  </p>
+
+  <p>
+    Subject to arbitration, the courts of <strong>Bengaluru, Karnataka</strong> shall have exclusive jurisdiction
+  for enforcement and legal proceedings arising under this Agreement.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>11. TERMINATION</h2>
+
+  <p>
+    Either Party may terminate this Agreement for material breach, including non-payment, non-delivery,
+    misrepresentation, or violation of agreed terms.
+  </p>
+
+  <p>
+    In case of payment default beyond agreed timelines, the defaulting Party may face account suspension,
+    penalty charges, and recovery proceedings as permitted under law.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>12. LANGUAGE OF AGREEMENT</h2>
+
+  <p>
+    This Agreement has been explained and translated to the Farmer in ${siteLang === 'en' ? 'English' : (siteLang === 'hi' ? 'हिंदी' : (siteLang === 'kn' ? 'ಕನ್ನಡ' : 'English'))} (Language).
+    In case of any inconsistency, the English version shall prevail.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>13. EXECUTION & DIGITAL ACCEPTANCE</h2>
+
+  <p>
+    This Agreement may be executed electronically through the AgriAI platform.
+    Digital acceptance using registered credentials shall constitute legally binding consent.
+  </p>
+
+  <p>Buyer / Authorized Representative</p>
+  <p>Signature: ___________________________</p>
+  <p>Date: ___________________________</p>
+
+  <p>Farmer / Producer</p>
+  <p>Signature: ___________________________</p>
+  <p>Date: ___________________________</p>
+
+  <p>Witness 1: ___________________________</p>
+  <p>Witness 2: ___________________________</p>
+</section>
+
+</body>
+</html>`;
+
+  // show an in-app preview modal instead of opening a new tab
+      setContractHtml(html);
+      
+      // Store contract metadata for later use when saving to database
+      // Calculate duration in days
+      const startDateObj = new Date(startDate.split('/').reverse().join('-'));
+      const endDateObj = new Date(endDate.split('/').reverse().join('-'));
+      const durationDays = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24));
+      
+      const contractMetadata = {
+        contract_number: `CNT${Date.now()}`,
+        farmer_id: farmerId || '',
+        farmer_name: farmerName,
+        farmer_address: farmerAddress,
+        farmer_state: farmerState,
+        buyer_id: buyerId || '',
+        buyer_name: buyerName,
+        buyer_address: buyerAddress,
+        buyer_state: buyerState,
+        crops: items.map(it => ({
+          id: it.id,
+          buyer_id: it.buyer_id,
+          crop_name: it.crop_name,
+          variety: it.variety || '',
+          quantity: Number(it.order_quantity || 0),
+          price_per_kg: Number(it.price_per_kg || 0),
+          amount: Number(it.order_quantity || 0) * Number(it.price_per_kg || 0)
+        })),
+        contract_nature: contractNature,
+        contract_duration: contractDuration,
+        start_date: startDate,
+        end_date: endDate,
+        duration: durationDays,
+        farmer_platform_fee: totalPlatformFee,
+        farmer_gst: totalGst,
+        buyer_platform_fee: buyerPlatformFee,
+        buyer_gst: buyerGst,
+        delivery_cost: deliveryRateDisplay ? parseFloat(deliveryRateDisplay.replace(/[^\d.]/g, '')) || 0 : 0
+      };
+      setContractMetadata(contractMetadata);
+      setShowContractPreview(true);
+    } catch (e) {
+      console.error('Failed to generate contract', e);
+      alert(t('contractGenerateFailed', siteLang) || 'Failed to generate contract. See console for details.');
+    }
+  };
+
+  const handleSendContract = () => {
+    // Validate that every item has a positive order quantity and a positive price before generating contract
+    const missingQty = items.some(it => !(Number(it.order_quantity) > 0));
+    if (missingQty) {
+      alert(t('editEnterOrderQty', siteLang));
+      return;
+    }
+    const missingPrice = items.some(it => !(Number(it.price_per_kg) > 0));
+    if (missingPrice) {
+      alert(t('priceMustBeGreaterThanZero', siteLang));
+      return;
+    }
+    // show preview and let user confirm before actually sending/clearing cart
+    generateContract();
+  };
+
+  const downloadContract = () => {
+    try {
+      const blob = new Blob([contractHtml], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'procurement-contract.html';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Download failed', e);
+      alert(t('downloadFailed', siteLang) || 'Download failed. See console for details.');
+    }
+  };
+
+  const printContract = () => {
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(contractHtml);
+      doc.close();
+      iframe.contentWindow.focus();
+      // give time for render
+      setTimeout(() => {
+        try { iframe.contentWindow.print(); } catch (err) { console.warn('Print failed', err); }
+        // remove iframe after a short delay
+        setTimeout(() => { try { document.body.removeChild(iframe); } catch (e) {} }, 500);
+      }, 250);
+    } catch (e) {
+      console.error('Print failed', e);
+      alert(t('printFailed', siteLang) || 'Print failed. See console for details.');
+    }
+  };
 
   return (
     <div style={{ background: '#53b635', minHeight: '85vh' }}>
@@ -1097,7 +1795,7 @@ const FarmerCart = () => {
                             {editingId === it.id ? (
                               <>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                                         <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{t('formQuantityLabel', siteLang)}</label>
                                         <input type="number" step="0.001" value={editVal} onChange={e => setEditVal(e.target.value)} style={{ width: 120, padding: 6 }} />
                                       </div>
@@ -1110,7 +1808,7 @@ const FarmerCart = () => {
                                     <button onClick={cancelEdit} style={{ padding: '6px 8px', background: '#ddd', border: 'none', borderRadius: 6, marginLeft: 6 }}>{t('cancelButton', siteLang)}</button>
                               </>
                             ) : (
-                                <>
+                              <>
                                 <button onClick={() => startEdit(it)} style={{ padding: '6px 8px', background: '#1976d2', color: '#fff', border: 'none', borderRadius: 6 }}>{t('editButton', siteLang)}</button>
                                 <button onClick={() => removeItem(it.id)} style={{ background: '#fff', border: '1px solid #d32f2f', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>{t('deleteButton', siteLang)}</button>
                               </>
@@ -1128,25 +1826,36 @@ const FarmerCart = () => {
                   <div style={{ fontWeight: 800, color: '#236902', marginBottom: 8 }}>{t('orderSummary', siteLang)}</div>
                   <div style={{ display: 'grid', gap: 6, fontWeight: 700 }}>
                     <div>{t('totalItemsLabel', siteLang)} {items.length}</div>
-                    <div>{t('totalAvailableLabel', siteLang)} {Number(totalAvailableQty).toLocaleString('en-IN')} {t('kg', siteLang)}</div>
+                    
                     <div>{t('totalOrderedLabel', siteLang)} {Number(totalOrderedQty).toLocaleString('en-IN')} {t('kg', siteLang)}</div>
                     <div>{t('subTotalLabel', siteLang)} {formatCurrency(totals.subtotal)}</div>
-                    <div>{t('platformFeeTotalLabel', siteLang)} {formatCurrency(totals.commission)}</div>
-                    <div>{t('gstTotalLabel', siteLang)} {formatCurrency(totals.gst)}</div>
+                    <div>{t('platformFeeLabel', siteLang)} {formatCurrency(totals.commission)}</div>
+
+                    <div>{t('gstLabel', siteLang)} {formatCurrency(totals.gst)}</div>
                     <div style={{ fontSize: 18, color: '#236902', marginTop: 6 }}>{t('grandTotalLabel', siteLang)}: {formatCurrency(grandTotal)}</div>
                   </div>
-                  
+
                   <div style={{ marginTop: 12 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 6 }}>{t('contractTypeLabel', siteLang)}</div>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>{t('contractNatureLabel', siteLang)}</div>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractNature" value="pre-harvest" checked={contractNature === 'pre-harvest'} onChange={() => setContractNature('pre-harvest')} /> {t('preHarvestContract', siteLang)}
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractNature" value="post-harvest" checked={contractNature === 'post-harvest'} onChange={() => setContractNature('post-harvest')} /> {t('postHarvestContract', siteLang)}
+                      </label>
+                    </div>
+
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>{t('contractDurationLabel', siteLang)}</div>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <input type="radio" name="contractType" value="one-time" checked={contractType === 'one-time'} onChange={() => setContractType('one-time')} /> {t('contractOneTime', siteLang)}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractDuration" value="one-time" checked={contractDuration === 'one-time'} onChange={() => setContractDuration('one-time')} /> {t('contractOneTime', siteLang)}
                       </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <input type="radio" name="contractType" value="seasonal" checked={contractType === 'seasonal'} onChange={() => setContractType('seasonal')} /> {t('contractSeasonal', siteLang)}
+                        <input type="radio" name="contractDuration" value="seasonal" checked={contractDuration === 'seasonal'} onChange={() => setContractDuration('seasonal')} /> {t('contractSeasonal', siteLang)}
                       </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <input type="radio" name="contractType" value="yearly" checked={contractType === 'yearly'} onChange={() => setContractType('yearly')} /> {t('contractYearly', siteLang)}
+                        <input type="radio" name="contractDuration" value="yearly" checked={contractDuration === 'yearly'} onChange={() => setContractDuration('yearly')} /> {t('contractYearly', siteLang)}
                       </label>
                     </div>
                   </div>
@@ -1163,65 +1872,17 @@ const FarmerCart = () => {
       {showContractPreview && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ width: '94%', maxWidth: 960, maxHeight: '92%', background: '#fff', padding: 16, overflow: 'auto', borderRadius: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30, marginTop: 10, position: 'relative' }}>
-              <div style={{ fontWeight: 800, position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>{t('contractPreview', siteLang)}</div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'absolute', right: 0, top: '58%', transform: 'translateY(-50%)', paddingTop: 6 }}>
-                  <select value={contractLang} onChange={(e) => { const v = e.target.value; setContractLang(v); }} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', fontWeight: 700, color: '#000' }} aria-label="Select language for contract">
-                    <option value="en">English</option>
-                    <option value="hi">Hindi</option>
-                    <option value="kn">Kannada</option>
-                    <option value="ta">Tamil</option>
-                    <option value="te">Telugu</option>
-                    <option value="mr">Marathi</option>
-                    <option value="bn">Bengali</option>
-                    <option value="or">Odia</option>
-                  </select>
-                  <button onClick={downloadContract} style={{ padding: '6px 10px' }}>{t('download', siteLang) || 'Download'}</button>
-                  <button onClick={printContract} style={{ padding: '6px 10px' }}>{t('print', siteLang) || 'Print'}</button>
-                  <button onClick={() => setShowContractPreview(false)} style={{ padding: '6px 10px' }}>{t('close', siteLang) || 'Close'}</button>
-                </div>
+            <div style={{ position: 'relative', marginBottom: 8, minHeight: 40 }}>
+              <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', fontWeight: 800 }}>{t('contractPreview', siteLang)}</div>
+              <div style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button onClick={downloadContract} style={{ padding: '6px 10px' }}>{t('download', siteLang) || 'Download'}</button>
+                <button onClick={printContract} style={{ padding: '6px 10px' }}>{t('print', siteLang) || 'Print'}</button>
+                <button onClick={() => setShowContractPreview(false)} style={{ padding: '6px 10px' }}>{t('close', siteLang) || 'Close'}</button>
               </div>
-            <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: contractHtml }} />
-            {showDeliveryInfoModal && (
-              <div style={{ position: 'fixed', left: 0, top: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
-                <div style={{ width: '92%', maxWidth: 760, background: '#fff', borderRadius: 8, padding: 18, boxShadow: '0 12px 40px rgba(0,0,0,0.25)', overflow: 'auto' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12 }}>
-                    <div style={{ flex: 1 }}>
-                      <h3 style={{ margin: '0 0 8px 0', color: '#236902' }}>Delivery & Logistics Charges</h3>
-                      <div style={{ fontSize: 14, color: '#111', lineHeight: 1.5 }}>
-                        <div style={{ overflow: 'auto' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, fontSize: 14, textAlign: 'center' }}>
-                            <thead>
-                              <tr>
-                                <th style={{ border: '1px solid #ddd', padding: 8, background: '#f7f7f7', textAlign: 'center' }}>Vehicle Type</th>
-                                <th style={{ border: '1px solid #ddd', padding: 8, background: '#f7f7f7', textAlign: 'center' }}>Typical Distance Range (km)</th>
-                                <th style={{ border: '1px solid #ddd', padding: 8, background: '#f7f7f7', textAlign: 'center' }}>Vehicle Capacity</th>
-                                <th style={{ border: '1px solid #ddd', padding: 8, background: '#f7f7f7', textAlign: 'center' }}>FIXED Cost per km (₹)</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr><td style={{ border: '1px solid #ddd', padding: 8 }}>Bike Courier</td><td style={{ border: '1px solid #ddd', padding: 8 }}>0 – 20 km</td><td style={{ border: '1px solid #ddd', padding: 8 }}>Up to 40 kg</td><td style={{ border: '1px solid #ddd', padding: 8 }}><strong>₹12 / km</strong></td></tr>
-                              <tr><td style={{ border: '1px solid #ddd', padding: 8 }}>3-Wheeler Cargo (Auto / Ape)</td><td style={{ border: '1px solid #ddd', padding: 8 }}>0 – 80 km</td><td style={{ border: '1px solid #ddd', padding: 8 }}>0 – 400 kg</td><td style={{ border: '1px solid #ddd', padding: 8 }}><strong>₹18 / km</strong></td></tr>
-                              <tr><td style={{ border: '1px solid #ddd', padding: 8 }}>Mini Truck (Tata Ace / Pickup)</td><td style={{ border: '1px solid #ddd', padding: 8 }}>0 – 100 km</td><td style={{ border: '1px solid #ddd', padding: 8 }}>40 – 1500 kg</td><td style={{ border: '1px solid #ddd', padding: 8 }}><strong>₹22 / km</strong></td></tr>
-                              <tr><td style={{ border: '1px solid #ddd', padding: 8 }}>LCV / Small Truck</td><td style={{ border: '1px solid #ddd', padding: 8 }}>50 – 250 km</td><td style={{ border: '1px solid #ddd', padding: 8 }}>1000 – 5 tons</td><td style={{ border: '1px solid #ddd', padding: 8 }}><strong>₹28 / km</strong></td></tr>
-                              <tr><td style={{ border: '1px solid #ddd', padding: 8 }}>6-Wheeler Truck</td><td style={{ border: '1px solid #ddd', padding: 8 }}>100 – 400 km</td><td style={{ border: '1px solid #ddd', padding: 8 }}>1000 – 10 tons</td><td style={{ border: '1px solid #ddd', padding: 8 }}><strong>₹35 / km</strong></td></tr>
-                              <tr><td style={{ border: '1px solid #ddd', padding: 8 }}>10-Wheeler Truck</td><td style={{ border: '1px solid #ddd', padding: 8 }}>200 – 1000 km</td><td style={{ border: '1px solid #ddd', padding: 8 }}>10 – 20 tons</td><td style={{ border: '1px solid #ddd', padding: 8 }}><strong>₹45 / km</strong></td></tr>
-                              <tr><td style={{ border: '1px solid #ddd', padding: 8 }}>Multi-Axle / Heavy Truck</td><td style={{ border: '1px solid #ddd', padding: 8 }}>300 – 1500 km</td><td style={{ border: '1px solid #ddd', padding: 8 }}>20 – 40 tons</td><td style={{ border: '1px solid #ddd', padding: 8 }}><strong>₹60 / km</strong></td></tr>
-                              <tr><td style={{ border: '1px solid #ddd', padding: 8 }}>Refrigerated Truck (Addon)</td><td style={{ border: '1px solid #ddd', padding: 8 }}>50 – 2000 km</td><td style={{ border: '1px solid #ddd', padding: 8 }}>Any</td><td style={{ border: '1px solid #ddd', padding: 8 }}><strong>+ ₹12 / km</strong></td></tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ flex: '0 0 auto', marginTop: 12 }}>
-                      <button onClick={() => setShowDeliveryInfoModal(false)} style={{ background: '#236902', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 10px', cursor: 'pointer', display: 'inline-block' }}>Close</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
+              <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: contractHtml }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button onClick={() => { setShowContractPreview(false); handleBuyNow(); }} style={{ padding: '8px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>{t('confirmAndSend', siteLang) || 'Confirm & Send'}</button>
+              <button onClick={() => { setPaymentMethod('contract'); setShowContractPreview(false); handleBuyNow(); }} style={{ padding: '8px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>{t('confirmAndSend', siteLang) || 'Confirm & Send'}</button>
               <button onClick={() => setShowContractPreview(false)} style={{ padding: '8px 12px', background: '#ddd', border: 'none', borderRadius: 6 }}>{t('cancelButton', siteLang)}</button>
             </div>
           </div>
@@ -1232,3 +1893,5 @@ const FarmerCart = () => {
 };
 
 export default FarmerCart;
+            
+      

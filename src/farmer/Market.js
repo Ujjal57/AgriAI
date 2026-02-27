@@ -16,7 +16,7 @@ export default function Market(){
                 <option>Food Crops</option>
                 <option>Fruits and Vegetables</option>
                 <option>Masalas</option>
-              </select>
+              </select>   
             </div>
           </div>
           <div style={{marginTop:12, display:'grid', gridTemplateColumns:'repeat(4, minmax(220px,1fr))', gap:12}}>

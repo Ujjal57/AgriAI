@@ -125,6 +125,7 @@ CREATE TABLE `deals` (
   `region` VARCHAR(50) DEFAULT NULL,
   `state` VARCHAR(100) DEFAULT NULL,
   `category` VARCHAR(100) DEFAULT NULL,          -- New column for crop category
+  `crop_id` BIGINT UNSIGNED DEFAULT NULL,
   `crop_name` VARCHAR(255) NOT NULL,
   `variety` VARCHAR(100) DEFAULT NULL,           -- New column for crop variety
   `quantity_kg` DECIMAL(12,3) NOT NULL DEFAULT 0.000,
@@ -134,14 +135,19 @@ CREATE TABLE `deals` (
   PRIMARY KEY (`id`),
   INDEX `idx_deals_buyer_id` (`buyer_id`),
   INDEX `idx_deals_buyer_phone` (`buyer_phone`),
+  INDEX `idx_deals_crop_id` (`crop_id`),
   INDEX `idx_deals_crop` (`crop_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Example insert into deals (for testing)
 INSERT INTO `deals` 
-(`buyer_id`, `buyer_name`, `buyer_phone`, `region`, `state`, `category`, `crop_name`, `variety`, `quantity_kg`, `image_path`) 
+(`buyer_id`, `buyer_name`, `buyer_phone`, `region`, `state`, `category`, `crop_id`, `crop_name`, `variety`, `quantity_kg`, `image_path`, `delivery_date`) 
 VALUES
-(NULL, 'Sample Buyer', '9111111111', 'North', 'Punjab', 'Food Crops', 'Wheat', 'Sharbati', 5.000, NULL);
+(NULL, 'Sample Buyer', '9111111111', 'North', 'Punjab', 'Food Crops', 1, 'Wheat', 'Sharbati', 5.000, NULL, '2026-03-15');
+
+-- Migration: Add crop_id column to deals table if missing (MySQL 8+)
+ALTER TABLE `deals` ADD COLUMN IF NOT EXISTS `crop_id` BIGINT UNSIGNED DEFAULT NULL;
+ALTER TABLE `deals` ADD INDEX IF NOT EXISTS `idx_deals_crop_id` (`crop_id`);
 
 -- ========== Purchase Notifications ==========
 -- Stores notifications created when a buyer purchases from a farmer. Farmers will see these in the app.
@@ -169,49 +175,40 @@ ALTER TABLE `purchase_notifications` ADD COLUMN IF NOT EXISTS `variety` VARCHAR(
 
 -- ========== Contracts table for buyer-side records (contract_b) ==========
 -- Stores summary contract records including farmer and buyer contact/region info
-DROP TABLE IF EXISTS `contract_b`;
-CREATE TABLE `contract_b` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `farmer_id` BIGINT UNSIGNED DEFAULT NULL,
-  `farmer_name` VARCHAR(255) DEFAULT NULL,
-  `farmer_state` VARCHAR(100) DEFAULT NULL,
-  `farmer_region` VARCHAR(50) DEFAULT NULL,
-  `farmer_email` VARCHAR(255) DEFAULT NULL,
-  `contract_number` VARCHAR(64) DEFAULT NULL,
-  `contract_datetime` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `buyer_id` BIGINT UNSIGNED DEFAULT NULL,
-  `buyer_name` VARCHAR(255) DEFAULT NULL,
-  `buyer_state` VARCHAR(100) DEFAULT NULL,
-  `buyer_region` VARCHAR(50) DEFAULT NULL,
-  `buyer_email` VARCHAR(255) DEFAULT NULL,
-  `total_quantity` DECIMAL(12,3) DEFAULT NULL,
-  `total_amount` DECIMAL(12,2) DEFAULT NULL,
-  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  INDEX `idx_contract_farmer` (`farmer_id`),
-  INDEX `idx_contract_buyer` (`buyer_id`),
-  INDEX `idx_contract_farmer_email` (`farmer_email`),
-  INDEX `idx_contract_buyer_email` (`buyer_email`)
+DROP TABLE IF EXISTS `contracts`;
+CREATE TABLE IF NOT EXISTS contracts (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  contract_number VARCHAR(100) NOT NULL,
+  farmer_id BIGINT UNSIGNED DEFAULT NULL,
+  farmer_name VARCHAR(255) DEFAULT NULL,
+  farmer_address VARCHAR(500) DEFAULT NULL,
+  farmer_state VARCHAR(100) DEFAULT NULL,
+  buyer_id BIGINT UNSIGNED DEFAULT NULL,
+  buyer_name VARCHAR(255) DEFAULT NULL,
+  buyer_address VARCHAR(500) DEFAULT NULL,
+  buyer_state VARCHAR(100) DEFAULT NULL,
+  crop_name VARCHAR(255) NOT NULL,
+  variety VARCHAR(255) DEFAULT NULL,
+  quantity_kg DECIMAL(12,3) NOT NULL,
+  price_per_kg DECIMAL(12,3) NOT NULL,
+  amount DECIMAL(12,2) DEFAULT NULL,
+  contract_nature VARCHAR(100) DEFAULT 'post-harvest',
+  contract_duration VARCHAR(100) DEFAULT 'one-time',
+  start_date DATE DEFAULT NULL,
+  end_date DATE DEFAULT NULL,
+  duration INT DEFAULT 0,
+  farmer_platform_fee DECIMAL(12,2) DEFAULT 0,
+  farmer_gst DECIMAL(12,2) DEFAULT 0,
+  buyer_platform_fee DECIMAL(12,2) DEFAULT 0,
+  buyer_gst DECIMAL(12,2) DEFAULT 0,
+  delivery_cost VARCHAR(255) DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_farmer_id (farmer_id),
+  INDEX idx_buyer_id (buyer_id),
+  INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Idempotent alters for `contract_b` (MySQL 8+)
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_id` BIGINT UNSIGNED DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_name` VARCHAR(255) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_state` VARCHAR(100) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_region` VARCHAR(50) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `farmer_email` VARCHAR(255) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `contract_number` VARCHAR(64) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `contract_datetime` DATETIME DEFAULT CURRENT_TIMESTAMP;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_id` BIGINT UNSIGNED DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_name` VARCHAR(255) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_state` VARCHAR(100) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_region` VARCHAR(50) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `buyer_email` VARCHAR(255) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `total_quantity` DECIMAL(12,3) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `total_amount` DECIMAL(12,2) DEFAULT NULL;
-ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
-ALTER TABLE `contract_b` ADD INDEX IF NOT EXISTS `idx_contract_farmer` (`farmer_id`);
-ALTER TABLE `contract_b` ADD INDEX IF NOT EXISTS `idx_contract_buyer` (`buyer_id`);
 
 -- ========== Cart table ==========
 -- Stores cart items added by signed-in users. Each row represents a single item
@@ -233,6 +230,7 @@ CREATE TABLE `cart` (
   `category` VARCHAR(100) DEFAULT NULL,
   `total_quantity` DECIMAL(12,3) DEFAULT 0.000,
   `total_price` DECIMAL(12,2) DEFAULT 0.00,
+  `delivery_date` DATE DEFAULT NULL,
   `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX `idx_cart_user` (`user_type`, `user_id`, `user_phone`),
@@ -252,6 +250,7 @@ ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `image_path` VARCHAR(255) DEFAULT NU
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `category` VARCHAR(100) DEFAULT NULL;
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `total_quantity` DECIMAL(12,3) DEFAULT 0.000;
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `total_price` DECIMAL(12,2) DEFAULT 0.00;
+ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `delivery_date` DATE DEFAULT NULL;
 ALTER TABLE `cart` ADD COLUMN IF NOT EXISTS `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 -- Add an index on category for faster category-based aggregations and lookups
 ALTER TABLE `cart` ADD INDEX IF NOT EXISTS `idx_cart_category` (`category`);
@@ -279,6 +278,7 @@ CREATE TABLE `cart_b` (
   `image_path` VARCHAR(255) DEFAULT NULL,
   `total_quantity` DECIMAL(12,3) DEFAULT 0.000,
   `total_price` DECIMAL(12,2) DEFAULT 0.00,
+  `delivery_date` DATE DEFAULT NULL,
   `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX `idx_cart_b_user` (`user_type`, `user_id`, `user_phone`),
@@ -297,6 +297,7 @@ ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `price_per_kg` DECIMAL(12,3) DEFAU
 ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `image_path` VARCHAR(255) DEFAULT NULL;
 ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `total_quantity` DECIMAL(12,3) DEFAULT 0.000;
 ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `total_price` DECIMAL(12,2) DEFAULT 0.00;
+ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `delivery_date` DATE DEFAULT NULL;
 ALTER TABLE `cart_b` ADD COLUMN IF NOT EXISTS `added_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 -- ========== Buyer Orders table ==========

@@ -17,7 +17,7 @@ export default function FarmerHistory() {
       const localOrders = Array.isArray(hist) ? hist : [];
       setOrders(localOrders);
 
-      // Attempt to fetch authoritative contract rows from backend and merge contract_number/contract_datetime
+      // Attempt to fetch authoritative contract rows from backend and merge all details
       (async () => {
         try {
           const role = localStorage.getItem('agriai_role') || '';
@@ -32,36 +32,90 @@ export default function FarmerHistory() {
               const j = await resp.json().catch(() => null);
               if (j && j.ok && Array.isArray(j.contracts)) {
                 const contracts = j.contracts;
-                // Build map by timestamp (seconds) for heuristic matching
-                const contractMap = contracts.map(c => ({
-                  contract_number: c.contract_number,
-                  contract_datetime: c.contract_datetime,
-                  total_amount: c.total_amount
-                }));
-                // merge into localOrders by nearest datetime within 10 seconds
+                
+                // Build map indexed by contract_number for direct lookup
+                const contractByNumber = {};
+                contracts.forEach(c => {
+                  if (c.contract_number) {
+                    contractByNumber[c.contract_number] = c;
+                  }
+                });
+
+                // Merge contracts into localOrders by timestamp matching
                 const merged = localOrders.map(o => {
                   try {
                     const oTime = new Date(o.created_at).getTime();
                     let matched = null;
-                    for (let c of contractMap) {
-                      if (!c.contract_datetime) continue;
-                      const cTime = new Date(c.contract_datetime.replace(' ', 'T') + 'Z').getTime();
-                      if (isNaN(cTime) || isNaN(oTime)) continue;
-                      if (Math.abs(cTime - oTime) <= 10000) { matched = c; break; }
+                    
+                    // Try direct contract_number match first
+                    if (o.contract_number && contractByNumber[o.contract_number]) {
+                      matched = contractByNumber[o.contract_number];
                     }
+                    
+                    // If no direct match, try timestamp matching
+                    if (!matched) {
+                      for (let c of contracts) {
+                        if (!c.contract_datetime) continue;
+                        const cTime = new Date(c.contract_datetime.replace(' ', 'T') + 'Z').getTime();
+                        if (isNaN(cTime) || isNaN(oTime)) continue;
+                        if (Math.abs(cTime - oTime) <= 10000) { matched = c; break; }
+                      }
+                    }
+                    
                     if (matched) {
-                      return { ...o, contract_number: matched.contract_number, contract_datetime: matched.contract_datetime };
+                      // Merge all contract table fields into order
+                      return { 
+                        ...o, 
+                        contract_number: matched.contract_number,
+                        contract_datetime: matched.contract_datetime,
+                        farmer_state: matched.farmer_state || o.farmer_state,
+                        buyer_state: matched.buyer_state || o.buyer_state,
+                        buyer_name: matched.buyer_name || o.buyer_name,
+                        buyer_id: matched.buyer_id || o.buyer_id,
+                        farmer_name: matched.farmer_name || o.farmer_name,
+                        farmer_id: matched.farmer_id || o.farmer_id,
+                        total_amount: matched.total_amount || o.total_amount,
+                        quantity_kg: matched.quantity_kg || matched.total_quantity || o.quantity_kg,
+                        price_per_kg: matched.price_per_kg || o.price_per_kg,
+                        contract_nature: matched.contract_nature || o.contract_nature,
+                        contract_duration: matched.contract_duration || o.contract_duration,
+                        start_date: matched.start_date || o.start_date,
+                        end_date: matched.end_date || o.end_date,
+                        _db_contract: matched // Store full contract object for later use
+                      };
                     }
                   } catch (e) {}
                   return o;
                 });
 
-                // Add any contracts that didn't match local orders as standalone entries
+                // Add any contracts from DB that didn't match local orders
                 const unmatched = [];
-                for (let c of contractMap) {
+                for (let c of contracts) {
                   const exists = merged.some(m => (m.contract_number && m.contract_number === c.contract_number));
                   if (!exists) {
-                    unmatched.push({ invoice_id: c.contract_number || ('CTR-' + Date.now()), created_at: c.contract_datetime || new Date().toISOString(), payment_method: 'contract', items: [], totals: { subtotal: 0, gst: 0, platform_fee: 0, grand_total: c.total_amount || 0 }, contract_number: c.contract_number, contract_datetime: c.contract_datetime });
+                    unmatched.push({ 
+                      contract_number: c.contract_number,
+                      contract_datetime: c.contract_datetime,
+                      invoice_id: c.contract_number,
+                      created_at: c.contract_datetime || new Date().toISOString(), 
+                      payment_method: 'contract', 
+                      items: [], 
+                      totals: { subtotal: 0, gst: 0, platform_fee: 0, grand_total: c.total_amount || 0 },
+                      farmer_state: c.farmer_state,
+                      buyer_state: c.buyer_state,
+                      buyer_name: c.buyer_name,
+                      buyer_id: c.buyer_id,
+                      farmer_name: c.farmer_name,
+                      farmer_id: c.farmer_id,
+                      total_amount: c.total_amount,
+                      quantity_kg: c.quantity_kg || c.total_quantity,
+                      price_per_kg: c.price_per_kg,
+                      contract_nature: c.contract_nature,
+                      contract_duration: c.contract_duration,
+                      start_date: c.start_date,
+                      end_date: c.end_date,
+                      _db_contract: c
+                    });
                   }
                 }
 
@@ -159,24 +213,29 @@ export default function FarmerHistory() {
       return;
     }
 
-    // Build a full contract HTML similar to the contract generated in FarmerCart
-    let buyerName = order.buyerName || order.buyer_name || (order.buyer && order.buyer.name) || '[Buyer Name]';
-    const buyerId = order.buyerId || order.buyer_id || (order.buyer && order.buyer.id) || '';
-    let buyerState = order.buyerState || order.buyer_state || (order.buyer && order.buyer.state) || '';
-    let buyerRegion = order.buyerRegion || order.buyer_region || (order.buyer && order.buyer.region) || '';
-    let farmerName = order.farmerName || order.farmer_name || (order.farmer && order.farmer.name) || (localStorage.getItem('agriai_name') || '');
-    let farmerId = order.farmerId || order.farmer_id || (order.farmer && order.farmer.id) || (localStorage.getItem('agriai_id') || '');
-    let farmerState = order.farmerState || order.farmer_state || (order.farmer && order.farmer.state) || (localStorage.getItem('agriai_state') || '');
-    let farmerRegion = order.farmerRegion || order.farmer_region || (order.farmer && order.farmer.region) || (localStorage.getItem('agriai_region') || '');
-    const contractNum = order.contract_number || order.invoice_id || ('CTR-' + (Date.now()));
-    const date = formatDateTime(order.contract_datetime || order.created_at || new Date().toISOString());
-    // prefer stored contract_meta values (saved at Confirm & Send)
-    const cm = order.contract_meta || order.contractMeta || order.contract_meta || {};
-    const contractType = order.contract_type || order.contractType || cm.contract_type || cm.contractType || 'one-time';
+    // Use database contract details if available, otherwise fall back to order data
+    const dbContract = order._db_contract || {};
+
+    // Build a full contract HTML using database contract as primary source
+    let buyerName = dbContract.buyer_name || order.buyerName || order.buyer_name || (order.buyer && order.buyer.name) || '[Buyer Name]';
+    const buyerId = dbContract.buyer_id || order.buyerId || order.buyer_id || (order.buyer && order.buyer.id) || '';
+    let buyerState = dbContract.buyer_state || order.buyerState || order.buyer_state || (order.buyer && order.buyer.state) || '';
+    let buyerRegion = dbContract.buyer_region || order.buyerRegion || order.buyer_region || (order.buyer && order.buyer.region) || '';
+    let farmerName = dbContract.farmer_name || order.farmerName || order.farmer_name || (order.farmer && order.farmer.name) || (localStorage.getItem('agriai_name') || '');
+    let farmerId = dbContract.farmer_id || order.farmerId || order.farmer_id || (order.farmer && order.farmer.id) || (localStorage.getItem('agriai_id') || '');
+    let farmerState = dbContract.farmer_state || order.farmerState || order.farmer_state || (order.farmer && order.farmer.state) || (localStorage.getItem('agriai_state') || '');
+    let farmerRegion = dbContract.farmer_region || order.farmerRegion || order.farmer_region || (order.farmer && order.farmer.region) || (localStorage.getItem('agriai_region') || '');
+    const contractNum = dbContract.contract_number || order.contract_number || order.invoice_id || ('CTR-' + (Date.now()));
+    const date = formatDateTime(dbContract.contract_datetime || order.contract_datetime || order.created_at || new Date().toISOString());
+    // prefer stored contract_meta values (saved at Confirm & Send), then database values
+    const cm = order.contract_meta || order.contractMeta || {};
+    const contractType = dbContract.contract_type || order.contract_type || order.contractType || cm.contract_type || cm.contractType || 'one-time';
+    const contractNature = dbContract.contract_nature || order.contract_nature || order.contractNature || cm.contract_nature || cm.contractNature || 'post-harvest';
+    const contractDuration = dbContract.contract_duration || order.contract_duration || order.contractDuration || cm.contract_duration || cm.contractDuration || 'one-time';
     const contractLang = order.contract_language || order.contractLanguage || cm.lang || (localStorage.getItem('agri_lang') || 'en');
-    const startDate = (cm.start_date || cm.startDate) || (order.start_date || order.startDate) || (new Date().toLocaleDateString('en-GB'));
-    // compute endDate: prefer ISO if available, else use stored strings, else derive from start + duration
-    let endDate = (cm.end_date || cm.endDate) || (order.end_date || order.endDate) || '';
+    const startDate = dbContract.start_date || (cm.start_date || cm.startDate) || (order.start_date || order.startDate) || (new Date().toLocaleDateString('en-GB'));
+    // compute endDate: prefer database, then ISO if available, else use stored strings, else derive from start + duration
+    let endDate = dbContract.end_date || (cm.end_date || cm.endDate) || (order.end_date || order.endDate) || '';
     try {
       const endIso = cm.end_date_iso || cm.endDateIso || order.contract_meta && (order.contract_meta.end_date_iso || order.contract_meta.endDateIso) || null;
       const startIso = cm.start_date_iso || cm.startDateIso || order.contract_meta && (order.contract_meta.start_date_iso || order.contract_meta.startDateIso) || null;
@@ -230,47 +289,96 @@ export default function FarmerHistory() {
     }
     const totals = order.totals || { subtotal: 0, gst: 0, platform_fee: 0, grand_total: 0 };
     const logoSrc = window.location.origin + logo;
-
-    // Try to fetch authoritative contract details from backend by contract_number
-    try {
-      const apiBase = (window.__AGRIAI_API_BASE__ || '');
-      let url = apiBase ? `${apiBase}/farmer/contracts?contract_number=${encodeURIComponent(contractNum)}` : `/farmer/contracts?contract_number=${encodeURIComponent(contractNum)}`;
-      let resp = await fetch(url);
-      if ((!resp || !resp.ok)) {
-        // fallback: request contracts for this farmer and match locally
-        const fid = localStorage.getItem('agriai_id') || localStorage.getItem('agriai_email') || '';
-        if (fid) {
-          const q = apiBase ? `${apiBase}/farmer/contracts?farmer_id=${encodeURIComponent(localStorage.getItem('agriai_id') || '')}` : `/farmer/contracts?farmer_id=${encodeURIComponent(localStorage.getItem('agriai_id') || '')}`;
-          resp = await fetch(q);
+    // Try multiple strategies to get authoritative contract details from backend
+    let fetched = dbContract || null;
+    const apiBase = (window.__AGRIAI_API_BASE__ || '');
+    const tryFetchContract = async (cn) => {
+      if (!cn) return null;
+      try {
+        const url = apiBase ? `${apiBase}/contracts/get/${encodeURIComponent(cn)}` : `/contracts/get/${encodeURIComponent(cn)}`;
+        const r = await fetch(url);
+        if (r && r.ok) {
+          const jj = await r.json().catch(() => null);
+          if (jj && jj.contract) return jj.contract;
         }
-      }
-      if (resp && resp.ok) {
-        const j = await resp.json().catch(() => null);
-        let fetched = null;
-        if (j) {
-          if (Array.isArray(j.contracts) && j.contracts.length) {
-            fetched = j.contracts.find(c => (c.contract_number && String(c.contract_number) === String(contractNum))) || j.contracts[0];
-          } else if (j.contract) {
-            fetched = j.contract;
+      } catch (e) {}
+      return null;
+    };
+
+    try {
+      // 1) Try by contract number (primary)
+      fetched = fetched && Object.keys(fetched).length ? fetched : await tryFetchContract(contractNum);
+
+      // 2) Try by invoice_id (some local orders use ORD... ids)
+      if (!fetched && order.invoice_id) fetched = await tryFetchContract(order.invoice_id);
+
+      // 3) Fallback: fetch farmer contracts and attempt matching
+      if (!fetched) {
+        const fid = localStorage.getItem('agriai_id') || '';
+        if (fid) {
+          const q = apiBase ? `${apiBase}/farmer/contracts?farmer_id=${encodeURIComponent(fid)}` : `/farmer/contracts?farmer_id=${encodeURIComponent(fid)}`;
+          const resp = await fetch(q);
+          if (resp && resp.ok) {
+            const j = await resp.json().catch(() => null);
+            if (j && Array.isArray(j.contracts) && j.contracts.length) {
+              // prefer exact contract_number match
+              fetched = j.contracts.find(c => (c.contract_number && String(c.contract_number) === String(contractNum)))
+                || j.contracts.find(c => (c.contract_number && String(c.contract_number) === String(order.invoice_id)));
+
+              // try timestamp proximity
+              if (!fetched) {
+                const oTime =   new Date(order.contract_datetime || order.created_at || '').getTime();
+                fetched = j.contracts.find(c => {
+                  try {
+                    const cTime = new Date((c.contract_datetime || '').replace(' ', 'T') + 'Z').getTime();
+                    if (isNaN(oTime) || isNaN(cTime)) return false;
+                    return Math.abs(cTime - oTime) <= 10000;
+                  } catch (e) { return false; }
+                });
+              }
+
+              if (!fetched) fetched = j.contracts[0];
+            }
           }
         }
-        if (fetched) {
-          // if server stored a saved html/pdf url, open directly
-          const remoteUrl = fetched.contract_pdf_url || fetched.contract_html_url || fetched.contract_pdf || null;
-          if (remoteUrl) { window.open(remoteUrl.startsWith('http') ? remoteUrl : (window.location.origin + remoteUrl), '_blank'); return; }
+      }
 
-          // merge authoritative fields
-          buyerName = fetched.buyer_name || fetched.buyerName || buyerName;
-          if (fetched.buyer_state) buyerState = fetched.buyer_state;
-          if (fetched.buyer_region) buyerRegion = fetched.buyer_region;
-          farmerName = fetched.farmer_name || fetched.farmerName || farmerName;
-          farmerId = fetched.farmer_id || fetched.farmerId || farmerId;
-          farmerState = fetched.farmer_state || fetched.farmerState || farmerState;
-          farmerRegion = fetched.farmer_region || fetched.farmerRegion || farmerRegion;
+      if (fetched && Object.keys(fetched).length) {
+        // if server stored a saved html/pdf url, open directly
+        const remoteUrl = fetched.contract_pdf_url || fetched.contract_html_url || fetched.contract_pdf || null;
+        if (remoteUrl) { window.open(remoteUrl.startsWith('http') ? remoteUrl : (window.location.origin + remoteUrl), '_blank'); return; }
+
+        // merge authoritative fields and attach DB contract to order
+        buyerName = fetched.buyer_name || fetched.buyerName || buyerName;
+        if (fetched.buyer_state) buyerState = fetched.buyer_state;
+        if (fetched.buyer_region) buyerRegion = fetched.buyer_region;
+        farmerName = fetched.farmer_name || fetched.farmerName || farmerName;
+        farmerId = fetched.farmer_id || fetched.farmerId || farmerId;
+        farmerState = fetched.farmer_state || fetched.farmerState || farmerState;
+        farmerRegion = fetched.farmer_region || fetched.farmerRegion || farmerRegion;
+        if (fetched.contract_number) {
+          order.contract_number = fetched.contract_number;
+          order.invoice_id = order.invoice_id || fetched.contract_number;
+          order._db_contract = fetched;
         }
       }
     } catch (e) {
       console.warn('Failed to fetch contract from server', e);
+    }
+    
+    if (fetched && Object.keys(fetched).length > 0) {
+      // if server stored a saved html/pdf url, open directly
+      const remoteUrl = fetched.contract_pdf_url || fetched.contract_html_url || fetched.contract_pdf || null;
+      if (remoteUrl) { window.open(remoteUrl.startsWith('http') ? remoteUrl : (window.location.origin + remoteUrl), '_blank'); return; }
+
+      // merge authoritative fields from database contract
+      buyerName = fetched.buyer_name || fetched.buyerName || buyerName;
+      if (fetched.buyer_state) buyerState = fetched.buyer_state;
+      if (fetched.buyer_region) buyerRegion = fetched.buyer_region;
+      farmerName = fetched.farmer_name || fetched.farmerName || farmerName;
+      farmerId = fetched.farmer_id || fetched.farmerId || farmerId;
+      farmerState = fetched.farmer_state || fetched.farmerState || farmerState;
+      farmerRegion = fetched.farmer_region || fetched.farmerRegion || farmerRegion;
     }
 
     // Prefer stored contract_meta when available (saved at Confirm & Send); otherwise derive from order.items
@@ -308,7 +416,7 @@ export default function FarmerHistory() {
     const displayFarmerGst = (cm && (cm.farmer_gst_on_fee != null ? Number(cm.farmer_gst_on_fee) : (cm.farmerGstOnFee != null ? Number(cm.farmerGstOnFee) : undefined))) != null ? Number(cm.farmer_gst_on_fee || cm.farmerGstOnFee) : (totals.gst || 0);
     const displayNetAmountToFarmer = (cm && (cm.net_amount_payable_to_farmer != null ? Number(cm.net_amount_payable_to_farmer) : (cm.netAmountPayableToFarmer != null ? Number(cm.netAmountPayableToFarmer) : undefined))) != null ? Number(cm.net_amount_payable_to_farmer || cm.netAmountPayableToFarmer) : Math.round((totalCropTradeValue - ((displayFarmerCommission || 0) + (displayFarmerGst || 0)) + Number.EPSILON) * 100) / 100;
 
-    const rowsPlaceholder = (order.items || []).map((it, idx) => {
+    const rowsHtml = (order.items || []).map((it, idx) => {
       const qty = Number(it.order_quantity || it.quantity || 0) || 0;
       const price = Number(it.price_per_kg || it.price || 0) || 0;
       const amount = Math.round((qty * price + Number.EPSILON) * 100) / 100;
@@ -322,471 +430,350 @@ export default function FarmerHistory() {
         </tr>`;
     }).join('') || `<tr><td colspan="6" style="padding:8px;border:1px solid #ddd;text-align:center">${t('noItems', siteLang)}</td></tr>`;
 
-    const html = `<!doctype html>
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <title>Procurement Contract</title>
-      <meta name="viewport" content="width=device-width,initial-scale=1" />
+    const html = `<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Procurement Contract</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #111;
+      padding: 24px;
+      line-height: 1.6;
+    }
+       h1 {
+      text-align: center;
+      color: #236902;
+      margin: 0;
+    }
+       h2 {
+      margin-top: 18px;
+    }
+       .section {
+      margin-top: 16px;
+    }
+      table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 12px;
+    }
+      th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+      th {
+      background: #f7f7f7;
+      text-align: left;
+    }
+      pre {
+      white-space: pre-wrap;
+      font-family: 'Times New Roman', Times, serif;
+    }
+  </style>
+</head>
+<body>
+<div style="text-align:center; margin-bottom:20px;">
+    <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
+    <h1>
+      Agri AI<br/>
+      CONTRACT FARMING AGREEMENT
+    </h1>
     
-      <style>
-        body {
-          font-family: 'Times New Roman', Times, serif;
-          color: #111;
-          padding: 24px;
-          line-height: 1.6;
-        }
-    
-        h1 {
-          text-align: center;
-          color: #236902;
-          margin: 0;
-        }
-    
-        h2 {
-          margin-top: 18px;
-        }
-    
-        .section {
-          margin-top: 16px;
-        }
-    
-        table {
-          border-collapse: collapse;
-          width: 100%;
-          margin-top: 12px;
-        }
-    
-        th, td {
-          border: 1px solid #ddd;
-          padding: 8px;
-        }
-    
-        th {
-          background: #f7f7f7;
-          text-align: left;
-        }
-    
-        pre {
-          white-space: pre-wrap;
-          font-family: 'Times New Roman', Times, serif;
-        }
-        /* delivery info modal */
-        #deliveryInfoModal{display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:99999}
-        #deliveryInfoModal .dialog{background:#fff;padding:18px;border-radius:8px;max-width:640px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,0.25);font-family:'Times New Roman', Times, serif}
-        #deliveryInfoModal .closeBtn{background:#236902;color:#fff;border:none;border-radius:6px;padding:8px 10px;cursor:pointer}
-        .infoBtn{margin-left:8px;border:0;background:#1976d2;color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:18px;cursor:pointer}
-      </style>
-    </head>
-    
-    <body>
-    
-      <div style="text-align:center; margin-bottom:20px;">
-        <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
-        <h1>
-          Agri AI<br/>
-          PROCUREMENT CONTRACT FARMING AGREEMENT
-        </h1>
-        <div style="margin-top:6px;font-weight:800">
-          Contract Type: ${contractType}
-        </div>
-      </div>
-    
-      <!-- Delivery info modal (hidden by default) -->
-      <div id="deliveryInfoModal">
-        <div class="dialog" role="dialog" aria-modal="true">
-              <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px">
-            <div>
-              <h3 style="margin:0 0 8px 0;color:#236902">Delivery & Logistics Charges</h3>
-              <div style="color:#111;line-height:1.5;font-size:14px">
-                <div style="overflow:auto">
-                  <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:14px;text-align:center">
-                    <thead>
-                      <tr>
-                        <th style="border:1px solid #ddd;padding:8px;background:#f7f7f7;text-align:center">Vehicle Type</th>
-                        <th style="border:1px solid #ddd;padding:8px;background:#f7f7f7;text-align:center">Typical Distance Range (km)</th>
-                        <th style="border:1px solid #ddd;padding:8px;background:#f7f7f7;text-align:center">Vehicle Capacity</th>
-                        <th style="border:1px solid #ddd;padding:8px;background:#f7f7f7;text-align:center">FIXED Cost per km (₹)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td style="border:1px solid #ddd;padding:8px">Bike Courier</td>
-                        <td style="border:1px solid #ddd;padding:8px">0 – 20 km</td>
-                        <td style="border:1px solid #ddd;padding:8px">Up to 40 kg</td>
-                        <td style="border:1px solid #ddd;padding:8px"><strong>₹12 / km</strong></td>
-                      </tr>
-                      <tr>
-                        <td style="border:1px solid #ddd;padding:8px">3-Wheeler Cargo (Auto / Ape)</td>
-                        <td style="border:1px solid #ddd;padding:8px">0 – 80 km</td>
-                        <td style="border:1px solid #ddd;padding:8px">0 – 400 kg</td>
-                        <td style="border:1px solid #ddd;padding:8px"><strong>₹18 / km</strong></td>
-                      </tr>
-                      <tr>
-                        <td style="border:1px solid #ddd;padding:8px">Mini Truck (Tata Ace / Pickup)</td>
-                        <td style="border:1px solid #ddd;padding:8px">0 – 100 km</td>
-                        <td style="border:1px solid #ddd;padding:8px">40 – 1500 kg</td>
-                        <td style="border:1px solid #ddd;padding:8px"><strong>₹22 / km</strong></td>
-                      </tr>
-                      <tr>
-                        <td style="border:1px solid #ddd;padding:8px">LCV / Small Truck</td>
-                        <td style="border:1px solid #ddd;padding:8px">50 – 250 km</td>
-                        <td style="border:1px solid #ddd;padding:8px">1000 – 5 tons</td>
-                        <td style="border:1px solid #ddd;padding:8px"><strong>₹28 / km</strong></td>
-                      </tr>
-                      <tr>
-                        <td style="border:1px solid #ddd;padding:8px">6-Wheeler Truck</td>
-                        <td style="border:1px solid #ddd;padding:8px">100 – 400 km</td>
-                        <td style="border:1px solid #ddd;padding:8px">1000 – 10 tons</td>
-                        <td style="border:1px solid #ddd;padding:8px"><strong>₹35 / km</strong></td>
-                      </tr>
-                      <tr>
-                        <td style="border:1px solid #ddd;padding:8px">10-Wheeler Truck</td>
-                        <td style="border:1px solid #ddd;padding:8px">200 – 1000 km</td>
-                        <td style="border:1px solid #ddd;padding:8px">10 – 20 tons</td>
-                        <td style="border:1px solid #ddd;padding:8px"><strong>₹45 / km</strong></td>
-                      </tr>
-                      <tr>
-                        <td style="border:1px solid #ddd;padding:8px">Multi-Axle / Heavy Truck</td>
-                        <td style="border:1px solid #ddd;padding:8px">300 – 1500 km</td>
-                        <td style="border:1px solid #ddd;padding:8px">20 – 40 tons</td>
-                        <td style="border:1px solid #ddd;padding:8px"><strong>₹60 / km</strong></td>
-                      </tr>
-                      <tr>
-                        <td style="border:1px solid #ddd;padding:8px">Refrigerated Truck (Addon)</td>
-                        <td style="border:1px solid #ddd;padding:8px">50 – 2000 km</td>
-                        <td style="border:1px solid #ddd;padding:8px">Any</td>
-                        <td style="border:1px solid #ddd;padding:8px"><strong>+ ₹12 / km</strong></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-            <div style="flex:0 0 auto;margin-top:12px">
-              <button class="closeBtn" onclick="hideDeliveryInfo()" style="display:inline-block">Close</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    
-      <section class="section">
-      <h2>PARTIES</h2>
-      <p><strong>Party A – Buyer / Company</strong></p>
-      <p><b>Name:</b> ${buyerName}</p>
-      <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
-      <p><b>Address:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
-      
-    
-      <p><strong>Party B – Farmer / Producer</strong></p>
-      <p><b>Name:</b> ${farmerName}</p>
-      <p><b>Farmer ID:</b> ${farmerId}</p>
-      <p><b>Address:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
-    
-        <p>
-          Party A and Party B are hereinafter collectively referred to as "the Parties".
-          All communication, delivery, and payments shall be conducted via the AgriAI platform unless otherwise authorized.
-        </p>
-      </section>
-    
-      <section class="section">
-        <h2>1. PURPOSE OF AGREEMENT</h2>
-        <p>
-          This Agreement defines the terms and conditions under which the Farmer agrees to produce
-          and supply agricultural produce to the Buyer, and the Buyer agrees to procure such produce
-          at a pre-determined price, ensuring:
-        </p>
-        <ul>
-          <li>Assured market access to the Farmer</li>
-          <li>Fair and transparent pricing</li>
-          <li>Timely and secure payment</li>
-          <li>Reduced dependency on intermediaries</li>
-        </ul>
-      </section>
-    
-      <section class="section">
-        <h2>2. CONTRACT TYPE & DURATION</h2>
-        <p>Contract Type: ${contractType === 'one-time' ? 'One-Time Procurement Contract' : contractType}</p>
-        <p>Start Date: ${startDate}</p>
-        <p>End Date: ${endDate}</p>
-        <p>Duration: ${days} Days</p>
-        <p>
-          This Agreement shall automatically expire on the End Date unless renewed digitally through
-          the AgriAI platform with explicit consent from both Parties using registered login credentials.
-        </p>
-      </section>
-    
-      <section class="section">
-        <h2>3. DATA PRIVACY & PLATFORM COMPLIANCE</h2>
-        <p>
-          All personal, agricultural, and transactional data collected through the AgriAI platform shall be:
-        </p>
-        <ul>
-          <li>Stored securely</li>
-          <li>Contract execution and renewal</li>
-          <li>Payment settlement</li>
-          <li>Insurance facilitation</li>
-          <li>Legal and regulatory compliance</li>
-        </ul>
-        <p>
-          This Agreement is fully compliant with the Digital Personal Data Protection Act, 2023.
-        </p>
-      </section>
-    
-      <section class="section">
-      <h2>4. COMMODITY DETAILS</h2>
-        <table>
-          <thead>
-            <tr>
-              <th style="padding:8px;border:1px solid #ddd;text-align:center">Sl. No</th>
-              <th style="padding:8px;border:1px solid #ddd;text-align:center">Crop Name</th>
-              <th style="padding:8px;border:1px solid #ddd;text-align:center">Variety</th>
-              <th style="padding:8px;border:1px solid #ddd;text-align:center">Quantity</th>
-              <th style="padding:8px;border:1px solid #ddd;text-align:center">Price (₹/kg)</th>
-              <th style="padding:8px;border:1px solid #ddd;text-align:center">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsPlaceholder}
-          </tbody>
-        </table>
-      </section>
-    
-      <section class="section">
-        <h2>5. PRICE & PAYMENT TERMS</h2>
-        <p><strong>5.1 Fixed Procurement Price (Trade Value)</strong></p>
-        <p>Price: ${formatCurrency(avgPricePerKg)} per kg</p>
-        <p>Total Contract Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p>
-        <p><strong>Total Crop Trade Value (GST Exempt): ${formatCurrency(totalCropTradeValue)}</strong></p>
-        <p>The agreed price shall remain fixed throughout the contract period, irrespective of market fluctuations.</p>
-    
-        <p><strong>5.2 Platform Service Fees & Taxes</strong></p>
-    <p>
-      AgriAI acts as a digital facilitation platform and charges a platform service fee to both the Buyer and the Farmer for enabling discovery, contracting, payment settlement, and compliance services. The platform service fee is subject to GST as per applicable laws.
+  </div>
+  <section class="section">
+  <h2>PARTIES</h2>
+  <p><strong>Party A – Buyer / Company</strong></p>
+  <p><b>Name:</b> ${buyerName}</p>
+  <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
+  <p><b>Address:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
+  <p><strong>Party B – Farmer / Producer</strong></p>
+  <p><b>Name:</b> ${farmerName}</p>
+  <p><b>Farmer ID:</b> ${farmerId}</p>
+  <p><b>Address:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
+   <p>
+      Party A and Party B are collectively referred to as "the Parties."
+      AgriAI acts solely as a digital facilitation platform and is not a buyer, seller, transporter, insurer, or agent of either Party.
     </p>
-    
-    <table>
-      <tr>
-        <th>Description</th>
-        <th>Buyer</th>
-        <th>Farmer</th>
-      </tr>
-      <tr>
-        <td>Platform Service Fee</td>
-        <td>${formatCurrency(displayBuyerCommission)}</td>
-        <td>${formatCurrency(displayFarmerCommission)}</td>
-      </tr>
-      <tr>
-        <td>GST @ 18% on Platform Fee</td>
-        <td>${formatCurrency(displayBuyerGst)}</td>
-        <td>${formatCurrency(displayFarmerGst)}</td>
-      </tr>
+  </section>
+
+  <section class="section">
+    <h2>1. PURPOSE OF AGREEMENT</h2>
+    <p>
+      This Agreement defines the terms and conditions under which the Farmer agrees to produce
+      and supply agricultural produce to the Buyer, and the Buyer agrees to procure such produce
+      at a pre-determined price, ensuring:
+    </p>
+    <ul>
+      <li>Assured market access to the Farmer</li>
+      <li>Fair and transparent pricing</li>
+      <li>Timely and secure payment</li>
+      <li>Reduced dependency on intermediaries</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>2. CONTRACT TYPE & DURATION</h2>
+    <p>Contract Nature: ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p>
+    <p>Contract Duration: ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p>
+    <p>Start Date: ${startDate}</p>
+    <p>End Date: ${endDate}</p>
+    <p>Duration: ${days} Days</p>
+    <p>
+      Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract. Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract.
+    </p>
+    <h3><strong>2.1 Contracto Acceptance &amp; Negotiation Window</strong>orS</h3>
+    <p>
+      This procurement contract shall remain valid for acceptance for a period of forty-eight (48) hours from the time it is digitally sent by the Farmer to the Buyer through the AgriAI platform.
+    </p>
+    <p>
+      Within this 48-hour period, the Buyer must take one of the following actions through the platform:
+    </p>
+    <ul>
+      <li>Accept the contract in its current form; or</li>
+      <li>Reject the contract; or</li>
+      <li>Request a price negotiation.</li>
+    </ul>
+    <p>
+      If the Buyer does not take any action within the 48-hour validity period, the contract shall automatically expire and shall have no legal or binding effect on either Party.
+    </p>
+    <p>
+      Any request for price negotiation shall be time-bound and must be concluded within forty-eight (48) hours from the time the negotiation is initiated. If no agreement is reached within this period, the negotiation shall automatically lapse, and the contract shall stand cancelled.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>3. DATA PRIVACY & PLATFORM COMPLIANCE</h2>
+    <p>
+      All personal, agricultural, and transactional data collected through the AgriAI platform shall be:
+    </p>
+    <ul>
+      <li>Stored securely</li>
+      <li>Used strictly for:</li>
+      <li>Contract execution and renewal</li>
+      <li>Payment settlement</li>
+      <li>Insurance facilitation</li>
+      <li>Legal and regulatory compliance</li>
+    </ul>
+    <p>
+      This Agreement is fully compliant with the Digital Personal Data Protection Act, 2023.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>4. COMMODITY DETAILS</h2>
+    <table style="border-collapse:collapse;width:100%;margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Sl. No</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Crop Name</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Variety</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Quantity</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Price (₹/kg)</th>
+          <th style="padding:8px;border:1px solid #ddd;text-align:center">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
     </table>
-    
-    <p><strong>5.3 Buyer Payable Amount</strong></p>
-      <p>
-      Crop Trade Value (GST Exempt): ${formatCurrency(totalCropTradeValue)}<br/>
-      Platform Service Fee + GST @18% (Payable by Buyer): ${formatCurrency(buyerFeeTotal)}<br/>
-      <p>
-      <strong>
-        Amount Payable Before Delivery: ${formatCurrency(totalAmountPayableByBuyer)}
-      </strong>
-    </p>
-        <div style="display:inline-block;vertical-align:middle">
-        Delivery / Logistics Charges (Payable After Delivery): ${deliveryRateDisplay}
-        <button class="infoBtn" onclick="(function(ev){try{ev && ev.stopPropagation();}catch(e){}; showDeliveryInfo();})(event)" aria-label="Delivery info">i</button>
-      </div>
-      <br/>
-      Labour Charges: ${formatCurrency(labourCharge)} (for ${qtyKg.toLocaleString('en-IN')} kg)<br/>
-    </p>
-    <p>
-      <strong>
-        Amount Payable After Delivery: ${formatCurrency(labourCharge)} + Delivery Charges + Platform Delivery Facilitation Fee (4%) + GST @18% (on delivery platform fee)
-      </strong>
-    </p>
-    <p>
-      Delivery charges shall be calculated by the third-party logistics provider
-      based on actual distance, vehicle type, and delivery location, and shall be
-      payable by the Buyer after successful delivery confirmation.
-    </p>
-    
-    <p><strong>5.4 Farmer Settlement Amount</strong></p>
-      <p>
-      Crop Trade Value: ${formatCurrency(totalCropTradeValue)}<br/>
-      Less Platform Fee + GST: ${formatCurrency((displayFarmerCommission || 0) + (displayFarmerGst || 0))}<br/>
-      <strong>Net Amount Payable to Farmer via AgriAI: ${formatCurrency(displayNetAmountToFarmer)}</strong>
-    </p>
-    
-        <p><strong>5.5 Payment Schedule</strong></p>
-    
-    <p>
-    <strong>50% Advance Payment:</strong>
-    The Buyer shall pay fifty percent (50%) of the total contract value as advance at the time of contract execution. 
-    This amount shall be adjusted against the final payable amount.
-    </p>
-    
-    <p>
-    <strong>25% Payment on Delivery:</strong>
-    An additional twenty-five percent (25%) of the total contract value shall be paid upon successful delivery of the produce to the Buyer.
-    </p>
-    
-    <p>
-    <strong>25% Payment After Quality Inspection:</strong>
-    The remaining twenty-five percent (25%) shall be paid within seven (7) working days after completion of quality inspection and acceptance of the produce.
-    </p>
-    
-    <p>
-    <strong>Late Payment Penalty:</strong>
-    If the Buyer fails to pay the remaining twenty-five percent (25%) within seven (7) working days after acceptance, the Buyer shall be liable to pay a late payment penalty of one percent (1%) per day on the delayed amount, subject to a maximum of ten percent (10%) of the delayed amount.
-    </p>
-    
-    <p>
-    <strong>Deemed Acceptance:</strong>
-    If no quality objection is raised within seven (7) working days from the date of delivery, the produce shall be deemed accepted, and the remaining payment shall become immediately payable.
-    </p>
-    
-    
-        <p><strong>5.3 Mode of Payment</strong></p>
-        <p>Bank Transfer / UPI / Cheque</p>
-        <p>The Buyer shall issue digital or physical receipts for all payments made under this Agreement.</p>
-      </section>
-    
-      <section class="section">
-        <h2>6. DELIVERY, LOGISTICS & TRANSPORTATION</h2>
-    
-        <p><strong>6.1 Delivery Responsibility</strong></p>
-        <p>
-            Delivery of agricultural produce under this Agreement shall be facilitated exclusively through third-party
-            logistics service providers approved by the AgriAI platform.
-        </p>
-        <p>
-            Neither the Buyer nor the Farmer shall be required to arrange transportation independently, unless mutually
-            agreed in writing.
-        </p>
-    
-        <p><strong>6.2 Vehicle Selection</strong></p>
-        <p>
-            The type of vehicle used for transportation shall be selected based on the quantity of produce, type of crop,
-            and handling requirements.
-        </p>
-        <p>Selected Vehicle Type: Will be Decided based on the Distance <button class="infoBtn" onclick="(function(ev){try{ev && ev.stopPropagation();}catch(e){}; showDeliveryInfo();})(event)" aria-label="Delivery info">i</button></p>
-    
-        <p><strong>6.3 Delivery Pricing Method</strong></p>
-        <p>
-            Delivery charges shall be determined by the third-party logistics provider. The final delivery cost shall be
-            calculated and communicated to the Buyer at or before the delivery.
-        </p>
-    
-        <p><strong>6.4 Payment of Delivery Charges</strong></p>
-        <p>
-            Delivery charges shall be paid directly by the Buyer to the logistics provider or delivery personnel, either
-            offline or online.
-        </p>
-    
-        <p><strong>6.5 Transfer of Risk During Transit</strong></p>
-        <p>
-            During transit, responsibility and risk shall lie with the logistics provider. Upon delivery, risk transfers
-            to the Buyer.
-        </p>
-    
-        <p><strong>6.6 Delay, Damage & Loss</strong></p>
-        <p>
-            Any delay, damage, or loss during transit shall be governed by the logistics provider’s terms and conditions.
-            AgriAI shall not be held liable for such incidents.
-        </p>
-    
-        <p><strong>6.7 Proof of Delivery</strong></p>
-        <p>
-            Delivery shall be confirmed through physical receipt, digital confirmation, or Proof of Delivery (POD).
-            Records may be stored digitally for verification purposes.
-        </p>
-    </section>
-    
-    
-      <section class="section">
-        <h2>7. QUALITY STANDARDS & ACCEPTANCE</h2>
-        <p>All produce supplied under this Agreement shall conform to the quality standards mutually agreed upon by the Parties and documented in Annexure A (or any other mutually agreed record).</p>
-        <p>The Buyer shall inspect the delivered produce within three (3) working days from the date of delivery.</p>
-        <p>Any rejection of produce must be communicated in writing, clearly specifying the reasons for rejection. If no communication is received within the inspection period, the produce shall be deemed accepted by the Buyer.</p>
-    </section>
-    
-    
-      <section class="section">
-        <h2>8. RISK, LIABILITY & INSURANCE</h2>
-    
-        <p>1. The Farmer shall make all reasonable efforts to follow good agricultural practices to ensure the expected production.</p>
-    
-        <p>2. The Farmer shall obtain crop insurance under the Pradhan Mantri Fasal Bima Yojana (PMFBY) or any other equivalent government-approved insurer for all contracted produce. Any compensation received from such insurance shall belong to the Farmer.</p>
-    
-        <p>3. In the event of partial or total crop loss due to natural disasters such as floods, droughts, cyclones, or other force majeure events, losses shall be covered through the Farmer’s insurance. In case of uncovered losses, both parties may mutually agree on a fair settlement.</p>
-    
-        <p>4. After the produce is collected from the Farmer, all logistics-related risks—including handling, transit, and transportation—shall lie with the logistics provider engaged for delivery.</p>
-    
-        <p>5. Once the produce is delivered and accepted by the Buyer, all market risks—including price fluctuation, storage loss, and any post-delivery damage—shall transfer to the Buyer.</p>
-    </section>
-    
-    
-      <section class="section">
-        <h2>9. FORCE MAJEURE</h2>
-        <p>
-          Neither Party shall be liable for delay or failure caused by events beyond reasonable control.
-          Obligations shall resume once normal conditions are restored.
-        </p>
-      </section>
-    
-      <section class="section">
-        <h2>10. DISPUTE RESOLUTION & JURISDICTION</h2>
-        <p>1. Any dispute, difference, or claim arising out of or in connection with this Agreement shall first be attempted to be resolved amicably through mutual discussion between the Parties.</p>
-        <p>2. If the Parties are unable to resolve the dispute within 30 days from the date of notification, the dispute shall be referred to arbitration under the Arbitration and Conciliation Act, 1996. The arbitration proceedings shall be conducted in ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'} (city/state).</p>
-    
-        <p>3. The courts of  ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'} (city/state) shall have exclusive jurisdiction over any disputes not resolved through arbitration.</p>
-    </section>
-    
-    
-      <section class="section">
-        <h2>11. TERMINATION</h2>
-        <p>
-          Either Party may terminate this Agreement with 30 days’ written notice
-          for valid reasons including breach, non-payment, or force majeure.
-        </p>
-      </section>
-    
-      <section class="section">
-        <h2>12. LANGUAGE OF AGREEMENT</h2>
-        <p>
-          This Agreement has been explained and translated to the Farmer in <b>${contractLanguage}</b> (Language).
-          In case of any inconsistency, the English version shall prevail.
-        </p>
-      </section>
-    
-      <section class="section">
-        <h2>13. EXECUTION & SIGNATURES</h2>
-    
-        <p>Buyer / Authorized Representative</p>
-        <p>Signature: ___________________________</p>
-        <p>Date: ___________________________</p>
-    
-        <p>Farmer / Producer</p>
-        <p>Signature: ___________________________</p>
-        <p>Date: ${startDate}</p>
-    
-        <p>Witness 1: ___________________________</p>
-      </section>
-    
-    </body>
-    <script>
-      function showDeliveryInfo(){
-        try{document.getElementById('deliveryInfoModal').style.display='flex';}catch(e){}
-      }
-      function hideDeliveryInfo(){
-        try{document.getElementById('deliveryInfoModal').style.display='none';}catch(e){}
-      }
-    </script>
-    </html>`;
+  </section>
+
+  <section class="section">
+    <h2>5. PRICE & PAYMENT TERMS</h2>
+    <p><strong>5.1 Farmer </strong></p>
+    <p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p>
+    <p>Price: ${formatCurrency(avgPricePerKg)} per kg</p>
+    <p>Platform Fee: ${formatCurrency(displayFarmerCommission)}</p>
+    <p>GST on Platform Fee: ${formatCurrency(displayFarmerGst)}</p>
+    <p><strong>Total Amount (After Deduction): ${formatCurrency(displayNetAmountToFarmer)}</strong></p>
+ 
+    <p><strong>5.2 Buyer</strong></p>
+    <p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p>
+    <p>Price: ${formatCurrency(avgPricePerKg)} per kg</p>
+    <p>Platform Fee: ${formatCurrency(displayBuyerCommission)}</p>
+    <p>GST on Platform Fee: ${formatCurrency(displayBuyerGst)}</p>
+    <p><strong>Total Amount (After Addition): ${formatCurrency(totalAmountPayableByBuyer)}</strong></p>
+    <p>Delivery / Logistics Charges (Payable After Delivery): ${deliveryRateDisplay}</p>
+
+    <p><strong>5.3 Payment Schedule</strong></p>
+    <p>25% of the Total Crop Trade Value shall be paid by the Buyer as an advance at the time of contract confirmation through the AgriAI platform.</p>
+    <p>50% of the Total Crop Trade Value shall be paid immediately upon successful delivery of the produce.</p>
+    <p>50% of the Total Crop Trade Value shall be paid immediately upon successful delivery of the produce.</p>
+    <p>The remaining 25% shall be paid within 7 (seven) working days after quality inspection and formal acceptance of the produce.</p>
+    <p><strong>5.4 Mode of Payment</strong></p>
+    <p>Bank Transfer / UPI / Cheque</p>
+    <p>The Buyer shall issue digital or physical receipts for all payments made under this Agreement.</p>
+  </section>
+  <section class="section">
+    <h2>6. DELIVERY, LOGISTICS & TRANSPORTATION</h2>
+
+  <p><strong>6.1 Role of AgriAI</strong></p>
+  <p>
+    AgriAI operates solely as a digital technology platform facilitating transactions between Buyers and Farmers.
+    AgriAI shall not be deemed a buyer, seller, trader, commission agent, transporter, or custodian of goods.
+    All obligations relating to sale and purchase remain strictly between the Parties.
+  </p>
+
+  <p><strong>6.2 Delivery Facilitation</strong></p>
+  <p>
+    Transportation shall be facilitated through third-party logistics service providers available on or approved by the AgriAI platform.
+    The selection of logistics provider and vehicle type shall be based on crop nature, quantity, distance, and handling requirements.
+  </p>
+
+  <p><strong>6.3 Delivery Charges</strong></p>
+  <p>
+    Delivery charges shall be determined by the third-party logistics provider based on actual distance, vehicle type, loading requirements, and location.
+    Such charges shall be paid directly by the Buyer to the logistics provider.
+    AgriAI shall not be responsible for determining or negotiating delivery pricing.
+  </p>
+
+  <p><strong>6.4 Transfer of Risk</strong></p>
+  <p>
+    Risk and responsibility for the produce shall remain with the logistics provider during transit.
+    Risk shall transfer to the Buyer only upon successful delivery and signed Proof of Delivery (POD).
+  </p>
+
+  <p><strong>6.5 Delay, Damage & Loss</strong></p>
+  <p>
+    Any delay, damage, shortage, or loss occurring during transit shall be governed by the logistics provider's terms and conditions.
+    AgriAI shall not be liable for any such claims.
+  </p>
+
+  <p><strong>6.6 Proof of Delivery</strong></p>
+  <p>
+    Delivery shall be confirmed through physical receipt, digital confirmation, and/or electronic POD recorded on the AgriAI platform.
+    Digital records maintained by AgriAI shall constitute valid evidence of delivery.
+  </p>
+  </section>
+
+  <section class="section">
+    <h2>7. QUALITY STANDARDS, INSPECTION & ACCEPTANCE</h2>
+
+  <p>
+    The produce supplied shall meet the mutually agreed specifications mentioned in this Agreement.
+  </p>
+
+  <p>
+    The Buyer shall complete quality inspection within 3 (three) working days from the date of delivery.
+  </p>
+
+  <p>
+    Any rejection must be raised in writing through the AgriAI platform within the inspection period,
+    clearly stating valid and verifiable reasons.
+  </p>
+
+  <p>
+    If no dispute is raised within 3 working days, the produce shall be deemed accepted.
+  </p>
+
+  <p>
+    In case of justified rejection, return transportation costs shall be borne by the Buyer unless the defect is proven to have originated prior to dispatch.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>8. RISK, LIABILITY & INSURANCE</h2>
+
+  <p>
+    The Farmer shall follow standard agricultural and post-harvest practices.
+  </p>
+
+  <p>
+    In case of crop loss due to natural calamities or force majeure before dispatch, obligations may be reviewed mutually.
+    Crop insurance, if applicable under government schemes such as PMFBY or other approved insurers, shall remain in the Farmer's name.
+  </p>
+
+  <p>
+    Any insurance compensation received shall belong solely to the Farmer.
+  </p>
+
+  <p>
+    After delivery and deemed acceptance, all risks, ownership, and liabilities shall transfer entirely to the Buyer.
+  </p>
+</section>
+
+
+  <section class="section">
+    <h2>9. FORCE MAJEURE</h2>
+
+  <p>
+    Neither Party shall be liable for failure or delay caused by events beyond reasonable control,
+    including natural disasters, government restrictions, war, strikes, transportation disruptions, or unforeseen calamities.
+  </p>
+
+  <p>
+    Obligations shall resume once such conditions cease to exist.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>10. DISPUTE RESOLUTION & JURISDICTION</h2>
+
+  <p>
+    Any dispute arising out of this Agreement shall first be resolved amicably through discussion via the AgriAI platform.
+  </p>
+
+  <p>
+    If unresolved within 15 days, disputes shall be referred to arbitration under the Arbitration and Conciliation Act, 1996.
+    The seat of arbitration shall be determined by AgriAI.
+  </p>
+
+  <p>
+    Subject to arbitration, the courts of <strong>Bengaluru, Karnataka</strong> shall have exclusive jurisdiction
+  for enforcement and legal proceedings arising under this Agreement.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>11. TERMINATION</h2>
+
+  <p>
+    Either Party may terminate this Agreement for material breach, including non-payment, non-delivery,
+    misrepresentation, or violation of agreed terms.
+  </p>
+
+  <p>
+    In case of payment default beyond agreed timelines, the defaulting Party may face account suspension,
+    penalty charges, and recovery proceedings as permitted under law.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>12. LANGUAGE OF AGREEMENT</h2>
+
+  <p>
+    This Agreement has been explained and translated to the Farmer in ${siteLang === 'en' ? 'English' : (siteLang === 'hi' ? 'हिंदी' : (siteLang === 'kn' ? 'ಕನ್ನಡ' : 'English'))} (Language).
+    In case of any inconsistency, the English version shall prevail.
+  </p>
+</section>
+
+  <section class="section">
+    <h2>13. EXECUTION & DIGITAL ACCEPTANCE</h2>
+
+  <p>
+    This Agreement may be executed electronically through the AgriAI platform.
+    Digital acceptance using registered credentials shall constitute legally binding consent.
+  </p>
+
+  <p>Buyer / Authorized Representative</p>
+  <p>Signature: ___________________________</p>
+  <p>Date: ___________________________</p>
+
+  <p>Farmer / Producer</p>
+  <p>Signature: ___________________________</p>
+  <p>Date: ___________________________</p>
+
+  <p>Witness 1: ___________________________</p>
+  <p>Witness 2: ___________________________</p>
+</section>
+
+</body>
+</html>`;
 
     const w = window.open('', '_blank');
     try { w.document.write(html); w.document.close(); } catch (e) { window.open('data:text/html;charset=utf-8,' + encodeURIComponent(html), '_blank'); }
-  };
+    };
 
   return (
     <div style={{ background: '#53b635', minHeight: '100vh', color: '#fff' }}>
@@ -884,5 +871,6 @@ export default function FarmerHistory() {
     </div>
   );
 }
+
 
 
