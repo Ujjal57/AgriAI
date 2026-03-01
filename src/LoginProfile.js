@@ -208,6 +208,138 @@ export const Paragraph = styled.p`
   margin: 20px 0 30px;
 `;
 
+// Modal Styled Components
+export const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+
+export const ModalContent = styled.div`
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  animation: slideIn 0.3s ease-out;
+  
+  @keyframes slideIn {
+    from {
+      transform: translateY(-50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+`;
+
+export const ModalTitle = styled.h2`
+  color: #236902;
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+  text-align: center;
+`;
+
+export const ModalInput = styled.input`
+  background-color: #f6f8fa;
+  border: 1px solid #e6e6e6;
+  padding: 0.8rem;
+  margin: 8px 0;
+  width: 100%;
+  font-size: 1rem;
+  font-family: 'Times New Roman', Times, serif !important;
+  color: #236902 !important;
+  box-sizing: border-box;
+  border-radius: 4px;
+  
+  &::placeholder {
+    font-family: 'Times New Roman', Times, serif;
+    color: #236902;
+  }
+  
+  &:focus {
+    border-color: #236902;
+    box-shadow: 0 0 5px rgba(35, 105, 2, 0.5);
+    outline: none;
+  }
+`;
+
+export const ModalButton = styled.button`
+  background-color: #236902;
+  color: #fff;
+  padding: 0.8rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 1rem;
+  font-size: 1rem;
+  transition: background-color 0.3s ease;
+  
+  &:hover {
+    background-color: #1a5001;
+  }
+  
+  &:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+`;
+
+export const ModalError = styled.div`
+  color: #d32f2f;
+  background-color: #ffebee;
+  padding: 0.8rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+`;
+
+export const ModalSuccess = styled.div`
+  color: #236902;
+  background-color: #e8f5e9;
+  padding: 0.8rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+`;
+
+export const ModalCloseButton = styled.button`
+  background-color: transparent;
+  color: #236902;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  
+  &:hover {
+    color: #1a5001;
+  }
+`;
+
+export const ModalStepIndicator = styled.div`
+  text-align: center;
+  color: #236902;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+`;
+
 function LoginProfile() {
   const [signIn, toggle] = React.useState(true);
   const [siteLang, setSiteLang] = useState(() => localStorage.getItem('agri_lang') || 'en');
@@ -223,6 +355,25 @@ function LoginProfile() {
     state: '',
     address: ''
   });
+  // Forgot Password State
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1: email, 2: otp, 3: new password
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
+
+  // Signup OTP State
+  const [showSignupOtp, setShowSignupOtp] = useState(false);
+  const [signupOtp, setSignupOtp] = useState('');
+  const [signupOtpLoading, setSignupOtpLoading] = useState(false);
+  const [signupOtpError, setSignupOtpError] = useState('');
+  const [signupOtpVerified, setSignupOtpVerified] = useState(false);
+  const [pendingSignupData, setPendingSignupData] = useState(null);
+
   const handleSignupChange = e => {
     setSignupData({ ...signupData, [e.target.name]: e.target.value });
   };
@@ -255,40 +406,251 @@ function LoginProfile() {
       alert(t('regInvalidAddress', siteLang));
       return;
     }
-    if (signupData.email) {
-      const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-      if (!emailRegex.test(signupData.email)) {
-        alert(t('regInvalidEmail', siteLang));
-        return;
-      }
+    if (!signupData.email) {
+      alert(t('emailRequired', siteLang));
+      return;
     }
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!emailRegex.test(signupData.email)) {
+      alert(t('regInvalidEmail', siteLang));
+      return;
+    }
+    if (!signupData.password || signupData.password.length < 4) {
+      alert('Password must be at least 4 characters');
+      return;
+    }
+
+    // All validations passed, now send OTP
+    await handleSignupSendOtp();
+  };
+
+  const handleSignupSendOtp = async () => {
+    setSignupOtpError('');
+    setSignupOtpLoading(true);
+    try {
+      const res = await fetch('http://127.0.0.1:5000/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: signupData.email.trim(), purpose: 'signup-verification' })
+      });
+      const result = await res.json();
+      if (res.ok || result.ok) {
+        setPendingSignupData(signupData);
+        setShowSignupOtp(true);
+        setSignupOtp('');
+        setSignupOtpVerified(false);
+      } else {
+        setSignupOtpError(result.error || 'Failed to send OTP');
+      }
+    } catch (err) {
+      setSignupOtpError('Server error. Please try again.');
+    } finally {
+      setSignupOtpLoading(false);
+    }
+  };
+
+  const handleSignupVerifyOtp = async () => {
+    setSignupOtpError('');
+    if (!signupOtp.trim()) {
+      setSignupOtpError(t('otpRequired', siteLang) || 'OTP is required');
+      return;
+    }
+    setSignupOtpLoading(true);
+    try {
+      const res = await fetch('http://127.0.0.1:5000/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: signupData.email.trim(), otp: signupOtp.trim(), purpose: 'signup-verification' })
+      });
+      const result = await res.json();
+      if (res.ok || result.ok) {
+        setSignupOtpVerified(true);
+      } else {
+        setSignupOtpError(result.error || 'Invalid or expired OTP');
+      }
+    } catch (err) {
+      setSignupOtpError('Server error. Please try again.');
+    } finally {
+      setSignupOtpLoading(false);
+    }
+  };
+
+  const handleCompleteSignup = async () => {
+    if (!signupOtpVerified || !pendingSignupData) {
+      setSignupOtpError('Please verify OTP first');
+      return;
+    }
+
+    setSignupOtpLoading(true);
     try {
       const res = await fetch('http://127.0.0.1:5000/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: signupData.name,
-          phone: signupData.phone,
-          aadhar: signupData.aadhar,
-          email: signupData.email,
-          password: signupData.password,
-          role: signupData.role,
-          region: signupData.region,
-          state: signupData.state,
-            address: signupData.address,
-            language: siteLang
+          name: pendingSignupData.name,
+          phone: pendingSignupData.phone,
+          aadhar: pendingSignupData.aadhar,
+          email: pendingSignupData.email,
+          password: pendingSignupData.password,
+          role: pendingSignupData.role,
+          region: pendingSignupData.region,
+          state: pendingSignupData.state,
+          address: pendingSignupData.address,
+          language: siteLang
         })
       });
       const result = await res.json();
       if (res.ok) {
         alert(t('regSuccess', siteLang));
-        setSignupData({ name: '', phone: '', email: '', aadhar: '', password: '', role: '', region: '', state: '' });
+        setSignupData({ name: '', phone: '', email: '', aadhar: '', password: '', role: '', region: '', state: '', address: '' });
+        setShowSignupOtp(false);
+        setSignupOtp('');
+        setSignupOtpVerified(false);
+        setPendingSignupData(null);
+        setSignupOtpError('');
       } else {
-        alert(result.error || t('regFailed', siteLang));
+        setSignupOtpError(result.error || t('regFailed', siteLang));
       }
     } catch (err) {
-      alert(t('regServerError', siteLang));
+      setSignupOtpError(t('regServerError', siteLang));
+    } finally {
+      setSignupOtpLoading(false);
     }
+  };
+
+  // Forgot Password Functions
+  const handleForgotPasswordClick = (e) => {
+    e.preventDefault();
+    setShowForgotPassword(true);
+    setForgotStep(1);
+    setForgotEmail('');
+    setForgotOtp('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setForgotError('');
+    setOtpVerified(false);
+  };
+
+  const handleSendOtp = async () => {
+    setForgotError('');
+    if (!forgotEmail.trim()) {
+      setForgotError(t('emailRequired', siteLang) || 'Email is required');
+      return;
+    }
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!emailRegex.test(forgotEmail)) {
+      setForgotError(t('invalidEmail', siteLang) || 'Invalid email format');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const res = await fetch('http://127.0.0.1:5000/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim(), purpose: 'password-reset' })
+      });
+      const result = await res.json();
+      if (res.ok || result.ok) {
+        setForgotStep(2);
+      } else {
+        setForgotError(result.error || 'Failed to send OTP');
+      }
+    } catch (err) {
+      setForgotError('Server error. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    setForgotError('');
+    if (!forgotOtp.trim()) {
+      setForgotError(t('otpRequired', siteLang) || 'OTP is required');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const res = await fetch('http://127.0.0.1:5000/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim(), otp: forgotOtp.trim(), purpose: 'password-reset' })
+      });
+      const result = await res.json();
+      if (res.ok || result.ok) {
+        setOtpVerified(true);
+        setForgotStep(3);
+      } else {
+        setForgotError(result.error || 'Invalid or expired OTP');
+      }
+    } catch (err) {
+      setForgotError('Server error. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setForgotError('');
+    if (!newPassword.trim() || !confirmPassword.trim()) {
+      setForgotError(t('passwordRequired', siteLang) || 'Password is required');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setForgotError(t('passwordMismatch', siteLang) || 'Passwords do not match');
+      return;
+    }
+    if (newPassword.length < 4) {
+      setForgotError('Password must be at least 4 characters');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      // First try the dedicated password reset endpoint
+      let res = await fetch('http://127.0.0.1:5000/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim(), password: newPassword })
+      });
+      
+      // If that doesn't exist, try profile update as fallback
+      if (res.status === 404) {
+        res = await fetch('http://127.0.0.1:5000/profile/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ original_email: forgotEmail.trim(), password: newPassword })
+        });
+      }
+
+      const result = await res.json();
+      if (res.ok || result.ok || result.success) {
+        alert(t('passwordResetSuccess', siteLang) || 'Password reset successfully!');
+        setShowForgotPassword(false);
+        setForgotStep(1);
+        setForgotEmail('');
+        setForgotOtp('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setForgotError('');
+        setOtpVerified(false);
+      } else {
+        setForgotError(result.error || 'Failed to reset password');
+      }
+    } catch (err) {
+      setForgotError('Server error. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const closeForgotPassword = () => {
+    setShowForgotPassword(false);
+    setForgotStep(1);
+    setForgotEmail('');
+    setForgotOtp('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setForgotError('');
+    setOtpVerified(false);
   };
   const [signinData, setSigninData] = React.useState({ email: '', password: '' });
   const handleSigninChange = e => setSigninData({ ...signinData, [e.target.name]: e.target.value });
@@ -370,11 +732,11 @@ function LoginProfile() {
             <Form onSubmit={handleSigninSubmit}>
               <Title>{t('signInTitle', siteLang)}</Title>
               <Input type='email' name='email' placeholder={t('placeholderEmail', siteLang)} value={signinData.email} onChange={handleSigninChange} />
-              <Input type='password' name='password' placeholder={t('signInButton', siteLang)} value={signinData.password} onChange={handleSigninChange} />
-              <Anchor href='#'>{t('forgotPassword', siteLang)}</Anchor>
+              <Input type='password' name='password' placeholder={t('placeholderPassword', siteLang)} value={signinData.password} onChange={handleSigninChange} />
+              <Anchor href='#' onClick={handleForgotPasswordClick}>{t('forgotPassword', siteLang)}</Anchor>
               <Button type='submit'>{t('signInButton', siteLang)}</Button>
             </Form>
-            <div style={{margin: '18px 0 8px 0', fontWeight: 'bold', color: '#236902', fontFamily: 'Times New Roman'}}>or</div>
+            <div style={{margin: '18px 0 8px 0', fontWeight: 'bold', color: '#236902', fontFamily: 'Times New Roman'}}>{t('orText', siteLang)}</div>
             <button type="button" style={{background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '8px'}}>
               <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/google/google-original.svg" alt="Google" style={{width: '2.2rem', height: '2.2rem'}} />
             </button>
@@ -407,6 +769,117 @@ function LoginProfile() {
       </CenterWrap>
       {/* Footer is rendered globally in index.js */}
       <Chatbot />
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <ModalOverlay onClick={closeForgotPassword}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalCloseButton onClick={closeForgotPassword}>&times;</ModalCloseButton>
+            
+            {forgotStep === 1 && (
+              <>
+                <ModalTitle>{t('forgotPassword', siteLang) || 'Reset Password'}</ModalTitle>
+                <ModalStepIndicator>Step 1 of 3: Enter Email</ModalStepIndicator>
+                {forgotError && <ModalError>{forgotError}</ModalError>}
+                <ModalInput
+                  type='email'
+                  placeholder={t('placeholderEmail', siteLang)}
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                />
+                <ModalButton onClick={handleSendOtp} disabled={forgotLoading}>
+                  {forgotLoading ? 'Sending...' : t('sendOtp', siteLang) || 'Send OTP'}
+                </ModalButton>
+              </>
+            )}
+
+            {forgotStep === 2 && (
+              <>
+                <ModalTitle>{t('forgotPassword', siteLang) || 'Reset Password'}</ModalTitle>
+                <ModalStepIndicator>Step 2 of 3: Verify OTP</ModalStepIndicator>
+                {forgotError && <ModalError>{forgotError}</ModalError>}
+                <p style={{textAlign: 'center', color: '#236902', fontSize: '0.9rem', marginBottom: '1rem'}}>
+                  {t('otpSentTo', siteLang) || 'OTP sent to'} {forgotEmail}
+                </p>
+                <ModalInput
+                  type='text'
+                  placeholder={t('enterOtp', siteLang) || 'Enter 6-digit OTP'}
+                  value={forgotOtp}
+                  onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength='6'
+                />
+                <ModalButton onClick={handleVerifyOtp} disabled={forgotLoading || !forgotOtp}>
+                  {forgotLoading ? 'Verifying...' : t('verifyOtp', siteLang) || 'Verify OTP'}
+                </ModalButton>
+              </>
+            )}
+
+            {forgotStep === 3 && (
+              <>
+                <ModalTitle>{t('forgotPassword', siteLang) || 'Reset Password'}</ModalTitle>
+                <ModalStepIndicator>Step 3 of 3: New Password</ModalStepIndicator>
+                {forgotError && <ModalError>{forgotError}</ModalError>}
+                <ModalInput
+                  type='password'
+                  placeholder={t('placeholderPassword', siteLang) || 'New Password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <ModalInput
+                  type='password'
+                  placeholder='Confirm Password'
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                <ModalButton onClick={handleResetPassword} disabled={forgotLoading}>
+                  {forgotLoading ? 'Resetting...' : 'Reset Password'}
+                </ModalButton>
+              </>
+            )}
+          </ModalContent>
+        </ModalOverlay>
+      )}
+
+      {/* Signup OTP Modal */}
+      {showSignupOtp && (
+        <ModalOverlay onClick={() => !signupOtpVerified && setShowSignupOtp(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalCloseButton onClick={() => !signupOtpVerified && setShowSignupOtp(false)}>&times;</ModalCloseButton>
+            
+            {!signupOtpVerified ? (
+              <>
+                <ModalTitle>{t('verifyEmail', siteLang) || 'Verify Email'}</ModalTitle>
+                <ModalStepIndicator>{t('otpVerificationStep', siteLang) || 'Email Verification'}</ModalStepIndicator>
+                {signupOtpError && <ModalError>{signupOtpError}</ModalError>}
+                <p style={{textAlign: 'center', color: '#236902', fontSize: '0.9rem', marginBottom: '1rem'}}>
+                  {t('otpSentTo', siteLang) || 'OTP sent to'} {signupData.email}
+                </p>
+                <ModalInput
+                  type='text'
+                  placeholder={t('enterOtp', siteLang) || 'Enter 6-digit OTP'}
+                  value={signupOtp}
+                  onChange={(e) => setSignupOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength='6'
+                />
+                <ModalButton onClick={handleSignupVerifyOtp} disabled={signupOtpLoading || !signupOtp}>
+                  {signupOtpLoading ? 'Verifying...' : t('verifyOtp', siteLang) || 'Verify OTP'}
+                </ModalButton>
+              </>
+            ) : (
+              <>
+                <ModalTitle>{t('emailVerified', siteLang) || 'Email Verified'}</ModalTitle>
+                <ModalSuccess>{t('emailVerificationSuccess', siteLang) || 'Your email has been verified successfully!'}</ModalSuccess>
+                <p style={{textAlign: 'center', color: '#236902', marginBottom: '1rem'}}>
+                  {t('readyToSignup', siteLang) || 'Click the button below to complete your sign-up'}
+                </p>
+                <ModalButton onClick={handleCompleteSignup} disabled={signupOtpLoading}>
+                  {signupOtpLoading ? 'Creating Account...' : t('completeSignup', siteLang) || 'Complete Sign Up'}
+                </ModalButton>
+              </>
+            )}
+          </ModalContent>
+        </ModalOverlay>
+      )}
     </Container>
   );
 }

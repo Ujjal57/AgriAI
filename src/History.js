@@ -283,8 +283,11 @@ export default function History() {
                   <div key={o.invoice_id} style={{ border: '1px solid #eee', borderRadius: 8, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 14px', background: '#f7faf7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <div style={{ fontWeight: 800, color: '#236902' }}>{(t('invoiceLabel', siteLang) || 'Invoice') + ': '}{o.invoice_id}</div>
-                        <div style={{ color: '#333' }}>{t('dateLabel', siteLang) || 'Date'}: {formatDateTime(o.created_at)}</div>
+                        <div style={{ fontWeight: 800, color: '#236902' }}>
+                        {((o.payment_method === 'contract' || o.contract_number) ? (t('contractLabel', siteLang) || 'Contract') : (t('invoiceLabel', siteLang) || 'Invoice')) + ': '}
+                        {o.invoice_id || o.contract_number}
+                      </div>
+                        <div style={{ color: '#333' }}>{t('dateLabel', siteLang) || 'Date'}: {(new Date(o.created_at)).toLocaleDateString()}</div>
                         <div style={{ background: '#eaf6ea', color: '#236902', padding: '4px 8px', borderRadius: 999, fontWeight: 700 }}>
                           {o.payment_method === 'cod' ? (t('cashOnDelivery', siteLang) || 'Cash on Delivery') : (t('online', siteLang) || 'Online')}
                         </div>

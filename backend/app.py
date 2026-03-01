@@ -1011,6 +1011,58 @@ def verify_otp():
         return jsonify({'ok': False, 'error': 'internal_error'}), 500
 
 
+@app.route('/auth/reset-password', methods=['POST'])
+def reset_password():
+    """Reset password for a user after OTP verification."""
+    try:
+        data = request.get_json() or {}
+        email = (data.get('email') or '').strip().lower()
+        password = (data.get('password') or '').strip()
+
+        if not email or not password:
+            return jsonify({'ok': False, 'error': 'email_and_password_required'}), 400
+
+        if len(password) < 4:
+            return jsonify({'ok': False, 'error': 'password_too_short'}), 400
+
+        # Find user by email
+        tbl, row = find_user_by_email(email)
+        if not row:
+            return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+
+        user_id = row[0]
+
+        # Hash the new password
+        try:
+            pw_bytes = password.encode('utf-8')
+            salt = bcrypt.gensalt()
+            hashed = bcrypt.hashpw(pw_bytes, salt).decode('utf-8')
+        except Exception as e:
+            print('Password hashing failed:', e)
+            return jsonify({'ok': False, 'error': 'internal_error'}), 500
+
+        # Update password in the database
+        kind, conn = get_db_connection()
+        try:
+            if kind == 'mysql':
+                cur = get_cursor(kind, conn)
+                cur.execute(f"UPDATE {tbl} SET password_hash=%s WHERE id=%s", (hashed, user_id))
+                conn.commit()
+            else:
+                cur = get_cursor(kind, conn)
+                cur.execute(f"UPDATE {tbl} SET password_hash=? WHERE id=?", (hashed, user_id))
+                conn.commit()
+            conn.close()
+        except Exception as e:
+            print('Password update failed:', e)
+            return jsonify({'ok': False, 'error': 'update_failed'}), 500
+
+        return jsonify({'ok': True, 'message': 'password_reset_success'}), 200
+    except Exception as e:
+        print('reset_password error:', e)
+        return jsonify({'ok': False, 'error': 'internal_error'}), 500
+
+
     def ensure_user_tables():
         """Create farmer, buyer and admin tables in the selected DB if they do not exist."""
         kind, conn = get_db_connection()
@@ -1978,6 +2030,9 @@ def ensure_contracts_table():
                   buyer_platform_fee DECIMAL(12,2) DEFAULT 0,
                   buyer_gst DECIMAL(12,2) DEFAULT 0,
                   delivery_cost VARCHAR(255) DEFAULT NULL,
+                  status VARCHAR(50) DEFAULT 'pending',
+                  signature_method VARCHAR(100) DEFAULT NULL,
+                  signature_timestamp DATETIME DEFAULT NULL,
                   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                   PRIMARY KEY (id),
@@ -2026,6 +2081,9 @@ def ensure_contracts_table():
                     buyer_platform_fee REAL DEFAULT 0,
                     buyer_gst REAL DEFAULT 0,
                     delivery_cost TEXT DEFAULT NULL,
+                    status TEXT DEFAULT 'pending',
+                    signature_method TEXT DEFAULT NULL,
+                    signature_timestamp DATETIME DEFAULT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -3072,7 +3130,8 @@ def farmer_contracts():
                 if farmer_id:
                     cur.execute('''
                         SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
-                               quantity_kg as total_quantity, amount as total_amount, contract_number, created_at as contract_datetime
+                               quantity_kg as total_quantity, amount as total_amount, contract_number, created_at as contract_datetime,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status
                         FROM contracts 
                         WHERE farmer_id=%s 
                         ORDER BY created_at DESC
@@ -3080,7 +3139,8 @@ def farmer_contracts():
                 else:
                     cur.execute('''
                         SELECT c.farmer_id, c.farmer_name, c.farmer_state, c.buyer_id, c.buyer_name, c.buyer_state,
-                               c.quantity_kg as total_quantity, c.amount as total_amount, c.contract_number, c.created_at as contract_datetime
+                               c.quantity_kg as total_quantity, c.amount as total_amount, c.contract_number, c.created_at as contract_datetime,
+                               c.farmer_platform_fee, c.farmer_gst, c.buyer_platform_fee, c.buyer_gst, c.buyer_total, c.farmer_total, c.delivery_cost, c.status
                         FROM contracts c
                         WHERE c.farmer_id IN (SELECT id FROM farmer WHERE email=%s LIMIT 1)
                         ORDER BY c.created_at DESC
@@ -3094,7 +3154,8 @@ def farmer_contracts():
                 if farmer_id:
                     cur.execute('''
                         SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
-                               quantity_kg as total_quantity, amount as total_amount, contract_number, created_at as contract_datetime
+                               quantity_kg as total_quantity, amount as total_amount, contract_number, created_at as contract_datetime,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status
                         FROM contracts 
                         WHERE farmer_id=? 
                         ORDER BY created_at DESC
@@ -3102,7 +3163,8 @@ def farmer_contracts():
                 else:
                     cur.execute('''
                         SELECT c.farmer_id, c.farmer_name, c.farmer_state, c.buyer_id, c.buyer_name, c.buyer_state,
-                               c.quantity_kg as total_quantity, c.amount as total_amount, c.contract_number, c.created_at as contract_datetime
+                               c.quantity_kg as total_quantity, c.amount as total_amount, c.contract_number, c.created_at as contract_datetime,
+                               c.farmer_platform_fee, c.farmer_gst, c.buyer_platform_fee, c.buyer_gst, c.buyer_total, c.farmer_total, c.delivery_cost, c.status
                         FROM contracts c
                         WHERE c.farmer_id IN (SELECT id FROM farmer WHERE email=? LIMIT 1)
                         ORDER BY c.created_at DESC
@@ -6724,7 +6786,28 @@ def save_contract():
     farmer_gst = float(data.get('farmer_gst') or 0)
     buyer_platform_fee = float(data.get('buyer_platform_fee') or 0)
     buyer_gst = float(data.get('buyer_gst') or 0)
-    delivery_cost = float(data.get('delivery_cost') or 0)
+    # compute totals if not explicitly provided: buyer_total = amount + buyer fees; farmer_total = amount - farmer fees
+    try:
+        buyer_total = float(data.get('buyer_total')) if (data.get('buyer_total') is not None) else (amount + buyer_platform_fee + buyer_gst)
+    except Exception:
+        buyer_total = (amount + buyer_platform_fee + buyer_gst)
+    try:
+        farmer_total = float(data.get('farmer_total')) if (data.get('farmer_total') is not None) else (amount - farmer_platform_fee - farmer_gst)
+    except Exception:
+        farmer_total = (amount - farmer_platform_fee - farmer_gst)
+    
+    # Handle delivery_cost - can be a string like "₹18 / km" or numeric
+    delivery_cost_raw = data.get('delivery_cost') or ''
+    try:
+        # Try to extract numeric value if it's a formatted string
+        if isinstance(delivery_cost_raw, str) and delivery_cost_raw:
+            numeric_val = float(''.join(c for c in delivery_cost_raw if c.isdigit() or c == '.'))
+            delivery_cost = numeric_val
+        else:
+            delivery_cost = float(delivery_cost_raw or 0)
+    except:
+        # If conversion fails, keep original string (database column is VARCHAR)
+        delivery_cost = delivery_cost_raw or None
     
     # Convert dates from DD/MM/YYYY format to YYYY-MM-DD
     def convert_date_format(date_str):
@@ -6848,12 +6931,12 @@ def save_contract():
             'farmer_gst': farmer_gst or 0,
             'buyer_platform_fee': buyer_platform_fee or 0,
             'buyer_gst': buyer_gst or 0,
-            'delivery_cost': delivery_cost or None
-            ,
-            # optional signature fields (if present in payload and table)
-            'digital_signature': (data.get('digital_signature') or data.get('signature_hash') or None),
+            'buyer_total': buyer_total,
+            'farmer_total': farmer_total,
+            'delivery_cost': delivery_cost or None,
+            # optional signature and status fields (if present in payload and table)
+            'status': (data.get('status') or 'pending'),
             'signature_method': (data.get('signature_method') or None),
-            'signature_email': (data.get('signature_email') or None),
             'signature_timestamp': (data.get('signature_timestamp') or None)
         }
 

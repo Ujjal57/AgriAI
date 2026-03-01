@@ -215,10 +215,11 @@ CREATE TABLE IF NOT EXISTS contracts (
   farmer_gst DECIMAL(12,2) DEFAULT 0,
   buyer_platform_fee DECIMAL(12,2) DEFAULT 0,
   buyer_gst DECIMAL(12,2) DEFAULT 0,
+  buyer_total DECIMAL(12,2) DEFAULT NULL,
+  farmer_total DECIMAL(12,2) DEFAULT NULL,
   delivery_cost VARCHAR(255) DEFAULT NULL,
-  digital_signature VARCHAR(1024) DEFAULT NULL,
+  status VARCHAR(50) DEFAULT 'pending',
   signature_method VARCHAR(100) DEFAULT NULL,
-  signature_email VARCHAR(255) DEFAULT NULL,
   signature_timestamp DATETIME DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -278,6 +279,9 @@ ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `digital_signature` VARCHAR(102
 ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `signature_method` VARCHAR(100) DEFAULT NULL;
 ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `signature_email` VARCHAR(255) DEFAULT NULL;
 ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `signature_timestamp` DATETIME DEFAULT NULL;
+-- Add buyer_total and farmer_total to contracts if missing
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `buyer_total` DECIMAL(12,2) DEFAULT NULL;
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `farmer_total` DECIMAL(12,2) DEFAULT NULL;
 
 -- Populate existing cart rows with the crop category when possible (one-time idempotent update)
 UPDATE `cart` c

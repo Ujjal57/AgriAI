@@ -235,8 +235,8 @@ const FarmerCart = () => {
       // Hindi block
       updated = updated.replace(/<p>किसान \/ उत्पादक<\/p>\s*<p>हस्ताक्षर:[\s\S]*?<\/p>\s*<p>तिथि:[\s\S]*?<\/p>/m, `<p>किसान / उत्पादक</p>\n  <p>हस्ताक्षर: <strong>${name}</strong></p>\n  <p>तिथि: <strong>${formatted}</strong></p>`);
 
-      // Kannada block (if present)
-      updated = updated.replace(/<p>ಕಿಸಾನ್ \/ ಉತ್ಪಾದಕ<\/p>\s*<p>ಸಹಿ:[\s\S]*?<\/p>\s*<p>ದಿನಾಂಕ:[\s\S]*?<\/p>/m, `<p>Farmer / Producer</p>\n  <p>Signature: <strong>${name}</strong></p>\n  <p>Date: <strong>${formatted}</strong></p>`);
+      // Kannada block (if present) - using correct Kannada labels
+      updated = updated.replace(/<p>ರೈತ \/ ಉತ್ಪಾದಕ<\/p>\s*<p>ಸಹಿ:[\s\S]*?<\/p>\s*<p>ದಿನಾಂಕ:[\s\S]*?<\/p>/m, `<p>ರೈತ / ಉತ್ಪಾದಕ</p>\n  <p>ಸಹಿ: <strong>${name}</strong></p>\n  <p>ದಿನಾಂಕ: <strong>${formatted}</strong></p>`);
 
       // Fallback: if no replacement occurred but template contains generic 'Signature: ______' lines
       if (updated === contractHtml) {
@@ -619,9 +619,10 @@ const FarmerCart = () => {
     email: localStorage.getItem('agriai_email') || ''
   };
 
-  const handleBuyNow = async () => {
+  const handleBuyNow = async (overridePaymentMethod = null) => {
     setPaymentError('');
-    if (!paymentMethod) {
+    const methodToUse = overridePaymentMethod || paymentMethod;
+    if (!methodToUse) {
       setPaymentError(t('selectPaymentMethod', siteLang));
       return;
     }
@@ -689,9 +690,27 @@ const FarmerCart = () => {
 
       // Save contract(s) to database and reduce buyer crop quantities
       try {
+        console.log('🔍 Starting contract save process...');
+        console.log('📋 contractMetadata:', contractMetadata);
+        console.log('📦 contractMetadata.crops:', contractMetadata?.crops);
         const failedSaves = [];
-        if (contractMetadata && contractMetadata.crops && Array.isArray(contractMetadata.crops)) {
-          for (const crop of contractMetadata.crops) {
+        
+        // Use contractMetadata.crops if available, otherwise build from items
+        const cropsToSave = (contractMetadata && contractMetadata.crops && Array.isArray(contractMetadata.crops)) 
+          ? contractMetadata.crops
+          : items.map(it => ({
+              id: it.id,
+              buyer_id: it.buyer_id,
+              crop_name: it.crop_name,
+              variety: it.variety || '',
+              quantity: Number(it.order_quantity || 0),
+              price_per_kg: Number(it.price_per_kg || 0),
+              amount: Number(it.order_quantity || 0) * Number(it.price_per_kg || 0)
+            }));
+        
+        if (cropsToSave && cropsToSave.length > 0) {
+          console.log(`✅ Found ${cropsToSave.length} crops to save as contracts`);
+          for (const crop of cropsToSave) {
             try {
               // Save contract to database
               const contractPayload = {
@@ -718,26 +737,53 @@ const FarmerCart = () => {
                 farmer_gst: contractMetadata.farmer_gst,
                 buyer_platform_fee: contractMetadata.buyer_platform_fee,
                 buyer_gst: contractMetadata.buyer_gst,
+                // compute per-crop buyer_total and farmer_total
+                buyer_total: (function() {
+                  try {
+                    const cropAmount = Number(crop.amount || 0);
+                    const subtotal = (summary && summary.subtotal) ? Number(summary.subtotal || 0) : 0;
+                    const buyerPlatformTotal = (contractMetadata.buyer_platform_fee != null) ? Number(contractMetadata.buyer_platform_fee) : (buyerTotals && buyerTotals.commission ? Number(buyerTotals.commission) : 0);
+                    const buyerGstTotal = (contractMetadata.buyer_gst != null) ? Number(contractMetadata.buyer_gst) : (buyerTotals && buyerTotals.gst ? Number(buyerTotals.gst) : 0);
+                    const share = (subtotal > 0) ? (cropAmount / subtotal) : 0;
+                    const bf = Math.round((buyerPlatformTotal * share + Number.EPSILON) * 100) / 100;
+                    const bg = Math.round((buyerGstTotal * share + Number.EPSILON) * 100) / 100;
+                    return Math.round((cropAmount + bf + bg + Number.EPSILON) * 100) / 100;
+                  } catch (e) { return null; }
+                })(),
+                farmer_total: (function() {
+                  try {
+                    const cropAmount = Number(crop.amount || 0);
+                    // try to find matching orderItem (has platform_fee and gst)
+                    const match = (orderItems || []).find(it => (it.crop_name === crop.crop_name && Number(it.order_quantity || 0) === Number(crop.quantity || 0)));
+                    const fpf = match ? Number(match.platform_fee || 0) : Number(contractMetadata.farmer_platform_fee || 0);
+                    const fg = match ? Number(match.gst || 0) : Number(contractMetadata.farmer_gst || 0);
+                    return Math.round((cropAmount - fpf - fg + Number.EPSILON) * 100) / 100;
+                  } catch (e) { return null; }
+                })(),
                 delivery_cost: contractMetadata.delivery_cost,
-                // Digital Signature Fields
-                ...(digitalSignature && {
-                  digital_signature: digitalSignature.signature_hash,
+                // Status and Signature Method/Timestamp (set after OTP verification)
+                ...(digitalSignature ? {
+                  status: 'pending',
                   signature_method: digitalSignature.signature_method,
-                  signature_email: digitalSignature.signer_email,
                   signature_timestamp: digitalSignature.signature_timestamp
+                } : {
+                  status: 'pending'
                 })
-              };
-              
+              };              
               let saveRes = null;
               try {
+                console.log('📤 Sending contract payload for:', crop.crop_name);
                 saveRes = await fetch(`${apiBase}/contracts/save`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(contractPayload)
                 });
+                console.log('📨 Response status:', saveRes.status, saveRes.statusText);
                 const text = await (saveRes.text ? saveRes.text() : Promise.resolve(null)).catch(() => null);
                 let bodyJson = null;
-                try { bodyJson = text ? JSON.parse(text) : null; } catch (e) { }
+                try { bodyJson = text ? JSON.parse(text) : null; } catch (e) { 
+                  console.warn('   Could not parse response as JSON:', text?.substring(0, 200));
+                }
                 if (saveRes && saveRes.ok) {
                   console.log('✅ Contract saved successfully', bodyJson || text || saveRes.status);
                   // IMPORTANT: Capture contract_number from database response
@@ -746,7 +792,10 @@ const FarmerCart = () => {
                     console.log('📌 Using contract_number from database:', savedContractNumber);
                   }
                 } else {
-                  console.warn('❌ Failed to save contract:', saveRes ? saveRes.status : 'no-response', bodyJson || text);
+                  console.warn('❌ Failed to save contract for crop:', crop.crop_name);
+                  console.warn('   Status:', saveRes ? saveRes.status : 'no-response');
+                  console.warn('   Error response:', bodyJson || text);
+                  console.warn('   Payload sent:', JSON.stringify(contractPayload, null, 2));
                   failedSaves.push({ payload: contractPayload, status: saveRes ? saveRes.status : 'no-response', body: bodyJson || text });
                 }
               } catch (e) {
@@ -779,10 +828,23 @@ const FarmerCart = () => {
               console.warn('Error reducing buyer crop quantity:', e);
             }
           }
+        } else {
+          console.warn('⚠️ No crops found to save as contracts. contractMetadata:', contractMetadata, 'items:', items);
         }
         if (failedSaves.length) {
           console.warn('Some contract rows failed to save:', failedSaves);
-          try { alert(`${failedSaves.length} contract row(s) failed to save to server — check console for details.`); } catch (e) {}
+          // Build detailed error message for user
+          let errorMsg = `${failedSaves.length} contract row(s) failed to save:\n\n`;
+          failedSaves.forEach((fail, idx) => {
+            const crop = fail.payload?.crop_name || 'Unknown';
+            const status = fail.status || 'unknown';
+            const errorDetail = (fail.body && typeof fail.body === 'string' && fail.body.includes('error')) 
+              ? fail.body.substring(0, 100) 
+              : (fail.body?.error || fail.body?.message || '');
+            errorMsg += `${idx + 1}. ${crop}\n   Status: ${status}\n   Error: ${errorDetail || 'Server returned no error message'}\n\n`;
+          });
+          console.error('📋 Failed saves full details:\n', failedSaves);
+          try { alert(errorMsg + 'Please check console for full details.'); } catch (e) {}
         }
       } catch (e) {
         console.warn('Error processing contracts/quantities:', e);
@@ -794,6 +856,11 @@ const FarmerCart = () => {
         const contractNumberToUse = savedContractNumber || contractMetadata.contract_number || ('CNT' + Date.now());
         console.log('📝 Saving order to history with contract_number:', contractNumberToUse);
         
+        // derive buyer fee and payable total so they can be stored in the history record
+        const buyerFeeTotal = (contractMetadata && (contractMetadata.buyer_platform_fee || contractMetadata.buyer_platform_fee === 0)) ? (contractMetadata.buyer_platform_fee || 0) + (contractMetadata.buyer_gst || 0) : ((summary && summary.platform_fee) ? summary.platform_fee : 0);
+        const buyerPayable = (summary && summary.subtotal != null ? summary.subtotal : 0) + (typeof buyerFeeTotal === 'number' ? buyerFeeTotal : 0);
+
+        // record to save in both farmer and buyer history
         const orderRecord = {
           contract_number: contractNumberToUse,
           invoice_id: contractNumberToUse,
@@ -801,14 +868,71 @@ const FarmerCart = () => {
           payment_method: 'contract',
           buyer,
           items: orderItems,
-          totals: { ...summary, grand_total }
+          // totals reflect buyer payable amount (subtotal + buyer fees)
+          totals: {
+            subtotal: summary.subtotal,
+            platform_fee: buyerFeeTotal,
+            gst: 0,
+            grand_total: buyerPayable
+          }
         };
         
-        const rawHist = localStorage.getItem('agriai_history_farmer');
-        const hist = rawHist ? JSON.parse(rawHist) : [];
-        const nextHist = [orderRecord, ...(Array.isArray(hist) ? hist : [])];
-        localStorage.setItem('agriai_history_farmer', JSON.stringify(nextHist));
-        console.log('✓ Order saved to history with database contract_number');
+        const rawHistFarmer = localStorage.getItem('agriai_history_farmer');
+        const histFarmer = rawHistFarmer ? JSON.parse(rawHistFarmer) : [];
+        const nextHistFarmer = [orderRecord, ...(Array.isArray(histFarmer) ? histFarmer : [])];
+        localStorage.setItem('agriai_history_farmer', JSON.stringify(nextHistFarmer));
+        console.log('✓ Order saved to farmer history with database contract_number');
+
+        // ALSO add this record to buyer history so that the buyer sees it when logged in
+        try {
+          const rawHistBuyer = localStorage.getItem('agriai_history');
+          const histBuyer = rawHistBuyer ? JSON.parse(rawHistBuyer) : [];
+          const nextHistBuyer = [orderRecord, ...(Array.isArray(histBuyer) ? histBuyer : [])];
+          localStorage.setItem('agriai_history', JSON.stringify(nextHistBuyer));
+          console.log('✓ Order saved to buyer history (local storage)');
+        } catch (e) {
+          console.warn('Failed to add order to buyer history', e);
+        }
+
+        // send a server-side notification for the buyer so it appears in navbar
+        try {
+          // derive buyer fee and payable total for display/notification
+          const buyerFeeTotal = (contractMetadata.buyer_platform_fee || 0) + (contractMetadata.buyer_gst || 0);
+          const buyerPayable = (summary && summary.subtotal != null ? summary.subtotal : 0) + buyerFeeTotal;
+          const notifPayload = {
+            notif_type: 'contract',
+            buyer_id: orderRecord.buyer && orderRecord.buyer.id,
+            buyer_email: orderRecord.buyer && orderRecord.buyer.email,
+            buyer_name: orderRecord.buyer && orderRecord.buyer.name,
+            farmer_id: contractMetadata.farmer_id,
+            farmer_name: contractMetadata.farmer_name,
+            contract_number: contractNumberToUse,
+            contract_meta: contractMetadata,
+            items: orderItems,
+            buyer_fee_total: buyerFeeTotal,
+            total_amount_payable: buyerPayable
+          };
+          fetch(`${apiBase}/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notifPayload)
+          }).catch(() => {});
+          console.log('✓ Buyer notification posted to server');
+
+          // Also persist locally so buyer sees it immediately in navbar notifications
+          try {
+            const localKey = 'agriai_notifications';
+            const rawLocal = localStorage.getItem(localKey);
+            const localArr = rawLocal ? JSON.parse(rawLocal) : [];
+            const entry = { ...notifPayload, is_read: 0, id: (`local-${Date.now()}`) };
+            localArr.unshift(entry);
+            localStorage.setItem(localKey, JSON.stringify(localArr));
+            // notify navbar to refresh
+            try { window.dispatchEvent(new Event('agriai:notifications:local:update')); } catch (e) {}
+          } catch (e) {}
+        } catch (e) {
+          console.warn('Failed to post buyer notification', e);
+        }
       } catch (e) {
         console.warn('Warning: Failed to save order to localStorage:', e);
       }
@@ -826,6 +950,11 @@ const FarmerCart = () => {
   };
    const generateContract = async () => {
     try {
+      // pick up the current language from localStorage (ignore state latency)
+      const lang = localStorage.getItem('agri_lang') || 'en';
+      const langName = lang === 'en' ? 'English' : (lang === 'hi' ? 'हिंदी' : (lang === 'kn' ? 'ಕನ್ನಡ' : 'English'));
+      console.log('generateContract language', lang);
+
       // Attempt to obtain buyer and farmer details from localStorage / items
       let farmerName = localStorage.getItem('agriai_name') || '';
       let farmerEmail = localStorage.getItem('agriai_email') || '';
@@ -1120,7 +1249,7 @@ const FarmerCart = () => {
       <html>
 <head>
   <meta charset="utf-8" />
-  <title>Procurement Contract</title>
+  <title>AgriAI Contract</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     body {
@@ -1274,7 +1403,7 @@ const FarmerCart = () => {
   <p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(buyerPlatformFee)}</p>
   <p>प्लेटफ़ॉर्म शुल्क पर जीएसटी: ${formatCurrency(buyerGst)}</p>
   <p><strong>कुल देय राशि (जोड़कर): ${formatCurrency(buyerTotalAmount)}</strong></p>
-  <p>डिलीवरी / लॉजिस्टिक्स शुल्क (डिलीवरी के पश्चात देय): ${deliveryRateDisplay}</p>
+  
 
   <p><strong>5.3 भुगतान अनुसूची</strong></p>
   <p>कुल फसल व्यापार मूल्य का 25% खरीदार द्वारा अनुबंध पुष्टि के समय एग्रीएआई प्लेटफ़ॉर्म के माध्यम से अग्रिम के रूप में भुगतान किया जाएगा।</p>
@@ -1433,7 +1562,7 @@ const FarmerCart = () => {
   <h2>12. अनुबंध की भाषा</h2>
 
   <p>
-    यह अनुबंध किसान को ${siteLang === 'en' ? 'English' : (siteLang === 'hi' ? 'हिंदी' : (siteLang === 'kn' ? 'ಕನ್ನಡ' : 'English'))} (भाषा) में समझाया एवं अनुवादित किया गया है।
+    यह अनुबंध किसान को ${langName} (भाषा) में समझाया एवं अनुवादित किया गया है।
     किसी भी असंगति की स्थिति में अंग्रेज़ी संस्करण प्रभावी एवं मान्य होगा।
   </p>
 </section>
@@ -1454,19 +1583,463 @@ const FarmerCart = () => {
   <p>हस्ताक्षर: ___________________________</p>
   <p>तिथि: ___________________________</p>
 
-  <p>गवाह 1: ___________________________</p>
-  <p>गवाह 2: ___________________________</p>
+  <p>गवाह : <strong>एग्री एआई</strong></p>
 </section>
 
 </body>
 </html>`;
 
-      // Select template based on language
-      const html = siteLang === 'hi' ? htmlHi : `<!doctype html>
+      // Kannada contract HTML
+      const htmlKn = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AgriAI Contract</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #111;
+      padding: 24px;
+      line-height: 1.6;
+    }
+       h1 {
+      text-align: center;
+      color: #236902;
+      margin: 0;
+    }
+       h2 {
+      margin-top: 18px;
+    }
+       .section {
+      margin-top: 16px;
+    }
+      table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 12px;
+    }
+      th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+      th {
+      background: #f7f7f7;
+      text-align: left;
+    }
+      pre {
+      white-space: pre-wrap;
+      font-family: 'Times New Roman', Times, serif;
+    }
+  </style>
+</head>
+<body>
+<div style="text-align:center; margin-bottom:20px;">
+    <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
+    <h1>
+  ಅಗ್ರಿ AI<br/>
+  ಒಪ್ಪಂದ ಕೃಷಿ ಒಪ್ಪಂದ 
+</h1>
+
+</div>
+
+<section class="section">
+  <h2>ಪಕ್ಷಗಳು </h2>
+
+  <p><strong>ಪಕ್ಷ A – ಖರೀದಿದಾರ / ಕಂಪನಿ</strong></p>
+  <p><b>ಹೆಸರು:</b> ${buyerName}</p>
+  <p><b>ಖರೀದಿದಾರ ಐಡಿ:</b> ${buyerId || '[Buyer ID]'}</p>
+  <p><b>ವಿಳಾಸ:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
+
+  <p><strong>ಪಕ್ಷ B – ರೈತ / ಉತ್ಪಾದಕ</strong></p>
+  <p><b>ಹೆಸರು:</b> ${farmerName}</p>
+  <p><b>ರೈತ ಐಡಿ:</b> ${farmerId}</p>
+  <p><b>ವಿಳಾಸ:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
+
+  <p>
+    ಪಕ್ಷ A ಮತ್ತು ಪಕ್ಷ B ಒಟ್ಟಾಗಿ “ಪಕ್ಷಗಳು” ಎಂದು ಕರೆಯಲ್ಪಡುತ್ತವೆ.
+    ಅಗ್ರಿAI ಕೇವಲ ಡಿಜಿಟಲ್ ಸೌಲಭ್ಯ ಒದಗಿಸುವ ವೇದಿಕೆಯಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ ಮತ್ತು ಯಾವುದೇ ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ಸಾರಿಗೆದಾರ, ವಿಮೆದಾರ ಅಥವಾ ಯಾವುದಾದರೂ ಪಕ್ಷದ ಪ್ರತಿನಿಧಿಯಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುವುದಿಲ್ಲ.
+  </p>
+</section>
+
+<section class="section">
+  <h2>1. ಒಪ್ಪಂದದ ಉದ್ದೇಶ </h2>
+
+  <p>
+    ಈ ಒಪ್ಪಂದವು ರೈತನು ಕೃಷಿ ಉತ್ಪನ್ನಗಳನ್ನು ಉತ್ಪಾದಿಸಿ ಖರೀದಿದಾರರಿಗೆ ಪೂರೈಸಲು ಹಾಗೂ ಖರೀದಿದಾರನು ಪೂರ್ವನಿರ್ಧರಿತ ಬೆಲೆಗೆ ಆ ಉತ್ಪನ್ನಗಳನ್ನು ಖರೀದಿಸಲು ಒಪ್ಪಿಕೊಂಡಿರುವ ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳನ್ನು ವಿವರಿಸುತ್ತದೆ. ಇದರ ಮೂಲಕ ಕೆಳಗಿನ ಉದ್ದೇಶಗಳನ್ನು ಸಾಧಿಸಲಾಗುತ್ತದೆ:
+  </p>
+
+  <ul>
+    <li>ರೈತನಿಗೆ ಖಚಿತ ಮಾರುಕಟ್ಟೆ ಪ್ರವೇಶ</li>
+    <li>ನ್ಯಾಯಸಮ್ಮತ ಮತ್ತು ಪಾರದರ್ಶಕ ಬೆಲೆ ನಿಗದಿ</li>
+    <li>ಸಮಯೋಚಿತ ಮತ್ತು ಸುರಕ್ಷಿತ ಪಾವತಿ</li>
+    <li>ಮಧ್ಯವರ್ತಿಗಳ ಮೇಲಿನ ಅವಲಂಬನೆ ಕಡಿತ</li>
+  </ul>
+</section>
+<section class="section">
+  <h2>2. ಒಪ್ಪಂದದ ಪ್ರಕಾರ ಮತ್ತು ಅವಧಿ </h2>
+
+  <p>
+    ಒಪ್ಪಂದದ ಸ್ವರೂಪ:
+    ${contractNature === 'pre-harvest'
+      ? 'ಕೊಯ್ಲು ಪೂರ್ವ ಉತ್ಪಾದನಾ ಒಪ್ಪಂದ (Pre-Harvest Production Contract)'
+      : 'ಕೊಯ್ಲು ನಂತರ ಖರೀದಿ ಒಪ್ಪಂದ (Post-Harvest Procurement Contract)'}
+  </p>
+
+  <p>
+    ಒಪ್ಪಂದ ಅವಧಿ:
+    ${contractDuration === 'one-time'
+      ? 'ಒಮ್ಮೆ ಮಾತ್ರ (One-Time)'
+      : (contractDuration === 'seasonal'
+          ? 'ಋತು ಆಧಾರಿತ (Seasonal)'
+          : 'ವಾರ್ಷಿಕ (Yearly)')}
+  </p>
+
+  <p><b>ಪ್ರಾರಂಭ ದಿನಾಂಕ:</b> ${startDate}</p>
+  <p><b>ಅಂತಿಮ ದಿನಾಂಕ:</b> ${endDate}</p>
+  <p><b>ಒಟ್ಟು ಅವಧಿ:</b> ${days} ದಿನಗಳು</p>
+
+  <p>
+    ಈ ಕೊಯ್ಲು ನಂತರದ ಖರೀದಿ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ, ಕೃಷಿ ಉತ್ಪನ್ನವನ್ನು ಈ ಒಪ್ಪಂದವನ್ನು ಜಾರಿಗೆ ತರುವ ಮೊದಲುಲೇ ಬೆಳೆಯಲಾಗಿದ್ದು ಅಥವಾ ಕೊಯ್ಲು ಮಾಡಲಾಗಿದೆ. ಆದ್ದರಿಂದ, ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಯಾವುದೇ ಕೃಷಿ ಉತ್ಪಾದನಾ ಕर्तವ್ಯ ಅಥವಾ ಬೆಳೆ ಬೆಳೆಸುವ ಬಾಧ್ಯತೆ ಉಂಟಾಗುವುದಿಲ್ಲ.
+  </p>
+
+  <h3><strong>2.1 ಒಪ್ಪಂದ ಸ್ವೀಕೃತಿ ಮತ್ತು ಮಾತುಕತೆ ಅವಧಿ </strong></h3>
+
+  <p>
+    ಈ ಖರೀದಿ ಒಪ್ಪಂದವು ರೈತನು ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಖರೀದಿದಾರರಿಗೆ ಡಿಜಿಟಲ್ ರೀತಿಯಲ್ಲಿ ಕಳುಹಿಸಿದ ಸಮಯದಿಂದ ನಾಲ್ವತ್ತೆಂಟು (48) ಗಂಟೆಗಳ ಅವಧಿಯವರೆಗೆ ಸ್ವೀಕೃತಿಗಾಗಿ ಮಾನ್ಯವಾಗಿರುತ್ತದೆ.
+  </p>
+
+  <p>
+    ಈ 48 ಗಂಟೆಗಳ ಅವಧಿಯೊಳಗೆ, ಖರೀದಿದಾರನು ವೇದಿಕೆಯ ಮೂಲಕ ಕೆಳಗಿನ ಕ್ರಮಗಳಲ್ಲಿ ಒಂದನ್ನು ಕೈಗೊಳ್ಳಬೇಕು:
+  </p>
+
+  <ul>
+    <li>ಒಪ್ಪಂದವನ್ನು ಪ್ರಸ್ತುತ ರೂಪದಲ್ಲೇ ಸ್ವೀಕರಿಸುವುದು; ಅಥವಾ</li>
+    <li>ಒಪ್ಪಂದವನ್ನು ತಿರಸ್ಕರಿಸುವುದು; ಅಥವಾ</li>
+    <li>ಬೆಲೆ ಮಾತುಕತೆಗೆ ವಿನಂತಿಸುವುದು.</li>
+  </ul>
+
+  <p>
+    ಖರೀದಿದಾರನು 48 ಗಂಟೆಗಳ ಮಾನ್ಯ ಅವಧಿಯೊಳಗೆ ಯಾವುದೇ ಕ್ರಮ ಕೈಗೊಳ್ಳದಿದ್ದರೆ,
+    ಒಪ್ಪಂದವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅವಧಿ ಮುಗಿದಂತೆ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ ಮತ್ತು
+    ಯಾವುದೇ ಪಕ್ಷಕ್ಕೂ ಕಾನೂನುಬದ್ಧ ಅಥವಾ ಬಾಧ್ಯತೆಯ ಪರಿಣಾಮ ಉಂಟಾಗುವುದಿಲ್ಲ.
+  </p>
+
+  <p>
+    ಬೆಲೆ ಮಾತುಕತೆಗೆ ಸಂಬಂಧಿಸಿದ ಯಾವುದೇ ವಿನಂತಿ ಸಮಯ ಮಿತಿಯೊಳಗೆ ಪೂರ್ಣಗೊಳ್ಳಬೇಕು
+    ಮತ್ತು ಮಾತುಕತೆ ಪ್ರಾರಂಭವಾದ ಸಮಯದಿಂದ ನಾಲ್ವತ್ತೆಂಟು (48) ಗಂಟೆಗಳೊಳಗೆ
+    ಅಂತಿಮಗೊಳ್ಳಬೇಕು. ಈ ಅವಧಿಯೊಳಗೆ ಒಪ್ಪಂದ ಸಾಧಿಸಲ್ಪಡದಿದ್ದರೆ,
+    ಮಾತುಕತೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ರದ್ದು ಆಗುತ್ತದೆ ಮತ್ತು ಒಪ್ಪಂದವೂ
+    ರದ್ದುಗೊಂಡಂತೆ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
+  </p>
+</section>
+
+<section class="section">
+  <h2>3. ಡೇಟಾ ಗೌಪ್ಯತೆ ಮತ್ತು ವೇದಿಕೆ ಅನುಸರಣೆ </h2>
+
+  <p>
+    ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಸಂಗ್ರಹಿಸಲಾದ ಎಲ್ಲಾ ವೈಯಕ್ತಿಕ,
+    ಕೃಷಿ ಸಂಬಂಧಿತ ಮತ್ತು ವ್ಯವಹಾರ ಸಂಬಂಧಿತ ಮಾಹಿತಿಯನ್ನು:
+  </p>
+
+  <ul>
+    <li>ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ</li>
+    <li>ಕೆಳಗಿನ ಉದ್ದೇಶಗಳಿಗೆ ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ:</li>
+    <li>ಒಪ್ಪಂದ ಜಾರಿಗೆ ಮತ್ತು ನವೀಕರಣಕ್ಕೆ</li>
+    <li>ಪಾವತಿ ಸಮನ್ವಯ ಮತ್ತು ಪರಿಹಾರಕ್ಕಾಗಿ</li>
+    <li>ವಿಮೆ ಸೌಲಭ್ಯ ಒದಗಿಸಲು</li>
+    <li>ಕಾನೂನು ಮತ್ತು ನಿಯಂತ್ರಣ ಅನುಸರಣೆಗೆ</li>
+  </ul>
+
+  <p>
+    ಈ ಒಪ್ಪಂದವು ಡಿಜಿಟಲ್ ಪರ್ಸನಲ್ ಡೇಟಾ ಪ್ರೊಟೆಕ್ಷನ್ ಕಾಯ್ದೆ, 2023
+    (Digital Personal Data Protection Act, 2023) ಗೆ ಸಂಪೂರ್ಣವಾಗಿ ಅನುಗುಣವಾಗಿದೆ.
+  </p>
+</section>
+<section class="section">
+  <h2>4. ವಸ್ತು ವಿವರಗಳು </h2>
+
+  <table style="border-collapse:collapse;width:100%;margin-top:12px;">
+    <thead>
+      <tr>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಕ್ರಮ ಸಂಖ್ಯೆ</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಬೆಳೆ ಹೆಸರು</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">ವೈವಿಧ್ಯ (Variety)</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಪ್ರಮಾಣ</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಬೆಲೆ (₹/ಕೆಜಿ)</th>
+        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಮೊತ್ತ</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+</section>
+
+<section class="section">
+  <h2>5. ಬೆಲೆ ಮತ್ತು ಪಾವತಿ ನಿಯಮಗಳು </h2>
+
+  <p><strong>5.1 ರೈತ </strong></p>
+  <p>ಒಟ್ಟು ಪ್ರಮಾಣ: ${totalContractQty.toLocaleString('en-IN')} ಕೆಜಿ</p>
+  <p>ಬೆಲೆ: ${formatCurrency(avgPricePerKg)} ಪ್ರತಿ ಕೆಜಿ</p>
+  <p>ವೇದಿಕೆ ಶುಲ್ಕ (Platform Fee): ${formatCurrency(totalPlatformFee)}</p>
+  <p>ವೇದಿಕೆ ಶುಲ್ಕದ ಮೇಲೆ GST: ${formatCurrency(totalGst)}</p>
+  <p><strong>ಒಟ್ಟು ಮೊತ್ತ (ಕಡಿತದ ನಂತರ): ${formatCurrency(totalAmountInvoice)}</strong></p>
+
+  <p><strong>5.2 ಖರೀದಿದಾರ </strong></p>
+  <p>ಒಟ್ಟು ಪ್ರಮಾಣ: ${totalContractQty.toLocaleString('en-IN')} ಕೆಜಿ</p>
+  <p>ಬೆಲೆ: ${formatCurrency(avgPricePerKg)} ಪ್ರತಿ ಕೆಜಿ</p>
+  <p>ವೇದಿಕೆ ಶುಲ್ಕ (Platform Fee): ${formatCurrency(buyerPlatformFee)}</p>
+  <p>ವೇದಿಕೆ ಶುಲ್ಕದ ಮೇಲೆ GST: ${formatCurrency(buyerGst)}</p>
+  <p><strong>ಒಟ್ಟು ಮೊತ್ತ (ಸೇರಿಕೆಯ ನಂತರ): ${formatCurrency(buyerTotalAmount)}</strong></p>
+
+  <p><strong>5.3 ಪಾವತಿ ವೇಳಾಪಟ್ಟಿ </strong></p>
+
+  <p>
+    ಒಟ್ಟು ಬೆಳೆ ವಹಿವಾಟಿನ ಮೌಲ್ಯದ 25% ಅನ್ನು ಖರೀದಿದಾರನು
+    ಒಪ್ಪಂದ ದೃಢೀಕರಣದ ಸಮಯದಲ್ಲಿ ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಮುಂಗಡವಾಗಿ ಪಾವತಿಸಬೇಕು.
+  </p>
+
+  <p>
+    ಒಟ್ಟು ಬೆಳೆ ವಹಿವಾಟಿನ ಮೌಲ್ಯದ 50% ಅನ್ನು ಉತ್ಪನ್ನದ
+    ಯಶಸ್ವಿ ವಿತರಣೆಯ ತಕ್ಷಣ ಪಾವತಿಸಬೇಕು.
+  </p>
+
+  <p>
+    ಉತ್ಪನ್ನದ ಗುಣಮಟ್ಟ ಪರಿಶೀಲನೆ ಮತ್ತು ಅಧಿಕೃತ ಸ್ವೀಕೃತಿಯ ನಂತರ
+    ಉಳಿದ 25% ಮೊತ್ತವನ್ನು 7 (ಏಳು) ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಪಾವತಿಸಬೇಕು.
+  </p>
+
+  <p><strong>5.4 ಪಾವತಿ ವಿಧಾನ </strong></p>
+
+  <p>ಬ್ಯಾಂಕ್ ವರ್ಗಾವಣೆ / UPI / ಚೆಕ್</p>
+
+  <p>
+    ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಮಾಡಿದ ಎಲ್ಲಾ ಪಾವತಿಗಳಿಗೆ ಖರೀದಿದಾರನು
+    ಡಿಜಿಟಲ್ ಅಥವಾ ಭೌತಿಕ ರಸೀದಿಗಳನ್ನು ನೀಡಬೇಕು.
+  </p>
+
+</section>
+<section class="section">
+  <h2>6. ವಿತರಣೆ, ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಮತ್ತು ಸಾರಿಗೆ </h2>
+
+  <p><strong>6.1 ಅಗ್ರಿAI ಯ ಪಾತ್ರ </strong></p>
+  <p>
+    ಅಗ್ರಿAI ಖರೀದಿದಾರರು ಮತ್ತು ರೈತರ ನಡುವೆ ವ್ಯವಹಾರಗಳನ್ನು ಸುಗಮಗೊಳಿಸುವ
+    ಡಿಜಿಟಲ್ ತಂತ್ರಜ್ಞಾನ ವೇದಿಕೆಯಾಗಿ ಮಾತ್ರ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ.
+    ಅಗ್ರಿAI ಅನ್ನು ಯಾವುದೇ ಸಂದರ್ಭದಲ್ಲೂ ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ವ್ಯಾಪಾರಿ,
+    ಕಮಿಷನ್ ಏಜೆಂಟ್, ಸಾರಿಗೆದಾರ ಅಥವಾ ಸರಕುಗಳ ಸಂರಕ್ಷಕ ಎಂದು ಪರಿಗಣಿಸಲಾಗುವುದಿಲ್ಲ.
+    ಮಾರಾಟ ಮತ್ತು ಖರೀದಿಗೆ ಸಂಬಂಧಿಸಿದ ಎಲ್ಲಾ ಬಾಧ್ಯತೆಗಳು ಸಂಪೂರ್ಣವಾಗಿ
+    ಸಂಬಂಧಿತ ಪಕ್ಷಗಳ ನಡುವೆಯೇ ಇರುತ್ತವೆ.
+  </p>
+
+  <p><strong>6.2 ವಿತರಣಾ ಸೌಲಭ್ಯ </strong></p>
+  <p>
+    ಸಾರಿಗೆ ಸೇವೆಯನ್ನು ಅಗ್ರಿAI ವೇದಿಕೆಯಲ್ಲಿ ಲಭ್ಯವಿರುವ ಅಥವಾ ಅನುಮೋದಿತ
+    ತೃತೀಯ ಪಕ್ಷ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಸೇವಾ ಪೂರೈಕೆದಾರರ ಮೂಲಕ ವ್ಯವಸ್ಥೆ ಮಾಡಲಾಗುತ್ತದೆ.
+    ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರ ಹಾಗೂ ವಾಹನದ ಆಯ್ಕೆ ಬೆಳೆ ಸ್ವರೂಪ,
+    ಪ್ರಮಾಣ, ದೂರ ಮತ್ತು ನಿರ್ವಹಣಾ ಅಗತ್ಯತೆಗಳ ಆಧಾರದ ಮೇಲೆ ನಿರ್ಧರಿಸಲಾಗುತ್ತದೆ.
+  </p>
+
+  <p><strong>6.3 ವಿತರಣಾ ಶುಲ್ಕಗಳು </strong></p>
+  <p>
+    ವಿತರಣಾ ಶುಲ್ಕಗಳನ್ನು ತೃತೀಯ ಪಕ್ಷ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರು
+    ನಿಜವಾದ ದೂರ, ವಾಹನದ ಪ್ರಕಾರ, ಲೋಡಿಂಗ್ ಅಗತ್ಯತೆಗಳು ಮತ್ತು ಸ್ಥಳದ ಆಧಾರದ ಮೇಲೆ ನಿರ್ಧರಿಸುತ್ತಾರೆ.
+    ಈ ಶುಲ್ಕಗಳನ್ನು ಖರೀದಿದಾರನು ನೇರವಾಗಿ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರಿಗೆ ಪಾವತಿಸಬೇಕು.
+    ವಿತರಣಾ ಬೆಲೆ ನಿರ್ಧಾರ ಅಥವಾ ಮಾತುಕತೆಯಲ್ಲಿ ಅಗ್ರಿAI ಯಾವುದೇ ಜವಾಬ್ದಾರಿಯನ್ನು ಹೊಂದಿರುವುದಿಲ್ಲ.
+  </p>
+
+  <p><strong>6.4 ಅಪಾಯದ ವರ್ಗಾವಣೆ </strong></p>
+  <p>
+    ಸಾಗಣೆಯ ಅವಧಿಯಲ್ಲಿ ಉತ್ಪನ್ನದ ಅಪಾಯ ಮತ್ತು ಜವಾಬ್ದಾರಿ
+    ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರಲ್ಲೇ ಇರುತ್ತದೆ.
+    ಯಶಸ್ವಿ ವಿತರಣೆ ಹಾಗೂ ಸಹಿ ಮಾಡಲಾದ ವಿತರಣಾ ದೃಢೀಕರಣ (Proof of Delivery – POD)
+    ನಂತರ ಮಾತ್ರ ಅಪಾಯವು ಖರೀದಿದಾರರಿಗೆ ವರ್ಗಾಯಿಸಲಾಗುತ್ತದೆ.
+  </p>
+
+  <p><strong>6.5 ವಿಳಂಬ, ಹಾನಿ ಮತ್ತು ನಷ್ಟ </strong></p>
+  <p>
+    ಸಾಗಣೆ ವೇಳೆ ಉಂಟಾಗುವ ಯಾವುದೇ ವಿಳಂಬ, ಹಾನಿ, ಕೊರತೆ ಅಥವಾ ನಷ್ಟವು
+    ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರ ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳ ಪ್ರಕಾರ ನಿರ್ವಹಿಸಲಾಗುತ್ತದೆ.
+    ಇಂತಹ ಯಾವುದೇ ದಾವೆಗಳಿಗೆ ಅಗ್ರಿAI ಜವಾಬ್ದಾರಿಯಾಗಿರುವುದಿಲ್ಲ.
+  </p>
+
+  <p><strong>6.6 ವಿತರಣಾ ದೃಢೀಕರಣ </strong></p>
+  <p>
+    ವಿತರಣೆಯನ್ನು ಭೌತಿಕ ರಸೀದಿ, ಡಿಜಿಟಲ್ ದೃಢೀಕರಣ ಮತ್ತು/ಅಥವಾ
+    ಅಗ್ರಿAI ವೇದಿಕೆಯಲ್ಲಿ ದಾಖಲಾಗುವ ಎಲೆಕ್ಟ್ರಾನಿಕ್ POD ಮೂಲಕ ದೃಢೀಕರಿಸಲಾಗುತ್ತದೆ.
+    ಅಗ್ರಿAI ನಿರ್ವಹಿಸುವ ಡಿಜಿಟಲ್ ದಾಖಲೆಗಳು ಮಾನ್ಯವಾದ
+    ವಿತರಣಾ ಸಾಕ್ಷ್ಯವಾಗಿ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
+  </p>
+
+</section>
+<section class="section">
+  <h2>7. ಗುಣಮಟ್ಟದ ಮಾನದಂಡಗಳು, ಪರಿಶೀಲನೆ ಮತ್ತು ಸ್ವೀಕೃತಿ
+   
+  </h2>
+
+  <p>
+    ಪೂರೈಸಲಾಗುವ ಕೃಷಿ ಉತ್ಪನ್ನವು ಈ ಒಪ್ಪಂದದಲ್ಲಿ ಪರಸ್ಪರ ಒಪ್ಪಿಕೊಂಡಿರುವ
+    ನಿರ್ದಿಷ್ಟ ಗುಣಮಟ್ಟದ ಮಾನದಂಡಗಳನ್ನು ಪೂರೈಸಿರಬೇಕು.
+  </p>
+
+  <p>
+    ವಿತರಣೆಯ ದಿನಾಂಕದಿಂದ 3 (ಮೂರು) ಕಾರ್ಯದಿನಗಳೊಳಗೆ
+    ಖರೀದಿದಾರನು ಗುಣಮಟ್ಟ ಪರಿಶೀಲನೆಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಬೇಕು.
+  </p>
+
+  <p>
+    ಯಾವುದೇ ತಿರಸ್ಕಾರವನ್ನು ಪರಿಶೀಲನಾ ಅವಧಿಯೊಳಗೆ ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ
+    ಲಿಖಿತ ರೂಪದಲ್ಲಿ ಸಲ್ಲಿಸಬೇಕು ಹಾಗೂ ಮಾನ್ಯ ಮತ್ತು ಪರಿಶೀಲಿಸಬಹುದಾದ
+    ಕಾರಣಗಳನ್ನು ಸ್ಪಷ್ಟವಾಗಿ ಉಲ್ಲೇಖಿಸಬೇಕು.
+  </p>
+
+  <p>
+    3 ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಯಾವುದೇ ವಿವಾದ ದಾಖಲಿಸಲಾಗದಿದ್ದರೆ,
+    ಉತ್ಪನ್ನವನ್ನು ಸ್ವೀಕರಿಸಲಾಗಿದೆ ಎಂದು ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
+  </p>
+
+  <p>
+    ಸಮರ್ಥನೀಯ ತಿರಸ್ಕಾರದ ಸಂದರ್ಭದಲ್ಲಿ, ದೋಷವು ಸಾಗಣೆಗೆ ಮುನ್ನವೇ ಉಂಟಾಗಿದೆ
+    ಎಂದು ಸಾಬೀತಾಗದ ಹೊರತು, ಮರಳಿ ಸಾಗಣೆ ವೆಚ್ಚವನ್ನು ಖರೀದಿದಾರನು ಭರಿಸಬೇಕು.
+  </p>
+</section>
+
+<section class="section">
+  <h2>8. ಅಪಾಯ, ಜವಾಬ್ದಾರಿ ಮತ್ತು ವಿಮೆ
+    
+  </h2>
+
+  <p>
+    ರೈತನು ಸಾಮಾನ್ಯ ಕೃಷಿ ಮತ್ತು ಕೊಯ್ಲಿನ ನಂತರದ
+    ಪ್ರಮಾಣಿತ ವಿಧಾನಗಳನ್ನು ಅನುಸರಿಸಬೇಕು.
+  </p>
+
+  <p>
+    ಸಾಗಣೆಗೆ ಮುನ್ನ ಪ್ರಕೃತಿ ವಿಕೋಪಗಳು ಅಥವಾ ಫೋರ್ಸ್ ಮಜ್ಯೂರ್
+    (Force Majeure) ಪರಿಸ್ಥಿತಿಗಳಿಂದ ಬೆಳೆ ನಷ್ಟವಾದಲ್ಲಿ,
+    ಪಕ್ಷಗಳ ಪರಸ್ಪರ ಒಪ್ಪಿಗೆಯೊಂದಿಗೆ ಬಾಧ್ಯತೆಗಳನ್ನು ಮರುಪರಿಶೀಲಿಸಬಹುದು.
+    ಪ್ರಧಾನಮಂತ್ರಿ ಫಸಲ್ ಬೀಮಾ ಯೋಜನೆ (PMFBY) ಅಥವಾ ಇತರ
+    ಅನುಮೋದಿತ ವಿಮಾ ಯೋಜನೆಗಳ ಅಡಿಯಲ್ಲಿ ಪಡೆದಿರುವ ಬೆಳೆ ವಿಮೆ
+    ರೈತನ ಹೆಸರಿನಲ್ಲೇ ಮುಂದುವರಿಯುತ್ತದೆ.
+  </p>
+
+  <p>
+    ಯಾವುದೇ ವಿಮಾ ಪರಿಹಾರ ಮೊತ್ತ ಸಂಪೂರ್ಣವಾಗಿ ರೈತನಿಗೇ ಸೇರಿರುತ್ತದೆ.
+  </p>
+
+  <p>
+    ವಿತರಣೆ ಪೂರ್ಣಗೊಂಡು ಉತ್ಪನ್ನವನ್ನು ಸ್ವೀಕರಿಸಲಾಗಿದೆ ಎಂದು ಪರಿಗಣಿಸಿದ ನಂತರ,
+    ಎಲ್ಲಾ ಅಪಾಯಗಳು, ಮಾಲೀಕತ್ವ ಮತ್ತು ಜವಾಬ್ದಾರಿಗಳು ಸಂಪೂರ್ಣವಾಗಿ
+    ಖರೀದಿದಾರರಿಗೆ ವರ್ಗಾಯಿಸಲಾಗುತ್ತವೆ.
+  </p>
+</section>
+<section class="section">
+  <h2>9. ಅನಿವಾರ್ಯ ಪರಿಸ್ಥಿತಿಗಳು </h2>
+
+  <p>
+    ಪ್ರಕೃತಿ ವಿಕೋಪಗಳು, ಸರ್ಕಾರಿ ನಿರ್ಬಂಧಗಳು, ಯುದ್ಧ, ಮುಷ್ಕರಗಳು,
+    ಸಾರಿಗೆ ವ್ಯತ್ಯಯಗಳು ಅಥವಾ ಯಾವುದೇ ಅನಿರೀಕ್ಷಿತ ವಿಪತ್ತುಗಳಂತಹ
+    ಸಮಂಜಸ ನಿಯಂತ್ರಣದ ಹೊರಗಿನ ಘಟನೆಗಳಿಂದ ಉಂಟಾಗುವ ವಿಫಲತೆ ಅಥವಾ
+    ವಿಳಂಬಕ್ಕಾಗಿ ಯಾವುದೇ ಪಕ್ಷ ಜವಾಬ್ದಾರಿಯಾಗಿರುವುದಿಲ್ಲ.
+  </p>
+
+  <p>
+    ಇಂತಹ ಪರಿಸ್ಥಿತಿಗಳು ಕೊನೆಗೊಂಡ ನಂತರ, ಒಪ್ಪಂದದ ಬಾಧ್ಯತೆಗಳು
+    ಮರುಪ್ರಾರಂಭವಾಗುತ್ತವೆ.
+  </p>
+</section>
+
+<section class="section">
+  <h2>10. ವಿವಾದ ಪರಿಹಾರ ಮತ್ತು ನ್ಯಾಯಾಧಿಕಾರ
+    
+  </h2>
+
+  <p>
+    ಈ ಒಪ್ಪಂದದಿಂದ ಉಂಟಾಗುವ ಯಾವುದೇ ವಿವಾದವನ್ನು ಮೊದಲು
+    ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಪರಸ್ಪರ ಚರ್ಚೆಯ ಮೂಲಕ ಸ್ನೇಹಪೂರ್ವಕವಾಗಿ
+    ಪರಿಹರಿಸಲು ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತದೆ.
+  </p>
+
+  <p>
+    15 ದಿನಗಳೊಳಗೆ ವಿವಾದ ಪರಿಹಾರವಾಗದಿದ್ದರೆ,
+    Arbitration and Conciliation Act, 1996 ಅನ್ವಯ
+    ಮಧ್ಯಸ್ಥಿಕೆ (Arbitration)ಗೆ ಸಲ್ಲಿಸಲಾಗುತ್ತದೆ.
+    ಮಧ್ಯಸ್ಥಿಕೆಯ ಸ್ಥಳವನ್ನು ಅಗ್ರಿAI ನಿರ್ಧರಿಸುತ್ತದೆ.
+  </p>
+
+  <p>
+    ಮಧ್ಯಸ್ಥಿಕೆ ಪ್ರಕ್ರಿಯೆಗೆ ಒಳಪಟ್ಟಿರುವುದರ ಜೊತೆಗೆ,
+    ಈ ಒಪ್ಪಂದದ ಜಾರಿಗೆ ಸಂಬಂಧಿಸಿದ ಎಲ್ಲಾ ಕಾನೂನು ಕ್ರಮಗಳಿಗೆ
+    <strong>ಬೆಂಗಳೂರು, ಕರ್ನಾಟಕ</strong> ನ್ಯಾಯಾಲಯಗಳಿಗೆ
+    ವಿಶೇಷ ನ್ಯಾಯಾಧಿಕಾರ (Exclusive Jurisdiction) ಇರುತ್ತದೆ.
+  </p>
+</section>
+
+<section class="section">
+  <h2>11. ಒಪ್ಪಂದ ರದ್ದುಪಡಿಸುವಿಕೆ </h2>
+
+  <p>
+    ಪಾವತಿ ವಿಫಲತೆ, ವಿತರಣೆ ವಿಫಲತೆ, ತಪ್ಪು ಮಾಹಿತಿ ನೀಡುವುದು
+    ಅಥವಾ ಒಪ್ಪಿಕೊಂಡ ನಿಯಮಗಳನ್ನು ಉಲ್ಲಂಘಿಸುವಂತಹ ಪ್ರಮುಖ ಉಲ್ಲಂಘನೆಗಳ
+    ಸಂದರ್ಭಗಳಲ್ಲಿ ಯಾವುದೇ ಪಕ್ಷ ಈ ಒಪ್ಪಂದವನ್ನು ರದ್ದುಪಡಿಸಬಹುದು.
+  </p>
+
+  <p>
+    ಒಪ್ಪಂದದಲ್ಲಿ ನಿಗದಿಪಡಿಸಿದ ಸಮಯ ಮಿತಿಯನ್ನು ಮೀರಿ ಪಾವತಿ ವಿಫಲವಾದಲ್ಲಿ,
+    ತಪ್ಪಿತಸ್ಥ ಪಕ್ಷದ ಖಾತೆಯನ್ನು ಅಮಾನತುಗೊಳಿಸುವುದು,
+    ದಂಡ ವಿಧಿಸುವುದು ಹಾಗೂ ಕಾನೂನು ಅನುಮತಿಸಿದಂತೆ
+    ವಸೂಲಿ ಕ್ರಮಗಳನ್ನು ಕೈಗೊಳ್ಳಬಹುದು.
+  </p>
+</section>
+
+<section class="section">
+  <h2>12. ಒಪ್ಪಂದದ ಭಾಷೆ </h2>
+
+  <p>
+    ಈ ಒಪ್ಪಂದವನ್ನು ರೈತನಿಗೆ
+    ${lang === 'en'
+      ? 'ಇಂಗ್ಲಿಷ್'
+      : (lang === 'hi'
+          ? 'ಹಿಂದಿ'
+          : (lang === 'kn'
+              ? 'ಕನ್ನಡ'
+              : 'ಇಂಗ್ಲಿಷ್'))}
+    ಭಾಷೆಯಲ್ಲಿ ವಿವರಿಸಿ ಅನುವಾದಿಸಲಾಗಿದೆ.
+    ಯಾವುದೇ ವ್ಯತ್ಯಾಸ ಉಂಟಾದಲ್ಲಿ, ಇಂಗ್ಲಿಷ್ ಆವೃತ್ತಿಯೇ ಅಂತಿಮವಾಗಿ ಮಾನ್ಯವಾಗುತ್ತದೆ.
+  </p>
+</section>
+<section class="section">
+  <h2>13. ಜಾರಿಗೆ ತರುವುದು ಮತ್ತು ಡಿಜಿಟಲ್ ಸ್ವೀಕೃತಿ
+    
+  </h2>
+
+  <p>
+    ಈ ಒಪ್ಪಂದವನ್ನು ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಎಲೆಕ್ಟ್ರಾನಿಕ್ ವಿಧಾನದಲ್ಲಿ
+    ಜಾರಿಗೆ ತರಬಹುದು.
+    ನೋಂದಾಯಿತ ವಿವರಗಳನ್ನು ಬಳಸಿಕೊಂಡು ನೀಡುವ ಡಿಜಿಟಲ್ ಸ್ವೀಕೃತಿ
+    ಕಾನೂನುಬದ್ಧವಾಗಿ ಬಾಧ್ಯಕರ ಒಪ್ಪಿಗೆಯಾಗಿ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
+  </p>
+
+  <p>ಖರೀದಿದಾರ / ಅಧಿಕೃತ ಪ್ರತಿನಿಧಿ</p>
+  <p>ಸಹಿ: ___________________________</p>
+  <p>ದಿನಾಂಕ: ___________________________</p>
+
+  <p>ರೈತ / ಉತ್ಪಾದಕ</p>
+  <p>ಸಹಿ: ___________________________</p>
+  <p>ದಿನಾಂಕ: ___________________________</p>
+
+  <p>ಸಾಕ್ಷಿ : <strong>AgriAI</strong></p>
+</section>
+</body>
+</html>`;
+      // Select template based on language (use lang fetched above)
+      const html = lang === 'hi' ? htmlHi : (lang === 'kn' ? htmlKn : `<!doctype html>
       <html>
 <head>
   <meta charset="utf-8" />
-  <title>Procurement Contract</title>
+  <title>AgriAI Contract</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     body {
@@ -1628,8 +2201,7 @@ const FarmerCart = () => {
     <p>Platform Fee: ${formatCurrency(buyerPlatformFee)}</p>
     <p>GST on Platform Fee: ${formatCurrency(buyerGst)}</p>
     <p><strong>Total Amount (After Addition): ${formatCurrency(buyerTotalAmount)}</strong></p>
-    <p>Delivery / Logistics Charges (Payable After Delivery): ${deliveryRateDisplay}</p>
-
+    
     <p><strong>5.3 Payment Schedule</strong></p>
     <p>25% of the Total Crop Trade Value shall be paid by the Buyer as an advance at the time of contract confirmation through the AgriAI platform.</p>
     <p>50% of the Total Crop Trade Value shall be paid immediately upon successful delivery of the produce.</p>
@@ -1781,7 +2353,7 @@ const FarmerCart = () => {
     <h2>12. LANGUAGE OF AGREEMENT</h2>
 
   <p>
-    This Agreement has been explained and translated to the Farmer in ${siteLang === 'en' ? 'English' : (siteLang === 'hi' ? 'हिंदी' : (siteLang === 'kn' ? 'ಕನ್ನಡ' : 'English'))} (Language).
+    This Agreement has been explained and translated to the Farmer in ${langName} (Language).
     In case of any inconsistency, the English version shall prevail.
   </p>
 </section>
@@ -1802,12 +2374,11 @@ const FarmerCart = () => {
   <p>Signature: ___________________________</p>
   <p>Date: ___________________________</p>
 
-  <p>Witness 1: ___________________________</p>
-  <p>Witness 2: ___________________________</p>
+  <p>Witness :<strong>AgriAI</strong></p>
 </section>
 
 </body>
-</html>`;
+</html>`) ;
 
   // show an in-app preview modal instead of opening a new tab
       setContractHtml(html);
@@ -1846,7 +2417,7 @@ const FarmerCart = () => {
         farmer_gst: totalGst,
         buyer_platform_fee: buyerPlatformFee,
         buyer_gst: buyerGst,
-        delivery_cost: deliveryRateDisplay ? parseFloat(deliveryRateDisplay.replace(/[^\d.]/g, '')) || 0 : 0
+        delivery_cost: deliveryRateDisplay || 'Calculated at delivery'
       };
       setContractMetadata(contractMetadata);
       setShowContractPreview(true);
@@ -2073,16 +2644,15 @@ const FarmerCart = () => {
               <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: contractHtml }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button onClick={() => {
-                setPaymentMethod('contract');
                 if (otpVerified && digitalSignature) {
-                  // already verified: proceed to send
+                  // already verified: proceed to send with contract payment method
                   try { setShowContractPreview(false); } catch (e) {}
-                  if (typeof pendingContractAction === 'function') pendingContractAction(); else handleBuyNow();
+                  handleBuyNow('contract');
                 } else {
                   // start OTP flow
                   initOtpVerification(() => {
                     resetOtpModal();
-                    handleBuyNow();
+                    handleBuyNow('contract');
                   });
                 }
               }} style={{ padding: '8px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>{t('confirmAndSend', siteLang) || 'Confirm & Send'}</button>
