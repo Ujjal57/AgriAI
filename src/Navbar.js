@@ -32,6 +32,8 @@ const Navbar = () => {
   const [showContractModal, setShowContractModal] = React.useState(false);
   const [contractHtml, setContractHtml] = React.useState('');
   const [contractLang, setContractLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
+  // persist contract language so it survives reloads
+  React.useEffect(() => { try { localStorage.setItem('agri_lang', contractLang); } catch (e) {} }, [contractLang]);
   const [currentContractNotification, setCurrentContractNotification] = React.useState(null);
 
   React.useEffect(() => {
@@ -68,7 +70,7 @@ const Navbar = () => {
     };
     window.addEventListener('storage', onStorage);
     window.addEventListener('agriai:login', onLoginEvent);
-    const onLangChange = (e) => { const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); setSiteLang(l); };
+    const onLangChange = (e) => { const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); setSiteLang(l); setContractLang(l); };
     window.addEventListener('agri:lang:change', onLangChange);
     // track cart updates dispatched manually by cart page
     const onCartEvent = () => onStorage();
@@ -363,6 +365,347 @@ const Navbar = () => {
       const contractStatus = dbContract.status || '[status]';
       const contractNumLabel = t('contractNumberLabel', siteLang) || 'Contract Number';
       const statusLabel = t('statusLabel', siteLang) || 'Status';
+      const langName = contractLang === 'hi' ? 'हिंदी' : (contractLang === 'kn' ? 'ಕನ್ನಡ' : 'English');
+
+      // Generate Hindi contract if language is Hindi
+      if (contractLang === 'hi') {
+        const hindiHtml = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AgriAI Contract</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #111;
+      padding: 24px;
+      line-height: 1.6;
+    }
+    h1 {
+      text-align: center;
+      color: #236902;
+      margin: 0;
+    }
+    h2 {
+      margin-top: 18px;
+    }
+    .section {
+      margin-top: 16px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 12px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+    th {
+      background: #f7f7f7;
+      text-align: left;
+    }
+    pre {
+      white-space: pre-wrap;
+      font-family: 'Times New Roman', Times, serif;
+    }
+  </style>
+</head>
+<body>
+<div style="text-align:center; margin-bottom:20px;">
+  <img src="${logoSrc}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
+  <h1>
+    एग्री एआई<br/>
+    संविदा कृषि अनुबंध
+  </h1>
+</div>
+
+<section class="section">
+<h2>पक्षकार</h2>
+<p><strong>पक्ष A – खरीदार / कंपनी</strong></p>
+<p><b>नाम:</b> ${buyerName}</p>
+<p><b>खरीदार आईडी: </b> ${buyerId || '[Buyer ID]'}</p>
+<p><b>पता:</b> ${buyerAddress || '[Buyer Address]'}${buyerState ? ', ' + buyerState : ''}</p>
+<p><strong>पक्ष B – किसान / उत्पादक</strong></p>
+<p><b>नाम: </b> ${farmerName}</p>
+<p><b>किसान आईडी:</b> ${farmerId}</p>
+<p><b>पता:</b> ${farmerAddress || ''}${farmerState ? (farmerAddress ? ', ' + farmerState : '' + farmerState) : ''}</p>
+<p>
+  पक्ष A और पक्ष B को सामूहिक रूप से "पक्षकार" कहा जाएगा।
+  एग्री एआई केवल एक डिजिटल सुविधा मंच के रूप में कार्य करता है और किसी भी पक्ष का खरीदार, विक्रेता, परिवहनकर्ता, बीमाकर्ता या एजेंट नहीं है।
+</p>
+</section>
+
+<section class="section">
+<h2>1. अनुबंध का उद्देश्य</h2>
+<p>
+  यह अनुबंध उन शर्तों और नियमों को परिभाषित करता है जिनके अंतर्गत किसान कृषि उपज का उत्पादन एवं आपूर्ति करेगा तथा खरीदार पूर्व-निर्धारित मूल्य पर उसे खरीदेगा, जिससे:
+</p>
+<ul>
+  <li>किसान को सुनिश्चित बाज़ार उपलब्ध हो</li>
+  <li>निष्पक्ष एवं पारदर्शी मूल्य निर्धारण हो</li>
+  <li>समय पर और सुरक्षित भुगतान हो</li>
+  <li>बिचौलियों पर निर्भरता कम हो</li>
+</ul>
+</section>
+
+<section class="section">
+<h2>2. अनुबंध का प्रकार एवं अवधि</h2>
+<p>अनुबंध का प्रकार: ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p>
+<p>अनुबंध अवधि: ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p>
+<p>प्रारंभ तिथि: ${startDate}</p>
+<p>समाप्ति तिथि: ${endDate}</p>
+<p>कुल अवधि: ${days} दिन</p>
+<p>
+  कटाई उपरांत क्रय अनुबंध के अंतर्गत उपज पहले से उत्पादित या कटाई की जा चुकी है। इस अनुबंध के अंतर्गत कोई उत्पादन दायित्व उत्पन्न नहीं होगा।
+</p>
+<h3>2.1 अनुबंध स्वीकृति एवं वार्ता अवधि</h3>
+<p>
+  यह अनुबंध किसान द्वारा डिजिटल रूप से भेजे जाने के 48 घंटों तक वैध रहेगा।
+</p>
+<p>
+  इस अवधि में खरीदार को निम्न में से एक कार्य करना होगा:
+</p>
+<ul>
+  <li>अनुबंध स्वीकार करना</li>
+  <li>अनुबंध अस्वीकार करना</li>
+  <li>मूल्य वार्ता का अनुरोध करना</li>
+</ul>
+<p>
+  यदि 48 घंटों के भीतर कोई कार्यवाही नहीं की जाती है, तो अनुबंध स्वतः निरस्त माना जाएगा।
+</p>
+</section>
+
+<section class="section">
+<h2>3. डेटा गोपनीयता एवं प्लेटफ़ॉर्म अनुपालन</h2>
+<p>
+  एग्री एआई द्वारा संकलित सभी व्यक्तिगत, कृषि एवं लेनदेन संबंधी डेटा:
+</p>
+<ul>
+  <li>सुरक्षित रूप से संग्रहीत किए जाएंगे</li>
+  <li>केवल अनुबंध निष्पादन, भुगतान निपटान, बीमा सुविधा एवं कानूनी अनुपालन हेतु उपयोग किए जाएंगे</li>
+</ul>
+<p>
+  यह अनुबंध डिजिटल पर्सनल डेटा प्रोटेक्शन अधिनियम, 2023 के अनुरूप है।
+</p>
+</section>
+
+<section class="section">
+<h2>4. वस्तु विवरण</h2>
+<table style="border-collapse:collapse;width:100%;margin-top:12px;">
+  <thead>
+    <tr>
+      <th style="padding:8px;border:1px solid #ddd;text-align:center">क्रम सं.</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:center">फसल का नाम</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:center">किस्म</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:center">मात्रा</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:center">मूल्य (₹/किग्रा)</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:center">कुल राशि</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rowsHtml}
+  </tbody>
+</table>
+</section>
+
+<section class="section">
+<h2>5. मूल्य एवं भुगतान शर्तें</h2>
+
+<p><strong>5.1 किसान</strong></p>
+<p>कुल मात्रा: ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
+<p>मूल्य: ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
+<p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(displayFarmerCommission)}</p>
+<p>प्लेटफ़ॉर्म शुल्क पर जीएसटी: ${formatCurrency(displayFarmerGst)}</p>
+<p><strong>कुल देय राशि (कटौती पश्चात): ${formatCurrency(displayNetAmountToFarmer)}</strong></p>
+
+<p><strong>5.2 खरीदार</strong></p>
+<p>कुल मात्रा: ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
+<p>मूल्य: ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
+<p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(displayBuyerCommission)}</p>
+<p>प्लेटफ़ॉर्म शुल्क पर जीएसटी: ${formatCurrency(displayBuyerGst)}</p>
+<p><strong>कुल देय राशि (जोड़कर): ${formatCurrency(totalAmountPayableByBuyer)}</strong></p>
+
+<p><strong>5.3 भुगतान अनुसूची</strong></p>
+<p>कुल फसल व्यापार मूल्य का 25% खरीदार द्वारा अनुबंध पुष्टि के समय एग्रीएआई प्लेटफ़ॉर्म के माध्यम से अग्रिम के रूप में भुगतान किया जाएगा।</p>
+<p>कुल फसल व्यापार मूल्य का 50% सफल डिलीवरी के तुरंत बाद भुगतान किया जाएगा।</p>
+<p>शेष 25% गुणवत्ता निरीक्षण एवं औपचारिक स्वीकृति के 7 (सात) कार्य दिवसों के भीतर भुगतान किया जाएगा।</p>
+
+<p><strong>5.4 भुगतान का तरीका</strong></p>
+<p>बैंक ट्रांसफर / यूपीआई / चेक</p>
+<p>खरीदार इस अनुबंध के अंतर्गत किए गए सभी भुगतानों के लिए डिजिटल या भौतिक रसीद जारी करेगा।</p>
+
+</section>
+
+<section class="section">
+<h2>6. डिलीवरी, लॉजिस्टिक्स एवं परिवहन</h2>
+
+<p><strong>6.1 एग्रीएआई की भूमिका</strong></p>
+<p>
+  एग्रीएआई केवल एक डिजिटल प्रौद्योगिकी प्लेटफ़ॉर्म के रूप में कार्य करता है, जो खरीदारों और किसानों के बीच लेनदेन को सुगम बनाता है।
+  एग्रीएआई को किसी भी स्थिति में खरीदार, विक्रेता, व्यापारी, कमीशन एजेंट, परिवहनकर्ता या माल का संरक्षक नहीं माना जाएगा।
+  बिक्री एवं खरीद से संबंधित सभी दायित्व पूर्णतः पक्षकारों के बीच ही रहेंगे।
+</p>
+
+<p><strong>6.2 डिलीवरी सुविधा</strong></p>
+<p>
+  परिवहन एग्रीएआई प्लेटफ़ॉर्म पर उपलब्ध या अनुमोदित तृतीय-पक्ष लॉजिस्टिक्स सेवा प्रदाताओं के माध्यम से कराया जाएगा।
+  लॉजिस्टिक्स प्रदाता एवं वाहन का चयन फसल की प्रकृति, मात्रा, दूरी तथा संभाल आवश्यकताओं के आधार पर किया जाएगा।
+</p>
+
+<p><strong>6.3 डिलीवरी शुल्क</strong></p>
+<p>
+  डिलीवरी शुल्क तृतीय-पक्ष लॉजिस्टिक्स प्रदाता द्वारा वास्तविक दूरी, वाहन के प्रकार, लोडिंग आवश्यकताओं एवं स्थान के आधार पर निर्धारित किया जाएगा।
+  यह शुल्क सीधे खरीदार द्वारा लॉजिस्टिक्स प्रदाता को भुगतान किया जाएगा।
+  एग्रीएआई डिलीवरी शुल्क निर्धारित करने या उसके संबंध में किसी भी प्रकार की वार्ता करने के लिए उत्तरदायी नहीं होगा।
+</p>
+
+<p><strong>6.4 जोखिम का हस्तांतरण</strong></p>
+<p>
+  परिवहन के दौरान उपज का जोखिम एवं उत्तरदायित्व लॉजिस्टिक्स प्रदाता के पास रहेगा।
+  सफल डिलीवरी तथा हस्ताक्षरित डिलीवरी प्रमाण (Proof of Delivery - POD) के पश्चात जोखिम खरीदार को हस्तांतरित होगा।
+</p>
+
+<p><strong>6.5 विलंब, क्षति एवं हानि</strong></p>
+<p>
+  परिवहन के दौरान होने वाली किसी भी प्रकार की देरी, क्षति, कमी या हानि लॉजिस्टिक्स प्रदाता के नियमों एवं शर्तों के अनुसार नियंत्रित होगी।
+  एग्रीएआई ऐसे किसी भी दावे के लिए उत्तरदायी नहीं होगा।
+</p>
+
+<p><strong>6.6 डिलीवरी का प्रमाण</strong></p>
+<p>
+  डिलीवरी की पुष्टि भौतिक रसीद, डिजिटल पुष्टि और/या एग्रीएआई प्लेटफ़ॉर्म पर दर्ज इलेक्ट्रॉनिक POD के माध्यम से की जाएगी।
+  एग्रीएआई द्वारा सुरक्षित रखे गए डिजिटल अभिलेख डिलीवरी के वैध साक्ष्य माने जाएंगे।
+</p>
+
+</section>
+
+<section class="section">
+<h2>7. गुणवत्ता मानक, निरीक्षण एवं स्वीकृति</h2>
+
+<p>
+  आपूर्ति की गई उपज इस अनुबंध में उल्लिखित पारस्परिक रूप से सहमत विनिर्देशों के अनुरूप होगी।
+</p>
+
+<p>
+  खरीदार डिलीवरी की तिथि से 3 (तीन) कार्य दिवसों के भीतर गुणवत्ता निरीक्षण पूर्ण करेगा।
+</p>
+
+<p>
+  किसी भी अस्वीकृति को निरीक्षण अवधि के भीतर एग्रीएआई प्लेटफ़ॉर्म के माध्यम से लिखित रूप में दर्ज करना अनिवार्य होगा,
+  जिसमें स्पष्ट, वैध एवं सत्यापन योग्य कारणों का उल्लेख होना चाहिए।
+</p>
+
+<p>
+  यदि 3 कार्य दिवसों के भीतर कोई विवाद या आपत्ति दर्ज नहीं की जाती है, तो उपज को स्वीकृत माना जाएगा।
+</p>
+
+<p>
+  यदि अस्वीकृति उचित एवं प्रमाणित पाई जाती है, तो वापसी परिवहन व्यय खरीदार द्वारा वहन किया जाएगा।
+</p>
+
+</section>
+
+<section class="section">
+<h2>8. जोखिम, दायित्व एवं बीमा</h2>
+
+<p>
+  किसान मानक कृषि एवं कटाई उपरांत (पोस्ट-हार्वेस्ट) प्रथाओं का पालन करेगा।
+</p>
+
+<p>
+  प्रेषण (डिस्पैच) से पूर्व प्राकृतिक आपदा या अप्रत्याशित परिस्थितियों (फोर्स मेज्योर) के कारण फसल हानि की स्थिति में,
+  पक्षकार आपसी सहमति से दायित्वों की समीक्षा कर सकते हैं।
+</p>
+
+<p>
+  किसी भी बीमा दावे के अंतर्गत प्राप्त क्षतिपूर्ति राशि पर पूर्ण अधिकार केवल किसान का होगा।
+</p>
+
+<p>
+  सफल डिलीवरी एवं स्वीकृति के पश्चात उपज से संबंधित सभी जोखिम, स्वामित्व एवं दायित्व पूर्णतः खरीदार को हस्तांतरित हो जाएंगे।
+</p>
+
+</section>
+
+<section class="section">
+<h2>9. अप्रत्याशित परिस्थितियाँ</h2>
+
+<p>
+  किसी भी पक्ष को ऐसी परिस्थितियों के कारण हुई विफलता या विलंब के लिए उत्तरदायी नहीं ठहराया जाएगा,
+  जो उसके उचित नियंत्रण से परे हों, जिनमें प्राकृतिक आपदाएँ, सरकारी प्रतिबंध, युद्ध, हड़ताल शामिल हैं।
+</p>
+
+<p>
+  ऐसी परिस्थितियों के समाप्त होते ही अनुबंध के दायित्व पुनः प्रभावी हो जाएंगे।
+</p>
+</section>
+
+<section class="section">
+<h2>10. विवाद समाधान एवं अधिकार क्षेत्र</h2>
+
+<p>
+  इस अनुबंध से उत्पन्न किसी भी विवाद को सर्वप्रथम एग्रीएआई प्लेटफ़ॉर्म के माध्यम से आपसी चर्चा द्वारा सौहार्दपूर्ण तरीके से सुलझाने का प्रयास किया जाएगा।
+</p>
+
+<p>
+  यदि 15 (पंद्रह) दिनों के भीतर विवाद का समाधान नहीं होता है, तो इसे मध्यस्थता एवं सुलह अधिनियम, 1996 के अंतर्गत मध्यस्थता के लिए संदर्भित किया जाएगा।
+</p>
+
+<p>
+  मध्यस्थता के अधीन रहते हुए, इस अनुबंध से संबंधित प्रवर्तन एवं अन्य कानूनी कार्यवाहियों के लिए
+  <strong>बेंगलुरु, कर्नाटक</strong> की न्यायालयों को विशेष अधिकार क्षेत्र प्राप्त होगा।
+</p>
+</section>
+
+<section class="section">
+<h2>11. समाप्ति</h2>
+
+<p>
+  किसी भी पक्ष द्वारा इस अनुबंध की किसी महत्वपूर्ण शर्त के उल्लंघन की स्थिति में,
+  जिसमें भुगतान न करना, डिलीवरी न करना, मिथ्या प्रस्तुतीकरण या सहमत शर्तों का उल्लंघन शामिल है,
+  यह अनुबंध समाप्त किया जा सकता है।
+</p>
+
+<p>
+  सहमत समयसीमा से परे भुगतान में चूक की स्थिति में, चूक करने वाले पक्ष के विरुद्ध
+  खाता निलंबन, दंडात्मक शुल्क तथा विधि द्वारा अनुमत वसूली कार्यवाही की जा सकती है।
+</p>
+</section>
+
+<section class="section">
+<h2>12. अनुबंध की भाषा</h2>
+
+<p>
+  यह अनुबंध किसान को ${langName} (भाषा) में समझाया एवं अनुवादित किया गया है।
+  किसी भी असंगति की स्थिति में अंग्रेज़ी संस्करण प्रभावी एवं मान्य होगा।
+</p>
+</section>
+
+<section class="section">
+<h2>13. निष्पादन एवं डिजिटल स्वीकृति</h2>
+
+<p>
+  यह अनुबंध एग्रीएआई प्लेटफ़ॉर्म के माध्यम से इलेक्ट्रॉनिक रूप से निष्पादित किया जा सकता है।
+  पंजीकृत क्रेडेंशियल्स के माध्यम से दी गई डिजिटल स्वीकृति विधिक रूप से बाध्यकारी सहमति मानी जाएगी।
+</p>
+
+<p>खरीदार / अधिकृत प्रतिनिधि</p>
+<p>हस्ताक्षर: ___________________________</p>
+<p>तिथि: ___________________________</p>
+
+<p>किसान / उत्पादक</p>
+<p>हस्ताक्षर: ${farmerName}</p>
+<p>तिथि: ${signatureDate}</p>
+
+<p>गवाह : <strong>एग्री एआई</strong></p>
+</section>
+
+</body>
+</html>`;
+        return hindiHtml;
+      }
 
       const html = `<html>
 <head>
