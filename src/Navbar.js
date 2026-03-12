@@ -10,6 +10,8 @@ const Navbar = () => {
   const [userName, setUserName] = React.useState(localStorage.getItem('agriai_name') || '');
   const [userRole, setUserRole] = React.useState(localStorage.getItem('agriai_role') || '');
   const location = useLocation();
+  // common API base URL used by various helpers
+  const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
   const [showLogin, setShowLogin] = React.useState(false);
   const [loginEmail, setLoginEmail] = React.useState('');
   const [loginPassword, setLoginPassword] = React.useState('');
@@ -35,6 +37,20 @@ const Navbar = () => {
   // persist contract language so it survives reloads
   React.useEffect(() => { try { localStorage.setItem('agri_lang', contractLang); } catch (e) {} }, [contractLang]);
   const [currentContractNotification, setCurrentContractNotification] = React.useState(null);
+  // OTP/modal state for buyer contract acceptance
+  const [otpModalOpen, setOtpModalOpen] = React.useState(false);
+  const [otpValue, setOtpValue] = React.useState('');
+  const [otpError, setOtpError] = React.useState('');
+  const [otpLoading, setOtpLoading] = React.useState(false);
+  const [otpSent, setOtpSent] = React.useState(false);
+  const [otpEmail, setOtpEmail] = React.useState(localStorage.getItem('agriai_email') || '');
+  const [otpVerified, setOtpVerified] = React.useState(false);
+  const [digitalSignature, setDigitalSignature] = React.useState(null);
+  // track whether OTP flow is for accept or reject
+  const [pendingAction, setPendingAction] = React.useState('');
+  // override values to inject into generated contract HTML after OTP verification
+  const [contractBuyerNameOverride, setContractBuyerNameOverride] = React.useState('');
+  const [contractSignatureDate, setContractSignatureDate] = React.useState('');
 
   React.useEffect(() => {
     if (showContractModal && currentContractNotification) {
@@ -43,7 +59,15 @@ const Navbar = () => {
         setContractHtml(html);
       })();
     }
-  }, [contractLang, showContractModal, currentContractNotification]);
+  }, [contractLang, showContractModal, currentContractNotification, contractBuyerNameOverride, contractSignatureDate]);
+
+  // reset overrides when modal is closed so subsequent contracts start clean
+  React.useEffect(() => {
+    if (!showContractModal) {
+      setContractBuyerNameOverride('');
+      setContractSignatureDate('');
+    }
+  }, [showContractModal]);
 
   React.useEffect(() => {
     const onStorage = () => {
@@ -194,7 +218,7 @@ const Navbar = () => {
             const localKey = 'agriai_notifications';
             const rawLocal = localStorage.getItem(localKey);
             const localArr = rawLocal ? JSON.parse(rawLocal) : [];
-            const relevantLocal = Array.isArray(localArr) ? localArr.filter(n => {
+            let relevantLocal = Array.isArray(localArr) ? localArr.filter(n => {
               if (userRole === 'farmer') {
                 if (n && n.farmer_id) return String(n.farmer_id) === String(farmerId);
                 return !n.farmer_id;
@@ -203,6 +227,30 @@ const Navbar = () => {
                 return !n.buyer_id;
               }
             }) : [];
+            // clean up notifications for buyer if contract was deleted on server
+            if (userRole !== 'farmer' && relevantLocal.length) {
+              try {
+                const apiBase = process.env.REACT_APP_API_BASE || (window.__AGRIAI_API_BASE__ || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000'));
+                const toKeep = [];
+                for (let n of relevantLocal) {
+                  if (n.contract_number) {
+                    try {
+                      const res = await fetch(`${apiBase}/contracts/get/${encodeURIComponent(n.contract_number)}`);
+                      if (res && res.status === 404) {
+                        continue; // skip this one
+                      }
+                    } catch (e) {
+                      // network error, retain to be safe
+                    }
+                  }
+                  toKeep.push(n);
+                }
+                if (toKeep.length !== relevantLocal.length) {
+                  relevantLocal = toKeep;
+                  try { localStorage.setItem('agriai_notifications', JSON.stringify(relevantLocal)); } catch (e) {}
+                }
+              } catch (e) { /* ignore cleanup errors */ }
+            }
             const byId = new Map();
             relevantLocal.concat(notifs || []).forEach(x => { if (x && x.id) byId.set(x.id, x); else if (x) byId.set(JSON.stringify(x), x); });
             const merged = Array.from(byId.values());
@@ -261,6 +309,307 @@ const Navbar = () => {
     navigate('/login');
   };
 
+  // send OTP email/phone for contract acceptance
+  const sendAcceptanceOtp = async () => {
+    setOtpError('');
+    setOtpLoading(true);
+    try {
+      const email = localStorage.getItem('agriai_email') || '';
+      const phone = localStorage.getItem('agriai_phone') || '';
+      const payload = {};
+      if (email) payload.email = email;
+      if (phone) payload.phone = phone;
+      payload.purpose = 'contract-acceptance';
+      const res = await fetch(`${apiBase}/auth/send-otp`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.ok) {
+        setOtpSent(true);
+        
+      } else {
+        setOtpError(j.error || 'Failed to send OTP');
+      }
+    } catch (e) {
+      setOtpError('Server error. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const generateDigitalSignature = (email, otp) => {
+    // Create a digital signature using email, timestamp, and OTP verification
+    const timestamp = new Date().toISOString();
+    const signatureData = `${email}-${otp}-${timestamp}`;
+    // Simple SHA-like hash (in production use proper crypto)
+    let hash = 0;
+    for (let i = 0; i < signatureData.length; i++) {
+      const char = signatureData.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    const hashHex = Math.abs(hash).toString(16).padStart(16, '0');
+    
+    return {
+      signer_email: email,
+      signature_timestamp: timestamp,
+      signature_method: 'OTP-Verified',
+      signature_hash: hashHex
+    };
+  };
+
+  const verifyAcceptanceOtp = async () => {
+    setOtpError('');
+    if (!otpValue.trim()) {
+      setOtpError(t('otpRequired', siteLang) || 'OTP is required');
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      const email = localStorage.getItem('agriai_email') || '';
+      const phone = localStorage.getItem('agriai_phone') || '';
+      const payload = { otp: otpValue.trim(), purpose: 'contract-acceptance' };
+      if (email) payload.email = email;
+      if (phone) payload.phone = phone;
+      const res = await fetch(`${apiBase}/auth/verify-otp`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.ok) {
+        // OTP verified; create digital signature (only needed for accept)
+        let signature = null;
+        if (pendingAction === 'accept') {
+          signature = generateDigitalSignature(email, otpValue.trim());
+          setDigitalSignature(signature);
+        }
+        setOtpVerified(true);
+        
+        // Set buyer name and verified date for contract display
+        const buyerName = localStorage.getItem('agriai_name') || '';
+        setContractBuyerNameOverride(buyerName);
+        const verifiedDate = new Date().toLocaleDateString('en-GB');
+        setContractSignatureDate(verifiedDate);
+        
+        // update notification status locally so contract HTML shows signature or rejection
+        const newStatus = pendingAction === 'reject' ? 'rejected' : 'accepted';
+        setCurrentContractNotification(prev => prev ? { ...prev, status: newStatus } : prev);
+        
+        // regenerate HTML immediately if acceptance (so signature appears)
+        if (pendingAction === 'accept') {
+          try {
+            const html = await generateContractHtml({ ...currentContractNotification, status: newStatus });
+            setContractHtml(html);
+          } catch (e) { /* ignore */ }
+        }
+        
+        // OTP verified successfully - finalize action
+        console.log('OTP verified successfully - finalizing contract', pendingAction);
+        const finalStatus = pendingAction === 'reject' ? 'rejected' : 'accepted';
+        await finalizeContract(finalStatus);
+        setOtpModalOpen(false);
+        setOtpValue('');
+        setOtpError('');
+        setOtpSent(false);
+        setPendingAction('');
+      } else {
+        setOtpError(j.error || 'Invalid or expired OTP');
+      }
+    } catch (e) {
+      setOtpError('Server error. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const resetOtpModal = () => {
+    setOtpModalOpen(false);
+    setOtpValue('');
+    setOtpError('');
+    setOtpSent(false);
+    // Note: otpVerified is NOT reset here - it persists until contract is finalized
+    // setOtpVerified(false);
+    // setDigitalSignature(null);
+  };
+
+  // finalize contract action (accept/reject) after OTP verification
+  const finalizeContract = async (status = 'accepted') => {
+    if (!currentContractNotification) {
+      console.error('finalizeContract: No contract notification set');
+      alert('Error: Contract data not found. Please try again.');
+      return;
+    }
+    
+    const contractNumber = currentContractNotification.contract_number;
+    const buyerId = localStorage.getItem('agriai_id') || '';
+
+    if (!contractNumber) {
+      console.error('finalizeContract: No contract_number found', currentContractNotification);
+      alert('Error: Contract number not found. Please try again.');
+      return;
+    }
+
+    console.log('finalizeContract initiated', { contractNumber, buyerId, status, otpVerified, digitalSignature });
+
+    const doRequest = async () => {
+      const payload = { 
+        contract_number: contractNumber, 
+        buyer_id: buyerId,
+        status: status
+      };
+      // include signature only for acceptance
+      if (status === 'accepted' && digitalSignature) {
+        payload.signature_data = digitalSignature;
+      }
+      console.log('Sending POST to /contracts/accept with payload:', payload);
+      
+      // update contract status on backend (endpoint handles generic status)
+      const res = await fetch(`${apiBase}/contracts/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return res;
+    };
+
+    try {
+      let res;
+      try {
+        res = await doRequest();
+      } catch (netErr) {
+        console.warn('Network error on first attempt to accept contract', netErr);
+        // retry once after a short pause
+        await new Promise(r => setTimeout(r, 1000));
+        res = await doRequest();
+      }
+
+      const responseText = await res.text();
+      let responseJson = null;
+      try { responseJson = responseText ? JSON.parse(responseText) : null; } catch(e) { /* ignore */ }
+      console.log('Response from /contracts/accept:', res.status, responseText, responseJson);
+
+      if (res && res.ok) {
+        console.log('✅ Contract status API succeeded for', contractNumber, 'status=', status);
+        // update local notification to reflect new status
+        setCurrentContractNotification(prev => prev ? { ...prev, status: status } : prev);
+        // update the notifications list to show new status
+        setNotifList(prev => {
+          const updated = prev.map(notif => 
+            notif.contract_number === contractNumber 
+              ? { ...notif, status: status }
+              : notif
+          );
+          // Persist updated notifications to localStorage
+          try {
+            localStorage.setItem('agriai_notifications', JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
+
+        // success: close modal & reset OTP
+        setShowContractModal(false);
+        resetOtpModal();
+        setOtpVerified(false);
+        setDigitalSignature(null);
+        setContractBuyerNameOverride('');
+        setContractSignatureDate('');
+    
+      } else {
+        const status = res ? res.status : 'no response';
+        console.warn('Contract acceptance API returned non-ok status:', status);
+        console.warn('Response body:', responseText);
+        // show error message but keep modal open so user can retry
+        let msg = `Unable to update contract status (server: ${status}). Please check network or try again.`;
+        if (responseJson && responseJson.error) {
+          msg += `\nServer message: ${responseJson.error}`;
+        }
+        alert(msg);
+      }
+    } catch (e) {
+      console.error('Failed to finalize acceptance after retries:', e);
+      alert('Unable to update contract status. Please check network or try again.');
+      // leave modal open for retry, but reset button state so OTP can be resent if needed
+      setOtpVerified(false);
+    }
+  };
+  // handle buyer actions on viewed contract (accept, negotiate, reject)
+  const handleContractAction = async (action) => {
+    if (!currentContractNotification) return;
+    console.log('handleContractAction', action, 'otpVerified=', otpVerified, 'currentContract=', currentContractNotification);
+    
+    if (action === 'accept' && userRole === 'buyer') {
+      // if OTP is already verified, finalize acceptance directly
+      if (otpVerified && pendingAction === 'accept') {
+        console.log('OTP already verified—finalizing acceptance');
+        await finalizeContract('accepted');
+        setPendingAction('');
+        return;
+      }
+
+      // start OTP flow for acceptance
+      console.log('Starting OTP flow for contract acceptance');
+      setPendingAction('accept');
+      setOtpEmail(localStorage.getItem('agriai_email') || '');
+      setOtpValue('');
+      setOtpError('');
+      setOtpSent(false);
+      setOtpVerified(false);
+      setDigitalSignature(null);
+      setOtpModalOpen(true);
+      sendAcceptanceOtp();
+      return;
+    }
+    
+    if (action === 'reject' && userRole === 'buyer') {
+      // if OTP verified for rejection, finalize rejection
+      if (otpVerified && pendingAction === 'reject') {
+        console.log('OTP already verified—finalizing rejection');
+        await finalizeContract('rejected');
+        setPendingAction('');
+        return;
+      }
+
+      // start OTP flow for rejection
+      console.log('Starting OTP flow for contract rejection');
+      setPendingAction('reject');
+      setOtpEmail(localStorage.getItem('agriai_email') || '');
+      setOtpValue('');
+      setOtpError('');
+      setOtpSent(false);
+      setOtpVerified(false);
+      setDigitalSignature(null);
+      setOtpModalOpen(true);
+      sendAcceptanceOtp();
+      return;
+    }
+    
+    if (action === 'negotiate') {
+      console.log('Contract negotiation:', currentContractNotification);
+      setShowContractModal(false);
+      return;
+    }
+    
+    if (action === 'reject' && userRole === 'buyer') {
+      // start OTP flow for rejection
+      console.log('Starting OTP flow for contract rejection');
+      setPendingAction('reject');
+      setOtpEmail(localStorage.getItem('agriai_email') || '');
+      setOtpValue('');
+      setOtpError('');
+      setOtpSent(false);
+      setOtpVerified(false);
+      setDigitalSignature(null);
+      setOtpModalOpen(true);
+      sendAcceptanceOtp();
+      return;
+    }
+    
+    if (action === 'reject') {
+      console.log('Contract rejection:', currentContractNotification);
+      setShowContractModal(false);
+      return;
+    }
+  };
+
   const initials = (name) => {
     if (!name) return 'U';
     const parts = String(name).trim().split(/\s+/);
@@ -292,7 +641,8 @@ const Navbar = () => {
       const logoSrc = window.location.origin + require('./assets/logo192.png');
       
       // Extract all variables with fallbacks to meta and notification
-      const buyerName = notification.buyer_name || dbContract.buyer_name || '[Buyer Name]';
+      const buyerNameOrig = notification.buyer_name || dbContract.buyer_name || '[Buyer Name]';
+      const buyerName = contractBuyerNameOverride || buyerNameOrig;
       const buyerId = notification.buyer_id || dbContract.buyer_id || '[Buyer ID]';
       const buyerAddress = meta.buyer_address || dbContract.buyer_address || '[Buyer Address]';
       const buyerState = meta.buyer_state || dbContract.buyer_state || '[Buyer State]';
@@ -321,7 +671,17 @@ const Navbar = () => {
       const deliveryRateDisplay = meta.deliveryRateDisplay || '₹-- / km';
       const labourCharge = meta.labourCharge || dbContract.labour_charge || 0;
       const qtyKg = meta.qtyKg || totalContractQty || 0;
-      const date = new Date().toLocaleDateString('en-GB');
+      // buyer date shown in signature; prefer override or backend timestamp
+      let date = contractSignatureDate || '';
+      if (!date) {
+        if (dbContract && dbContract.signature_timestamp) {
+          try {
+            date = new Date(dbContract.signature_timestamp).toLocaleDateString('en-GB');
+          } catch (e) { date = new Date().toLocaleDateString('en-GB'); }
+        } else {
+          date = new Date().toLocaleDateString('en-GB');
+        }
+      }
       const signatureDate = startDate;
       const buyerTotals = meta.buyer_totals || { commission: 0, gst: 0 };
       const totals = meta.farmer_totals || { commission: 0, gst: 0 };
@@ -1478,12 +1838,12 @@ const Navbar = () => {
   
 
 
-  ${ (dbContract && dbContract.status && String(dbContract.status).toLowerCase() === 'accepted') ?
+  ${ (notification.status === 'accepted' || (dbContract && dbContract.status && String(dbContract.status).toLowerCase() === 'accepted')) ?
     `<p>Buyer / Authorized Representative</p>
      <p>Signature: ${buyerName}</p>
      <p>Date: ${date}</p>
-     ${dbContract.signature_method ? `<p>Signature Method: ${dbContract.signature_method}</p>` : ''}
-     ${dbContract.signature_timestamp ? `<p>Signature Time: ${dbContract.signature_timestamp}</p>` : ''}`
+     ${digitalSignature?.signature_method ? `<p>Signature Method: ${digitalSignature.signature_method}</p>` : ''}
+     ${digitalSignature?.signature_timestamp ? `<p>Signature Time: ${digitalSignature.signature_timestamp}</p>` : ''}`
     :
     `<p>Buyer / Authorized Representative</p>
      <p>Signature: ___________________________</p>
@@ -1836,8 +2196,21 @@ const Navbar = () => {
                               <button onClick={async () => {
                                 if (userRole === 'buyer') {
                                   // For buyers, show contract modal
-                                  setCurrentContractNotification(n);
-                                  const html = await generateContractHtml(n);
+                                  // Fetch latest contract status from backend
+                                  let updatedNotif = { ...n };
+                                  if (n.contract_number) {
+                                    try {
+                                      const res = await fetch(`${apiBase}/contracts/get/${encodeURIComponent(n.contract_number)}`);
+                                      if (res && res.ok) {
+                                        const j = await res.json();
+                                        if (j && j.ok && j.contract) {
+                                          updatedNotif.status = j.contract.status;
+                                        }
+                                      }
+                                    } catch (e) { /* ignore */ }
+                                  }
+                                  setCurrentContractNotification(updatedNotif);
+                                  const html = await generateContractHtml(updatedNotif);
                                   setContractHtml(html);
                                   setShowContractModal(true);
                                 } else {
@@ -1912,6 +2285,28 @@ const Navbar = () => {
                                 aria-label={userRole === 'buyer' ? (t('viewContract', siteLang) || 'View Contract') : (t('viewInvoice', siteLang) || 'View Invoice')}
                                 style={{ background: hoveredInvoice === invoiceId ? '#155a9e' : '#1976d2', color:'#fff', border:'none', padding:'5px 8px', borderRadius:6, fontSize:13, lineHeight:1, marginTop:0, transition:'transform .08s ease, background .08s ease', cursor:'pointer' }}
                               >{userRole === 'buyer' ? (t('viewContract', siteLang) || 'View Contract') : (t('viewInvoice', siteLang) || 'View Invoice')}</button>
+                              {userRole === 'buyer' && (
+                                <button disabled style={{
+                                  marginTop: 4,
+                                  fontWeight: 600,
+                                  background: (function() {
+                                    const s = String(n.status || 'pending').toLowerCase();
+                                    if (s === 'accepted') return '#2e7d32';
+                                    if (s === 'pending') return '#fdd835';
+                                    if (s === 'rejected') return '#c62828';
+                                    return '#ccc';
+                                  })(),
+                                  color: '#fff',
+                                  border: 'none',
+                                  padding: '4px 8px',
+                                  borderRadius: 4,
+                                  cursor: 'default',
+                                  fontSize: 12,
+                                  lineHeight: 1
+                                }}>
+                                  {t(n.status || 'pending', siteLang) || (n.status || 'pending')}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -2002,6 +2397,236 @@ const Navbar = () => {
           <div style={{flex:1, overflow:'auto', padding:0}}>
             <iframe srcDoc={contractHtml} style={{width:'100%', height:'100%', border:'none'}} title="Contract Preview" />
           </div>
+          {/* action buttons for buyer at bottom */}
+          {userRole === 'buyer' && currentContractNotification && !['accepted','rejected'].includes(String(currentContractNotification.status).toLowerCase()) && (
+            <div style={{padding:'12px 16px', display:'flex', justifyContent:'center', gap:12, borderTop:'1px solid #e5e5e5'}}>
+              {otpVerified ? (
+                <>
+                  <button
+                    onClick={() => handleContractAction('accept')}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#388E3C'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = '#4CAF50'}
+                    style={{background:'#4CAF50', color:'#fff', border:'none', borderRadius:4, padding:'8px 16px', cursor:'pointer', fontWeight:700}}
+                  >✓ {t('contractAccept', siteLang) || 'Accept & Close'}</button>
+                  <button
+                    onClick={() => setShowContractModal(false)}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D32F2F'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = '#F44336'}
+                    style={{background:'#F44336', color:'#fff', border:'none', borderRadius:4, padding:'8px 16px', cursor:'pointer'}}
+                  >{t('contractReject', siteLang) || 'Cancel'}</button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleContractAction('accept')}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#388E3C'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = '#4CAF50'}
+                    style={{background:'#4CAF50', color:'#fff', border:'none', borderRadius:4, padding:'8px 16px', cursor:'pointer'}}
+                  >{t('contractAccept', siteLang) || 'Accept'}</button>
+                  <button
+                    onClick={() => handleContractAction('negotiate')}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FFB300'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFC107'}
+                    style={{background:'#FFC107', color:'#000', border:'none', borderRadius:4, padding:'8px 16px', cursor:'pointer'}}
+                  >{t('contractNegotiate', siteLang) || 'Negotiate'}</button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(t('confirmRejectContract', siteLang) || 'Are you sure you want to reject this contract?')) {
+                        handleContractAction('reject');
+                      }
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D32F2F'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = '#F44336'}
+                    style={{background:'#F44336', color:'#fff', border:'none', borderRadius:4, padding:'8px 16px', cursor:'pointer'}}
+                  >{t('contractReject', siteLang) || 'Reject'}</button>
+                </>
+              )}
+            </div>
+          )}
+          {/* Digital Signature OTP Verification Modal - FarmerCart Design */}
+          {otpModalOpen && (
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+              <div style={{ width: '90%', maxWidth: 500, background: '#fff', padding: 24, borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
+                <h2 style={{ margin: '0 0 16px 0', color: '#236902', fontSize: 20, textAlign: 'center' }}>
+                  {otpVerified ? ((t('signatureVerified', siteLang) || 'Signature Verified')) : t('verifyIdentity', siteLang) || 'Verify Identity'}
+                </h2>
+
+                <p style={{ color: '#666', marginBottom: 16, fontSize: 14 }}>
+                  {otpVerified 
+                    ? (t('verifyIdentitySigned', siteLang) || 'Your contract has been digitally signed with your verified email.')
+                    : (t('verifyIdentityDesc', siteLang) || 'Enter the OTP sent to your email to verify your identity and digitally sign the contract.')}
+                </p>
+
+                {otpVerified ? (
+                  <div style={{ background: '#f0f7ff', border: '2px solid #236902', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <strong>{t('signatureDetails', siteLang) || 'Digital Signature Details'}</strong>
+                    </div>
+                    <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#333' }}>
+                      <div>📧 {t('signatureEmailLabel', siteLang) || 'Email'}: {otpEmail}</div>
+                      <div>🕐 {t('signatureTimeLabel', siteLang) || 'Time'}: {digitalSignature?.signature_timestamp}</div>
+                      <div>✔ {t('signatureMethodLabel', siteLang) || 'Method'}: {digitalSignature?.signature_method}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 14 }}>{t('signatureEmailLabel', siteLang) || 'Email'}</label>
+                      <input 
+                        type="email" 
+                        value={otpEmail} 
+                        disabled
+                        style={{ width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 6, fontSize: 14, background: '#f5f5f5' }} 
+                      />
+                    </div>
+
+                    {!otpSent ? (
+                      <div style={{ marginBottom: 16 }}>
+                        <button 
+                          onClick={sendAcceptanceOtp}
+                          disabled={otpLoading}
+                          style={{ 
+                            width: '100%', 
+                            padding: 10, 
+                            background: '#236902', 
+                            color: '#fff', 
+                            border: 'none', 
+                            borderRadius: 6, 
+                            fontSize: 14,
+                            fontWeight: 600,
+                            cursor: otpLoading ? 'not-allowed' : 'pointer',
+                            opacity: otpLoading ? 0.6 : 1
+                          }}
+                        >
+                          {otpLoading ? (t('sendingOtp', siteLang) || 'Sending...') : (t('sendOtpButton', siteLang) || 'Send OTP')}
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ marginBottom: 16 }}>
+                          <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 14 }}>Enter OTP</label>
+                          <input 
+                            type="text" 
+                            placeholder={t('otpPlaceholder', siteLang) || '000000'}
+                            value={otpValue}
+                            onChange={(e) => setOtpValue(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                            style={{ 
+                              width: '100%', 
+                              padding: 10, 
+                              border: '1px solid #ddd', 
+                              borderRadius: 6, 
+                              fontSize: 14,
+                              textAlign: 'center',
+                              letterSpacing: '4px',
+                              fontWeight: 'bold'
+                            }} 
+                          />
+                          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{t('checkEmailMsg', siteLang) || 'Check your email for the 6-digit code'}</div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button 
+                            onClick={verifyAcceptanceOtp}
+                            disabled={otpLoading || otpValue.length < 6}
+                            style={{ 
+                              flex: 1, 
+                              padding: 10, 
+                              background: '#236902', 
+                              color: '#fff', 
+                              border: 'none', 
+                              borderRadius: 6, 
+                              fontSize: 14,
+                              fontWeight: 600,
+                              cursor: (otpLoading || otpValue.length < 6) ? 'not-allowed' : 'pointer',
+                              opacity: (otpLoading || otpValue.length < 6) ? 0.6 : 1
+                            }}
+                          >
+                            {otpLoading ? (t('verifying', siteLang) || 'Verifying...') : (t('verifyAndSign', siteLang) || 'Verify & Sign')}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {otpError && (
+                  <div style={{ background: '#ffebee', border: '1px solid #d32f2f', color: '#d32f2f', padding: 10, borderRadius: 6, marginTop: 12, fontSize: 13 }}>
+                    ⚠ {otpError}
+                  </div>
+                )}
+
+                <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+                  {otpVerified ? (
+                    <>
+                      <button 
+                        onClick={() => {
+                          // Close modal without finalizing
+                          resetOtpModal();
+                          setShowContractModal(false);
+                          setOtpVerified(false);
+                          setDigitalSignature(null);
+                        }}
+                        disabled={otpLoading}
+                        style={{ 
+                          flex: 1, 
+                          padding: 10, 
+                          background: '#ddd', 
+                          color: '#000',
+                          border: 'none', 
+                          borderRadius: 6, 
+                          fontSize: 14,
+                          fontWeight: 400,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {t('cancelButton', siteLang) || 'Cancel'}
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          console.log('Action button clicked after OTP verification, pendingAction=', pendingAction);
+                          await finalizeContract(pendingAction || 'accepted');
+                        }}
+                        disabled={otpLoading}
+                        style={{ 
+                          flex: 1, 
+                          padding: 10, 
+                          background: '#236902', 
+                          color: '#fff',
+                          border: 'none', 
+                          borderRadius: 6, 
+                          fontSize: 14,
+                          fontWeight: 600,
+                          cursor: otpLoading ? 'not-allowed' : 'pointer',
+                          opacity: otpLoading ? 0.6 : 1
+                        }}
+                      >
+                        {otpLoading ? (t('processing', siteLang) || 'Processing...') : 
+                          (pendingAction === 'reject' ? (t('contractReject', siteLang) || 'Reject & Confirm') : (t('acceptContract', siteLang) || 'Accept & Confirm'))}
+                      </button>
+                    </>
+                  ) : (
+                    <button 
+                      onClick={resetOtpModal}
+                      disabled={otpLoading}
+                      style={{ 
+                        flex: 1, 
+                        padding: 10, 
+                        background: '#ddd', 
+                        color: '#000',
+                        border: 'none', 
+                        borderRadius: 6, 
+                        fontSize: 14,
+                        fontWeight: 400,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {t('cancelButton', siteLang) || 'Cancel'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )}

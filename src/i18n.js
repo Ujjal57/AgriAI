@@ -48,6 +48,8 @@ const translations = {
     regSuccess: 'User registered successfully!',
     regFailed: 'Registration failed',
     regServerError: 'Error connecting to server',
+    // custom labels
+    rejectContract: 'Reject & Confirm',
     // Profile update page
     profileTitle: 'Update Profile',
     profileIdLabel: 'ID',
@@ -119,6 +121,10 @@ const translations = {
     totalAmount: 'Total Amount',
     contractNumberLabel: 'Contract Number',
     statusLabel: 'Status',
+    // Status translations
+    accepted: 'Accepted',
+    pending: 'Pending',
+    rejected: 'Rejected',
     invoiceLabel: 'Invoice',
       contractLabel: 'Contract',
     invoiceTitle: 'Agri AI Invoice',
@@ -130,6 +136,10 @@ const translations = {
     clear: 'Clear',
     deleteSelected: 'Delete selected',
     cancel: 'Cancel',
+    enterDeliveryDate: 'Enter delivery date',
+    dateFormatHint: 'dd-mm-yyyy',
+    deliveryDateRequired: 'Please enter a delivery date',
+    ok: 'OK',
     tableIndex: '#',
     tableCropName: 'Crop Name',
     tableVariety: 'Variety',
@@ -294,6 +304,11 @@ const translations = {
     ,
     // confirmations & errors
     confirmDelete: 'Delete this deal? This action cannot be undone.',
+    // contract actions
+    contractAccept: 'Accept',
+    contractNegotiate: 'Negotiate',
+    contractReject: 'Reject',
+    confirmRejectContract: 'Are you sure you want to reject this contract?',
     selectExpiryError: 'Please select an expiry date.',
     selectCategoryError: 'Please select a crop category.',
     expiresLabelPrefix: 'Expires',
@@ -352,6 +367,8 @@ const translations = {
     regSuccess: 'उपयोगकर्ता सफलतापूर्वक पंजीकृत हुआ!',
     regFailed: 'पंजीकरण विफल',
     regServerError: 'सर्वर से कनेक्ट करने में त्रुटि',
+    // custom labels
+    rejectContract: 'अस्वीकार करें',
     // Profile update page
     profileTitle: 'प्रोफ़ाइल अपडेट करें',
     profileIdLabel: 'आईडी',
@@ -423,6 +440,10 @@ const translations = {
     totalAmount: 'कुल राशि',
     contractNumberLabel: 'अनुबंध संख्या',
     statusLabel: 'स्थिति',
+    // Status translations
+    accepted: 'स्वीकृत',
+    pending: 'लंबित',
+    rejected: 'अस्वीकृत',
     invoiceLabel: 'इनवॉइस',
       contractLabel: 'अनुबंध',
     invoiceTitle: 'Agri AI चालान',
@@ -434,6 +455,10 @@ const translations = {
     clear: 'हटाएं',
     deleteSelected: 'चयनित हटाएं',
     cancel: 'रद्द करें',
+    enterDeliveryDate: 'डिलीवरी की तारीख दर्ज करें',
+    dateFormatHint: 'dd-mm-yyyy',
+    deliveryDateRequired: 'कृपया एक डिलीवरी तिथि दर्ज करें',
+    ok: 'ठीक है',
     tableIndex: '#',
     tableCropName: 'फसल का नाम',
     tableVariety: 'वेरायटी',
@@ -598,6 +623,11 @@ const translations = {
     ,
     // confirmations & errors
     confirmDelete: 'क्या आप इस सौदे को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।',
+    // contract actions
+    contractAccept: 'स्वीकार करें',
+    contractNegotiate: 'मूल्य वार्ता',
+    contractReject: 'अस्वीकार करें',
+    confirmRejectContract: 'क्या आप वाकई इस अनुबंध को अस्वीकार करना चाहते हैं?',
     selectExpiryError: 'कृपया एक समाप्ति तिथि चुनें।',
     selectCategoryError: 'कृपया एक फसल श्रेणी चुनें।',
     expiresLabelPrefix: 'समाप्त',
@@ -727,6 +757,10 @@ const translations = {
     totalAmount: 'ಒಟ್ಟು ಮೊತ್ತ',
     contractNumberLabel: 'ಒಪ್ಪಂದ ಸಂಖ್ಯೆ',
     statusLabel: 'ಸ್ಥಿತಿ',
+    // Status translations
+    accepted: 'ಸ್ವೀಕರಿಸಲಾಗಿದೆ',
+    pending: 'ಬಾಕಿ ಇದೆ',
+    rejected: 'ತಿರಸ್ಕರಿಸಲಾಗಿದೆ',
     invoiceLabel: 'ರಸೀದಿ',
     contractLabel: 'ಒಪ್ಪಂದ',
     invoiceIdLabel: 'ರಸೀದಿ ID:',
@@ -840,6 +874,11 @@ const translations = {
     editButton: 'ತಿದ್ದು',
     saveButton: 'ಉಳಿಸಿ',
     cancelButton: 'ರದ್ದುಮಾಡಿ',
+    enterDeliveryDate: 'ಡಿಲಿವರಿ ದಿನಾಂಕ ನಮೂದಿಸಿ',
+    dateFormatHint: 'dd-mm-yyyy',
+    deliveryDateRequired: 'ದಯವಿಟ್ಟು ರವಾನೆ ದಿನಾಂಕವನ್ನು ನಮೂದಿಸಿ',
+    ok: 'ಸರಿ',
+    cancel: 'ರದ್ದು ಮಾಡಿ',
     deleteButton: 'ಅಳಿಸಿ'
     ,
     // Cart page
@@ -894,7 +933,13 @@ const translations = {
     postHarvestContract: 'ಪೋಸ್ಟ-ಸುಗ್ರಿವ ಖರೀದಿ ಒಪ್ಪಂದ',
     sendContract: 'ಒಪ್ಪಂದವನ್ನು ಕಳುಹಿಸಿ',
     // confirmations & errors
-    confirmDelete: 'ಈ ಒಪ್ಪಂದವನ್ನು ಅಳಿಸಬೇಕೆ? ಈ ಕ್ರಮವನ್ನು ಹಿಂದಿರುಗಿಸಲಾಗದು.',
+    confirmDelete: 'ಈ ಒಪ್ಪಂದವನ್ನು ಅಳಿಸಬೇಕೆ? ಈ ಕ್ರಮವನ್ನು ಹಿಂದಿರುಗಲಾಗದು.',
+    // contract actions
+    contractAccept: 'ಸ್ವೀಕರಿಸಿ',
+    contractNegotiate: 'ಸಂವಹನ',
+    contractReject: 'ತಿರಸ್ಕರಿಸಿ',
+    confirmRejectContract: 'ನೀವು ಈ ಒಪ್ಪಂದವನ್ನು ನಿಜವಾಗಿಯೂ ತಿರಸ್ಕರಿಸಲು ಇಚ್ಛಿ?',
+    rejectContract: 'ತಿರಸ್ಕರಿಸಿ',
     selectExpiryError: 'ದಯವಿಟ್ಟು ಅವಧಿ ದಿನಾಂಕವನ್ನು ಆಯ್ಕೆಮಾಡಿ.',
     selectCategoryError: 'ದಯವಿಟ್ಟು ಬೆಳೆ ವರ್ಗವನ್ನು ಆಯ್ಕೆಮಾಡಿ.',
     expiresLabelPrefix: 'ಅವಧಿ ಮುಕ್ತಾಯ',

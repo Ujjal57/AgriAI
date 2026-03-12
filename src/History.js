@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import Navbar from './Navbar';
 import logo from './assets/logo192.png';
 import { t } from './i18n';
@@ -17,29 +17,52 @@ export default function History() {
   }, []);
 
   React.useEffect(() => {
-    try {
-      const raw = localStorage.getItem('agriai_history');
-      const hist = raw ? JSON.parse(raw) : [];
-      const arr = Array.isArray(hist) ? hist : [];
-      // Filter orders to the signed-in buyer id (fallback to phone match)
-      const signedId = localStorage.getItem('agriai_id');
-      const signedPhone = localStorage.getItem('agriai_phone');
-      if (signedId || signedPhone) {
-        const filtered = arr.filter(o => {
-          try {
-            if (signedId && (o.buyer_id == signedId || (o.buyer && (''+o.buyer.id) === ''+signedId))) return true;
-            if (signedPhone && (o.buyer && o.buyer.phone && (''+o.buyer.phone) === ''+signedPhone)) return true;
-            return false;
-          } catch (e) { return false; }
-        });
-        setOrders(filtered);
-      } else {
-        // no signed-in buyer, show no orders
-        setOrders([]);
+    let mounted = true;
+    (async () => {
+      try {
+        const raw = localStorage.getItem('agriai_history');
+        const hist = raw ? JSON.parse(raw) : [];
+        const arr = Array.isArray(hist) ? hist : [];
+        // Filter orders to the signed-in buyer id (fallback to phone match)
+        const signedId = localStorage.getItem('agriai_id');
+        const signedPhone = localStorage.getItem('agriai_phone');
+        let filtered = [];
+        if (signedId || signedPhone) {
+          filtered = arr.filter(o => {
+            try {
+              if (signedId && (o.buyer_id == signedId || (o.buyer && (''+o.buyer.id) === ''+signedId))) return true;
+              if (signedPhone && (o.buyer && o.buyer.phone && (''+o.buyer.phone) === ''+signedPhone)) return true;
+              return false;
+            } catch (e) { return false; }
+          });
+        }
+        if (mounted) setOrders(filtered);
+
+        // also validate contracts still exist on server; remove any that return 404
+        try {
+          const apiBase = process.env.REACT_APP_API_BASE || (window.__AGRIAI_API_BASE__ || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000'));
+          for (let o of filtered) {
+            const cn = o.contract_number || o.invoice_id;
+            if (!cn) continue;
+            try {
+              const resp = await fetch(`${apiBase}/contracts/get/${encodeURIComponent(cn)}`);
+              if (resp && resp.status === 404) {
+                // delete from local storage and state
+                const raw2 = localStorage.getItem('agriai_history');
+                const arr2 = raw2 ? JSON.parse(raw2) : [];
+                const arr3 = (arr2 || []).filter(h => (h.contract_number || h.invoice_id) !== cn);
+                localStorage.setItem('agriai_history', JSON.stringify(arr3));
+                if (mounted) setOrders(prev => (prev || []).filter(h => (h.contract_number || h.invoice_id) !== cn));
+              }
+            } catch (e) { /* ignore per-contract network error */ }
+          }
+        } catch (e) { /* ignore */ }
+
+      } catch (e) {
+        if (mounted) setOrders([]);
       }
-    } catch (e) {
-      setOrders([]);
-    }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;

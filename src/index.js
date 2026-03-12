@@ -17,6 +17,7 @@ import Market from './farmer/Market';
 import History from './History';
 import FarmerHistory from './farmer/FarmerHistory';
 import MyCrops from './farmer/MyCrops';
+import Notification from './farmer/Notification';
 import Cart from './Cart';
 import FarmerCart from './farmer/FarmerCart';
 import MyDeals from './MyDeals';
@@ -44,6 +45,7 @@ root.render(
   <Route path="/my-crops" element={<MyCrops />} />
   <Route path="/cart" element={<Cart />} />
   <Route path="/farmer/cart" element={<FarmerCart />} />
+  <Route path="/farmer/notification" element={<Notification />} />
   <Route path="/admin/contacts" element={<ContactAdmin />} />
       </Routes>
       <Footer />

@@ -187,8 +187,26 @@ export default function FarmerHistory() {
 
   
 
-  const handleDelete = (idKey) => {
+  const handleDelete = async (idKey) => {
+    if (!window.confirm(t('confirmDelete', siteLang) || 'Delete this deal? This action cannot be undone.')) return;
     try {
+      const apiBase = process.env.REACT_APP_API_BASE || (window.__AGRIAI_API_BASE__ || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000'));
+      // ask server to remove contract row
+      try {
+        const resp = await fetch(`${apiBase}/contracts/delete/${encodeURIComponent(idKey)}`, { method: 'DELETE' });
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          console.warn('contract delete failed', resp.status, j);
+          alert((t('failedDelete', siteLang) || 'Delete failed') + ': ' + (j.error || resp.status));
+          return;
+        }
+      } catch (e) {
+        console.warn('contract delete network error', e);
+        alert((t('failedDelete', siteLang) || 'Delete failed') + ': ' + String(e));
+        return;
+      }
+
+      // remove from local farmer history
       const raw = localStorage.getItem('agriai_history_farmer');
       const hist = raw ? JSON.parse(raw) : [];
       const filtered = (hist || []).filter(h => {
@@ -197,6 +215,24 @@ export default function FarmerHistory() {
       });
       localStorage.setItem('agriai_history_farmer', JSON.stringify(filtered));
       setOrders(prev => (prev || []).filter(o => ((o.contract_number || o.invoice_id) !== idKey)));
+
+      // also wipe buyer history record if present
+      try {
+        const rawB = localStorage.getItem('agriai_history');
+        const histB = rawB ? JSON.parse(rawB) : [];
+        const filtB = (histB || []).filter(h => (h.contract_number || h.invoice_id) !== idKey);
+        localStorage.setItem('agriai_history', JSON.stringify(filtB));
+      } catch (e) { /* ignore */ }
+
+      // also drop any local notifications for this contract
+      try {
+        const key = 'agriai_notifications';
+        const rawN = localStorage.getItem(key);
+        const arrN = rawN ? JSON.parse(rawN) : [];
+        const filtN = arrN.filter(n => n.contract_number !== idKey);
+        localStorage.setItem(key, JSON.stringify(filtN));
+        try { window.dispatchEvent(new Event('agriai:notifications:local:update')); } catch (e) {}
+      } catch (e) {}
     } catch (e) { console.warn('delete history failed', e); }
   };
 
@@ -1765,7 +1801,10 @@ export default function FarmerHistory() {
                             <button disabled style={{ background: bg, color, border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'default' }}>{(t(s, siteLang) || (st && String(st).toUpperCase()) || 'STATUS')}</button>
                           );
                         })()}
-                        <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'transparent', color: '#c62828', border: '1px solid #f5c6c6', padding: '6px 10px', borderRadius: 6, marginLeft: 6 }}>{'🗑️'}</button>
+                        {( ((o._db_contract && String(o._db_contract.status).toLowerCase() === 'pending')
+                             || String(o.status || '').toLowerCase() === 'pending') && (
+                          <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'transparent', color: '#c62828', border: '1px solid #f5c6c6', padding: '6px 10px', borderRadius: 6, marginLeft: 6 }}>{'🗑️'}</button>
+                        ))}
                       </div>
                     </div>
                   </div>

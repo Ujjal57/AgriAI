@@ -930,6 +930,9 @@ def send_otp():
         expires_at = int(time.time()) + OTP_TTL_SECONDS
         OTP_STORE[email.lower()] = { 'otp': otp, 'expires_at': expires_at, 'purpose': purpose }
 
+        # DEBUG: Print OTP for testing
+        print(f"DEBUG: OTP for {email} (purpose: {purpose}): {otp}")
+
         # Send email (simple plaintext)
         try:
             smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
@@ -964,7 +967,11 @@ def send_otp():
         except Exception as e:
             print('Error sending OTP email (non-fatal):', e)
 
-        return jsonify({'ok': True, 'message': 'otp_sent'}), 200
+        # DEBUG: Include OTP in response for testing
+        response = {'ok': True, 'message': 'otp_sent'}
+        if os.environ.get('FLASK_ENV') == 'development':
+            response['debug_otp'] = otp
+        return jsonify(response), 200
     except Exception as e:
         print('send_otp error:', e)
         return jsonify({'ok': False, 'error': 'internal_error'}), 500
@@ -1794,7 +1801,10 @@ def ensure_expiry_notifications_table():
 
 
 def ensure_purchase_notifications_table():
-    """Create notifications table to deliver purchase alerts to farmers."""
+    """Create notifications table to deliver purchase alerts to farmers.
+    Also support optional contract_number column so contracts can generate
+    notifications as well. If the column is missing it will be added.
+    """
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
     if use_mysql:
         try:
@@ -1819,12 +1829,20 @@ def ensure_purchase_notifications_table():
                 "buyer_name VARCHAR(255) NULL,"
                 "buyer_email VARCHAR(255) NULL,"
                 "buyer_phone VARCHAR(32) NULL,"
+                "contract_number VARCHAR(64) NULL,"
                 "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
                 "is_read TINYINT(1) NOT NULL DEFAULT 0,"
                 "PRIMARY KEY (id)"
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             )
             conn.commit()
+            # ensure column exists in case table was created earlier without it
+            try:
+                cur.execute("ALTER TABLE purchase_notifications ADD COLUMN contract_number VARCHAR(64) NULL")
+                conn.commit()
+            except Exception:
+                # ignore if it already exists
+                pass
             try: cur.close()
             except Exception: pass
             try: conn.close()
@@ -1848,11 +1866,21 @@ def ensure_purchase_notifications_table():
                     buyer_name TEXT,
                     buyer_email TEXT,
                     buyer_phone TEXT,
+                    contract_number TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     is_read INTEGER NOT NULL DEFAULT 0
                 )
             ''')
             conn.commit()
+            # examine columns and add contract_number if missing
+            try:
+                cur.execute("PRAGMA table_info(purchase_notifications)")
+                cols = [r[1] for r in cur.fetchall()]
+                if 'contract_number' not in cols:
+                    cur.execute("ALTER TABLE purchase_notifications ADD COLUMN contract_number TEXT")
+                    conn.commit()
+            except Exception:
+                pass
             try: cur.close()
             except Exception: pass
             try: conn.close()
@@ -2484,6 +2512,8 @@ def create_purchase_notifications():
     buyer = data.get('buyer') or {}
     items = data.get('items') or []
     invoice_id = (data.get('invoice_id') or data.get('invoice') or buyer.get('invoice_id') or None)
+    # new field: contract_number may be supplied when a buyer sends a contract instead of a purchase
+    contract_number = data.get('contract_number') or None
     if not isinstance(items, list) or not items:
         return jsonify({'ok': False, 'error': 'items_required'}), 400
 
@@ -2512,9 +2542,9 @@ def create_purchase_notifications():
                     qty = float(it.get('order_quantity') or 0)
                 except Exception:
                     qty = None
-                farmer_id = None
+                farmer_id = it.get('farmer_id') or None
                 farmer_phone = None
-                if crop_id:
+                if not farmer_id and crop_id:
                     try:
                         cur2 = conn.cursor()
                         cur2.execute('SELECT seller_id, seller_phone, variety FROM crops WHERE id=%s LIMIT 1', (crop_id,))
@@ -2535,8 +2565,8 @@ def create_purchase_notifications():
                     variety_val = None
 
                 cur.execute(
-                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone) '
-                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, contract_number) '
+                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                     (
                         farmer_id if farmer_id else None,
                         farmer_phone if farmer_phone else None,
@@ -2547,6 +2577,7 @@ def create_purchase_notifications():
                         (buyer.get('name') or None),
                         (buyer.get('email') or None),
                         (buyer.get('phone') or None),
+                        contract_number or invoice_id or None
                     )
                 )
                 # attempt to notify the farmer via email (best-effort)
@@ -2773,8 +2804,8 @@ def create_purchase_notifications():
                     variety_val = None
 
                 cur.execute(
-                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone) '
-                    'VALUES (?,?,?,?,?,?,?,?,?)',
+                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, contract_number) '
+                    'VALUES (?,?,?,?,?,?,?,?,?,?)',
                     (
                         farmer_id,
                         farmer_phone,
@@ -2785,6 +2816,7 @@ def create_purchase_notifications():
                         (buyer.get('name') or None),
                         (buyer.get('email') or None),
                         (buyer.get('phone') or None),
+                        contract_number or invoice_id or None
                     )
                 )
                 # attempt to notify the farmer via email (best-effort)
@@ -2997,7 +3029,7 @@ def list_purchase_notifications():
                 where.append('farmer_phone=%s'); params.append(farmer_phone_q)
             if unread_only:
                 where.append('is_read=0')
-            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, created_at, is_read FROM purchase_notifications'
+            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, contract_number, created_at, is_read FROM purchase_notifications'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC LIMIT 100'
@@ -3010,7 +3042,7 @@ def list_purchase_notifications():
                 else:
                     results.append({
                         'id': r[0], 'farmer_id': r[1], 'farmer_phone': r[2], 'crop_id': r[3], 'crop_name': r[4], 'variety': r[5], 'quantity_kg': r[6],
-                        'buyer_name': r[7], 'buyer_email': r[8], 'buyer_phone': r[9], 'created_at': r[10], 'is_read': r[11]
+                        'buyer_name': r[7], 'buyer_email': r[8], 'buyer_phone': r[9], 'contract_number': r[10], 'created_at': r[11], 'is_read': r[12]
                     })
             try: cur.close()
             except Exception: pass
@@ -3033,7 +3065,7 @@ def list_purchase_notifications():
                 where.append('farmer_phone=?'); params.append(farmer_phone_q)
             if unread_only:
                 where.append('is_read=0')
-            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, created_at, is_read FROM purchase_notifications'
+            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, contract_number, created_at, is_read FROM purchase_notifications'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC LIMIT 100'
@@ -3042,7 +3074,7 @@ def list_purchase_notifications():
             for r in rows:
                 results.append({
                     'id': r[0], 'farmer_id': r[1], 'farmer_phone': r[2], 'crop_id': r[3], 'crop_name': r[4], 'variety': r[5], 'quantity_kg': r[6],
-                    'buyer_name': r[7], 'buyer_email': r[8], 'buyer_phone': r[9], 'created_at': r[10], 'is_read': r[11]
+                    'buyer_name': r[7], 'buyer_email': r[8], 'buyer_phone': r[9], 'contract_number': r[10], 'created_at': r[11], 'is_read': r[12]
                 })
             try: cur.close()
             except Exception: pass
@@ -3100,13 +3132,15 @@ def mark_notifications_read():
 
 @app.route('/notifications/contract-submitted', methods=['POST'])
 def create_contract_record():
-    """DEPRECATED: This endpoint is no longer used. 
-    All contracts should be saved via /contracts/save endpoint instead.
-    Kept for backward compatibility - returns mock success.
+    """Handle contract submission notifications.
+
+    Historically this endpoint was a no-op, but we now forward the payload to
+    the same logic used for purchase notifications so that farmers receive an
+    alert whenever a buyer sends a contract. The JSON may include
+    ``contract_number`` along with ``buyer`` and ``items`` (crop list).
     """
-    # Just return success without doing anything
-    contract_number = f"CNT{int(datetime.datetime.now().timestamp())}"
-    return jsonify({'ok': True, 'contract_number': contract_number}), 200
+    # forward to main handler (which now understands contract_number too)
+    return create_purchase_notifications()
 
 
 @app.route('/farmer/contracts', methods=['GET'])
@@ -3248,6 +3282,103 @@ def get_contract(contract_number):
         import traceback
         traceback.print_exc()
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/contracts/accept', methods=['POST'])
+def accept_contract():
+    """Mark an existing contract as accepted by the buyer.
+    Expects JSON body with contract_number (string) and optionally buyer_id
+    and signature_data object containing signature_method and signature_timestamp.
+    The contract row's status will be set to 'accepted' and signature fields updated.
+    Note: buyer_id is not used for matching since OTP verification already proves identity.
+    """
+    data = request.get_json(silent=True) or {}
+    contract_number = (data.get('contract_number') or '').strip()
+    sig = data.get('signature_data') or {}
+
+    if not contract_number:
+        return jsonify({'ok': False, 'error': 'contract_number_required'}), 400
+
+    ensure_contracts_table()
+    kind, conn = get_db_connection()
+    cur = get_cursor(kind, conn)
+    try:
+        print(f"🔧 accept_contract called: contract_number={contract_number}")
+        # decide status to set (support 'accepted' or 'rejected')
+        status_to_set = 'accepted'
+        req_status = (data.get('status') or '').strip().lower()
+        if req_status in ('accepted', 'rejected'):
+            status_to_set = req_status
+        # Update contract status and signature fields (signature may be null for reject)
+        # Note: No buyer_id check since OTP verification proves identity
+        if kind == 'mysql':
+            cur.execute(
+                """
+                UPDATE contracts
+                SET status=%s, signature_method=%s, signature_timestamp=%s
+                WHERE contract_number=%s
+                """,
+                (status_to_set, sig.get('signature_method'), sig.get('signature_timestamp'), contract_number)
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE contracts
+                SET status=?, signature_method=?, signature_timestamp=?
+                WHERE contract_number=?
+                """,
+                (status_to_set, sig.get('signature_method'), sig.get('signature_timestamp'), contract_number)
+            )
+        conn.commit()
+        if cur.rowcount == 0:
+            print(f"⚠️ accept_contract: no rows updated for {contract_number}")
+            return jsonify({'ok': False, 'error': 'contract_not_found'}), 404
+        print(f"✅ accept_contract: successfully updated contract {contract_number} status to {status_to_set}")
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        print(f'❌ accept_contract error: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        try: cur.close()
+        except: pass
+        try: conn.close()
+        except: pass
+
+
+
+@app.route('/contracts/delete/<contract_number>', methods=['DELETE'])
+def delete_contract(contract_number):
+    """Remove a contract row (used by farmer when cancelling a pending deal).
+    Does NOT perform any authentication; caller must ensure only rightful farmer
+    can delete (frontend restricts button visibility to owner and pending status).
+    """
+    ensure_contracts_table()
+    kind, conn = get_db_connection()
+    cur = get_cursor(kind, conn)
+    try:
+        print(f"🔧 delete_contract called: contract_number={contract_number}")
+        if kind == 'mysql':
+            cur.execute("DELETE FROM contracts WHERE contract_number=%s", (contract_number,))
+        else:
+            cur.execute("DELETE FROM contracts WHERE contract_number=?", (contract_number,))
+        conn.commit()
+        if cur.rowcount == 0:
+            print(f"⚠️ delete_contract: no rows deleted for {contract_number}")
+            return jsonify({'ok': False, 'error': 'contract_not_found'}), 404
+        print(f"✅ delete_contract: successfully removed contract {contract_number}")
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        print(f'❌ delete_contract error: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        try: cur.close()
+        except: pass
+        try: conn.close()
+        except: pass
 
 
 @app.route('/contracts/debug/<farmer_id>', methods=['GET'])
@@ -6398,42 +6529,168 @@ def profile_get():
     return jsonify({'user': user}), 200
 
 
-@app.route('/buyer/get', methods=['GET'])
-def buyer_get():
-    """Return buyer info by id. Query param: id
-    Response: { ok: True, buyer: { id, name, phone, email, region, state, address } }
+@app.route('/farmer/get', methods=['GET'])
+def farmer_get():
+    """Return farmer info by id/phone/email.
+
+    Mirrors the logic of /buyer/get but queries the `farmer` table so the
+    frontend can obtain the correct name/region/state/address for contract
+    previews.  Accepts query params `id`/`farmer_id`, `phone`/`farmer_phone`
+    or `email`.
     """
-    bid = request.args.get('id') or request.args.get('buyer_id')
-    if not bid:
-        return jsonify({'error': 'id_required'}), 400
-    try:
-        bid_int = int(bid)
-    except Exception:
-        return jsonify({'error': 'invalid_id'}), 400
+    fid = request.args.get('id') or request.args.get('farmer_id')
+    phone = request.args.get('phone') or request.args.get('farmer_phone')
+    email = request.args.get('email')
+
+    if not (fid or phone or email):
+        return jsonify({'error': 'id_or_phone_required'}), 400
+
     kind, conn = get_db_connection()
     try:
         cur = get_cursor(kind, conn)
-        if kind == 'mysql':
-            cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE id=%s LIMIT 1', (bid_int,))
+        row = None
+
+        if fid:
+            try:
+                fid_int = int(fid)
+            except Exception:
+                return jsonify({'error': 'invalid_id'}), 400
+            if kind == 'mysql':
+                cur.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE id=%s LIMIT 1', (fid_int,))
+            else:
+                cur.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE id=? LIMIT 1', (fid_int,))
+            row = cur.fetchone()
         else:
-            cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE id=? LIMIT 1', (bid_int,))
-        row = cur.fetchone()
+            if phone:
+                if kind == 'mysql':
+                    cur.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE phone=%s LIMIT 1', (phone,))
+                else:
+                    cur.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE phone=? LIMIT 1', (phone,))
+            elif email:
+                if kind == 'mysql':
+                    cur.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE email=%s LIMIT 1', (email,))
+                else:
+                    cur.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE email=? LIMIT 1', (email,))
+            row = cur.fetchone()
+
         try: cur.close()
         except Exception: pass
         try: conn.close()
         except Exception: pass
-        if not row:
-            # If buyer not found in `buyer` table, try to find recent info in `deals` table
+
+        if not row and (phone or email):
             try:
-                cur2 = get_cursor(kind, conn)
+                kind2, conn2 = get_db_connection()
+                cur2 = get_cursor(kind2, conn2)
+                if phone:
+                    if kind2 == 'mysql':
+                        cur2.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE phone=%s LIMIT 1', (phone,))
+                    else:
+                        cur2.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE phone=? LIMIT 1', (phone,))
+                elif email:
+                    if kind2 == 'mysql':
+                        cur2.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE email=%s LIMIT 1', (email,))
+                    else:
+                        cur2.execute('SELECT id,name,phone,email,region,state,address FROM farmer WHERE email=? LIMIT 1', (email,))
+                row = cur2.fetchone()
+                try: cur2.close()
+                except Exception: pass
+                try: conn2.close()
+                except Exception: pass
+            except Exception:
+                try: conn2.close()
+                except Exception: pass
+
+        if not row:
+            return jsonify({'error': 'not_found'}), 404
+
+        farmer = {
+            'id': row[0],
+            'name': row[1] if len(row) > 1 else None,
+            'phone': row[2] if len(row) > 2 else None,
+            'email': row[3] if len(row) > 3 else None,
+            'region': row[4] if len(row) > 4 else None,
+            'state': row[5] if len(row) > 5 else None,
+            'address': row[6] if len(row) > 6 else None,
+        }
+        return jsonify({'ok': True, 'farmer': farmer}), 200
+    except Exception:
+        try: conn.close()
+        except Exception: pass
+        return jsonify({'error': 'server_error'}), 500
+
+
+@app.route('/buyer/get', methods=['GET'])
+def buyer_get():
+    """Return buyer info.
+
+    The route is primarily looked up by numeric id (query param `id` or
+    `buyer_id`), which is what most callers use.  However in some cases the
+    client may not have a reliable id (eg. localStorage got out of sync), so
+    we also support lookups by phone or email.  If an `id` is provided it will
+    always be used first, otherwise we attempt to resolve from `phone` or
+    `email`.
+
+    Response: { ok: True, buyer: { id, name, phone, email, region, state, address } }
+    """
+    # accept multiple forms of identification
+    bid = request.args.get('id') or request.args.get('buyer_id')
+    phone = request.args.get('phone') or request.args.get('buyer_phone')
+    email = request.args.get('email')
+
+    if not (bid or phone or email):
+        return jsonify({'error': 'id_or_phone_required'}), 400
+
+    kind, conn = get_db_connection()
+    try:
+        cur = get_cursor(kind, conn)
+
+        # if we have an explicit id, try that first
+        if bid:
+            try:
+                bid_int = int(bid)
+            except Exception:
+                return jsonify({'error': 'invalid_id'}), 400
+
+            if kind == 'mysql':
+                cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE id=%s LIMIT 1', (bid_int,))
+            else:
+                cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE id=? LIMIT 1', (bid_int,))
+            row = cur.fetchone()
+        else:
+            # lookup by phone/email
+            if phone:
                 if kind == 'mysql':
+                    cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE phone=%s LIMIT 1', (phone,))
+                else:
+                    cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE phone=? LIMIT 1', (phone,))
+            elif email:
+                if kind == 'mysql':
+                    cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE email=%s LIMIT 1', (email,))
+                else:
+                    cur.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE email=? LIMIT 1', (email,))
+            row = cur.fetchone()
+
+        try: cur.close()
+        except Exception: pass
+        try: conn.close()
+        except Exception: pass
+
+        if not row and bid:
+            # If buyer not found in `buyer` table and we searched by id, try to
+            # recover some info from `deals` table as a fallback.  This keeps
+            # existing behaviour for legacy ids that may not have a buyer row.
+            try:
+                kind2, conn2 = get_db_connection()
+                cur2 = get_cursor(kind2, conn2)
+                if kind2 == 'mysql':
                     cur2.execute('SELECT buyer_name,buyer_phone,region,state FROM deals WHERE buyer_id=%s ORDER BY id DESC LIMIT 1', (bid_int,))
                 else:
                     cur2.execute('SELECT buyer_name,buyer_phone,region,state FROM deals WHERE buyer_id=? ORDER BY id DESC LIMIT 1', (bid_int,))
                 dr = cur2.fetchone()
                 try: cur2.close()
                 except Exception: pass
-                try: conn.close()
+                try: conn2.close()
                 except Exception: pass
                 if dr:
                     buyer = {
@@ -6447,9 +6704,39 @@ def buyer_get():
                     }
                     return jsonify({'ok': True, 'buyer': buyer}), 200
             except Exception:
-                try: conn.close()
+                try: conn2.close()
                 except Exception: pass
+
+        # if id lookup failed but the caller supplied phone/email we can
+        # still try resolving by that information.  this covers cases where
+        # localStorage had an outdated id but the user still has the correct
+        # phone number saved.
+        if not row and (phone or email):
+            try:
+                kind3, conn3 = get_db_connection()
+                cur3 = get_cursor(kind3, conn3)
+                if phone:
+                    if kind3 == 'mysql':
+                        cur3.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE phone=%s LIMIT 1', (phone,))
+                    else:
+                        cur3.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE phone=? LIMIT 1', (phone,))
+                elif email:
+                    if kind3 == 'mysql':
+                        cur3.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE email=%s LIMIT 1', (email,))
+                    else:
+                        cur3.execute('SELECT id,name,phone,email,region,state,address FROM buyer WHERE email=? LIMIT 1', (email,))
+                row = cur3.fetchone()
+                try: cur3.close()
+                except Exception: pass
+                try: conn3.close()
+                except Exception: pass
+            except Exception:
+                try: conn3.close()
+                except Exception: pass
+
+        if not row:
             return jsonify({'error': 'not_found'}), 404
+
         buyer = {
             'id': row[0],
             'name': row[1] if len(row) > 1 else None,
@@ -6460,6 +6747,10 @@ def buyer_get():
             'address': row[6] if len(row) > 6 else None,
         }
         return jsonify({'ok': True, 'buyer': buyer}), 200
+    except Exception:
+        try: conn.close()
+        except Exception: pass
+        return jsonify({'error': 'server_error'}), 500
     except Exception as e:
         try:
             conn.close()
@@ -7179,3 +7470,4 @@ if __name__ == '__main__':
     app.run(debug=True)
 
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+
