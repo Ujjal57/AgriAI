@@ -977,6 +977,28 @@ def send_otp():
         return jsonify({'ok': False, 'error': 'internal_error'}), 500
 
 
+@app.route('/auth/check-email', methods=['POST'])
+def check_email():
+    """Check whether an email is already registered (farmer/buyer/admin).
+
+    Returns ok:true and exists:true if already registered.
+    """
+    try:
+        data = request.get_json() or {}
+        email = (data.get('email') or '').strip().lower()
+        if not email:
+            return jsonify({'ok': False, 'error': 'email_required'}), 400
+
+        tbl, row = find_user_by_email(email)
+        if row:
+            return jsonify({'ok': True, 'exists': True, 'role': tbl, 'message': 'Email already registered.'}), 200
+
+        return jsonify({'ok': True, 'exists': False}), 200
+    except Exception as e:
+        print('check_email error:', e)
+        return jsonify({'ok': False, 'error': 'internal_error'}), 500
+
+
 @app.route('/auth/verify-otp', methods=['POST'])
 def verify_otp():
     """Verify an OTP previously sent to an email. Returns ok:true on success."""
@@ -1801,10 +1823,7 @@ def ensure_expiry_notifications_table():
 
 
 def ensure_purchase_notifications_table():
-    """Create notifications table to deliver purchase alerts to farmers.
-    Also support optional contract_number column so contracts can generate
-    notifications as well. If the column is missing it will be added.
-    """
+    """Create notifications table to deliver purchase alerts to farmers."""
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
     if use_mysql:
         try:
@@ -1829,20 +1848,12 @@ def ensure_purchase_notifications_table():
                 "buyer_name VARCHAR(255) NULL,"
                 "buyer_email VARCHAR(255) NULL,"
                 "buyer_phone VARCHAR(32) NULL,"
-                "contract_number VARCHAR(64) NULL,"
                 "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
                 "is_read TINYINT(1) NOT NULL DEFAULT 0,"
                 "PRIMARY KEY (id)"
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             )
             conn.commit()
-            # ensure column exists in case table was created earlier without it
-            try:
-                cur.execute("ALTER TABLE purchase_notifications ADD COLUMN contract_number VARCHAR(64) NULL")
-                conn.commit()
-            except Exception:
-                # ignore if it already exists
-                pass
             try: cur.close()
             except Exception: pass
             try: conn.close()
@@ -1866,21 +1877,11 @@ def ensure_purchase_notifications_table():
                     buyer_name TEXT,
                     buyer_email TEXT,
                     buyer_phone TEXT,
-                    contract_number TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     is_read INTEGER NOT NULL DEFAULT 0
                 )
             ''')
             conn.commit()
-            # examine columns and add contract_number if missing
-            try:
-                cur.execute("PRAGMA table_info(purchase_notifications)")
-                cols = [r[1] for r in cur.fetchall()]
-                if 'contract_number' not in cols:
-                    cur.execute("ALTER TABLE purchase_notifications ADD COLUMN contract_number TEXT")
-                    conn.commit()
-            except Exception:
-                pass
             try: cur.close()
             except Exception: pass
             try: conn.close()
@@ -2512,8 +2513,6 @@ def create_purchase_notifications():
     buyer = data.get('buyer') or {}
     items = data.get('items') or []
     invoice_id = (data.get('invoice_id') or data.get('invoice') or buyer.get('invoice_id') or None)
-    # new field: contract_number may be supplied when a buyer sends a contract instead of a purchase
-    contract_number = data.get('contract_number') or None
     if not isinstance(items, list) or not items:
         return jsonify({'ok': False, 'error': 'items_required'}), 400
 
@@ -2542,9 +2541,9 @@ def create_purchase_notifications():
                     qty = float(it.get('order_quantity') or 0)
                 except Exception:
                     qty = None
-                farmer_id = it.get('farmer_id') or None
+                farmer_id = None
                 farmer_phone = None
-                if not farmer_id and crop_id:
+                if crop_id:
                     try:
                         cur2 = conn.cursor()
                         cur2.execute('SELECT seller_id, seller_phone, variety FROM crops WHERE id=%s LIMIT 1', (crop_id,))
@@ -2565,8 +2564,8 @@ def create_purchase_notifications():
                     variety_val = None
 
                 cur.execute(
-                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, contract_number) '
-                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone) '
+                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                     (
                         farmer_id if farmer_id else None,
                         farmer_phone if farmer_phone else None,
@@ -2577,7 +2576,6 @@ def create_purchase_notifications():
                         (buyer.get('name') or None),
                         (buyer.get('email') or None),
                         (buyer.get('phone') or None),
-                        contract_number or invoice_id or None
                     )
                 )
                 # attempt to notify the farmer via email (best-effort)
@@ -2804,8 +2802,8 @@ def create_purchase_notifications():
                     variety_val = None
 
                 cur.execute(
-                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, contract_number) '
-                    'VALUES (?,?,?,?,?,?,?,?,?,?)',
+                    'INSERT INTO purchase_notifications (farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone) '
+                    'VALUES (?,?,?,?,?,?,?,?,?)',
                     (
                         farmer_id,
                         farmer_phone,
@@ -2816,7 +2814,6 @@ def create_purchase_notifications():
                         (buyer.get('name') or None),
                         (buyer.get('email') or None),
                         (buyer.get('phone') or None),
-                        contract_number or invoice_id or None
                     )
                 )
                 # attempt to notify the farmer via email (best-effort)
@@ -3029,7 +3026,7 @@ def list_purchase_notifications():
                 where.append('farmer_phone=%s'); params.append(farmer_phone_q)
             if unread_only:
                 where.append('is_read=0')
-            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, contract_number, created_at, is_read FROM purchase_notifications'
+            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, created_at, is_read FROM purchase_notifications'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC LIMIT 100'
@@ -3042,7 +3039,7 @@ def list_purchase_notifications():
                 else:
                     results.append({
                         'id': r[0], 'farmer_id': r[1], 'farmer_phone': r[2], 'crop_id': r[3], 'crop_name': r[4], 'variety': r[5], 'quantity_kg': r[6],
-                        'buyer_name': r[7], 'buyer_email': r[8], 'buyer_phone': r[9], 'contract_number': r[10], 'created_at': r[11], 'is_read': r[12]
+                        'buyer_name': r[7], 'buyer_email': r[8], 'buyer_phone': r[9], 'created_at': r[10], 'is_read': r[11]
                     })
             try: cur.close()
             except Exception: pass
@@ -3065,7 +3062,7 @@ def list_purchase_notifications():
                 where.append('farmer_phone=?'); params.append(farmer_phone_q)
             if unread_only:
                 where.append('is_read=0')
-            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, contract_number, created_at, is_read FROM purchase_notifications'
+            sql = 'SELECT id, farmer_id, farmer_phone, crop_id, crop_name, variety, quantity_kg, buyer_name, buyer_email, buyer_phone, created_at, is_read FROM purchase_notifications'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC LIMIT 100'
@@ -3074,7 +3071,7 @@ def list_purchase_notifications():
             for r in rows:
                 results.append({
                     'id': r[0], 'farmer_id': r[1], 'farmer_phone': r[2], 'crop_id': r[3], 'crop_name': r[4], 'variety': r[5], 'quantity_kg': r[6],
-                    'buyer_name': r[7], 'buyer_email': r[8], 'buyer_phone': r[9], 'contract_number': r[10], 'created_at': r[11], 'is_read': r[12]
+                    'buyer_name': r[7], 'buyer_email': r[8], 'buyer_phone': r[9], 'created_at': r[10], 'is_read': r[11]
                 })
             try: cur.close()
             except Exception: pass
@@ -3132,15 +3129,13 @@ def mark_notifications_read():
 
 @app.route('/notifications/contract-submitted', methods=['POST'])
 def create_contract_record():
-    """Handle contract submission notifications.
-
-    Historically this endpoint was a no-op, but we now forward the payload to
-    the same logic used for purchase notifications so that farmers receive an
-    alert whenever a buyer sends a contract. The JSON may include
-    ``contract_number`` along with ``buyer`` and ``items`` (crop list).
+    """DEPRECATED: This endpoint is no longer used. 
+    All contracts should be saved via /contracts/save endpoint instead.
+    Kept for backward compatibility - returns mock success.
     """
-    # forward to main handler (which now understands contract_number too)
-    return create_purchase_notifications()
+    # Just return success without doing anything
+    contract_number = f"CNT{int(datetime.datetime.now().timestamp())}"
+    return jsonify({'ok': True, 'contract_number': contract_number}), 200
 
 
 @app.route('/farmer/contracts', methods=['GET'])

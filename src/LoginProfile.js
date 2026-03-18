@@ -384,7 +384,19 @@ function LoginProfile() {
   }, []);
   const handleSignupSubmit = async e => {
     e.preventDefault();
-    // client-side validation: role and aadhar are required; email is optional but if provided must be valid
+    // client-side validation: name, phone, role and aadhar are required; email is optional but if provided must be valid
+    if (!signupData.name || signupData.name.trim().length < 2) {
+      alert(t('regInvalidName', siteLang) || 'Enter a valid name');
+      return;
+    }
+    if (!signupData.name.trim()[0].match(/[A-Z]/)) {
+      alert(t('regInvalidNameCapital', siteLang) || 'Name must start with a capital letter');
+      return;
+    }
+    if (!signupData.phone || !/^\d{10}$/.test(signupData.phone.trim())) {
+      alert(t('regInvalidPhone', siteLang) || 'Phone number must be exactly 10 digits');
+      return;
+    }
     if (!signupData.role) {
       alert(t('regSelectAccount', siteLang));
       return;
@@ -411,13 +423,29 @@ function LoginProfile() {
       return;
     }
     const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-    if (!emailRegex.test(signupData.email)) {
+    if (!emailRegex.test(signupData.email.trim())) {
       alert(t('regInvalidEmail', siteLang));
       return;
     }
     if (!signupData.password || signupData.password.length < 4) {
       alert('Password must be at least 4 characters');
       return;
+    }
+
+    // All validations passed, now check email uniqueness before sending OTP
+    try {
+      const res = await fetch('http://127.0.0.1:5000/auth/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: signupData.email.trim() })
+      });
+      const checkResult = await res.json();
+      if (res.ok && checkResult.exists) {
+        alert(checkResult.message || 'Email already registered.');
+        return;
+      }
+    } catch (err) {
+      // if check fails, still proceed to avoid blocking; backend will reject on register
     }
 
     // All validations passed, now send OTP
@@ -440,7 +468,7 @@ function LoginProfile() {
         setSignupOtp('');
         setSignupOtpVerified(false);
       } else {
-        setSignupOtpError(result.error || 'Failed to send OTP');
+        setSignupOtpError(result.message || result.error || 'Failed to send OTP');
       }
     } catch (err) {
       setSignupOtpError('Server error. Please try again.');
@@ -481,16 +509,26 @@ function LoginProfile() {
       return;
     }
 
+    // Ensure data is normalized before sending to backend (reduces 400 failures)
+    const normalizedName = pendingSignupData.name ? pendingSignupData.name.trim() : '';
+    const normalizedNameFixed = normalizedName ? normalizedName[0].toUpperCase() + normalizedName.slice(1) : '';
+    const normalizedEmail = pendingSignupData.email ? pendingSignupData.email.trim() : '';
+
+    if (!pendingSignupData.role) {
+      setSignupOtpError('Please select an account type (farmer or buyer).');
+      return;
+    }
+
     setSignupOtpLoading(true);
     try {
       const res = await fetch('http://127.0.0.1:5000/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: pendingSignupData.name,
+          name: normalizedNameFixed,
           phone: pendingSignupData.phone,
           aadhar: pendingSignupData.aadhar,
-          email: pendingSignupData.email,
+          email: normalizedEmail,
           password: pendingSignupData.password,
           role: pendingSignupData.role,
           region: pendingSignupData.region,
@@ -509,7 +547,7 @@ function LoginProfile() {
         setPendingSignupData(null);
         setSignupOtpError('');
       } else {
-        setSignupOtpError(result.error || t('regFailed', siteLang));
+        setSignupOtpError(result.error || result.message || t('regFailed', siteLang));
       }
     } catch (err) {
       setSignupOtpError(t('regServerError', siteLang));
@@ -869,6 +907,7 @@ function LoginProfile() {
               <>
                 <ModalTitle>{t('emailVerified', siteLang) || 'Email Verified'}</ModalTitle>
                 <ModalSuccess>{t('emailVerificationSuccess', siteLang) || 'Your email has been verified successfully!'}</ModalSuccess>
+                {signupOtpError && <ModalError>{signupOtpError}</ModalError>}
                 <p style={{textAlign: 'center', color: '#236902', marginBottom: '1rem'}}>
                   {t('readyToSignup', siteLang) || 'Click the button below to complete your sign-up'}
                 </p>
