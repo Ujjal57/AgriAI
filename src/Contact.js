@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Chatbot from "./Chatbot";
 import "./App.css";
 import CImage from "./assets/c.jpg";
@@ -436,13 +436,43 @@ const styles = `
 `;
 
 function Contact() {
+  const navigate = useNavigate();
   const [form, setForm] = useState({ first: "", last: "", phone: "", email: "", message: "" });
   const [success, setSuccess] = useState("");
   const [clicked, setClicked] = useState(false);
   const [showThankYou, setShowThankYou] = useState(false);
   const [listening, setListening] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState("");
   const recognitionRef = useRef(null);
   const [siteLang, setSiteLang] = useState(() => localStorage.getItem('agri_lang') || 'en');
+
+  // Check if user is logged in and get user details
+  useEffect(() => {
+    const userEmail = localStorage.getItem('agriai_email');
+    const name = localStorage.getItem('agriai_name');
+    const role = localStorage.getItem('agriai_role');
+    setIsLoggedIn(!!userEmail);
+    setUserName(name || "");
+    setUserRole(role || "");
+  }, []);
+
+  // Listen for language change from navbar and refresh page automatically
+  useEffect(() => {
+    const handleLanguageChangeFromNavbar = (e) => {
+      const newLang = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en');
+      // Refresh the page to apply the new language
+      window.location.reload();
+    };
+    
+    window.addEventListener('agri:lang:change', handleLanguageChangeFromNavbar);
+    
+    return () => {
+      try { window.removeEventListener('agri:lang:change', handleLanguageChangeFromNavbar); } catch (e) {}
+    };
+  }, []);
 
   // Derive display language name from code
   const getLanguageName = (lang) => lang === 'hi' ? 'Hindi' : lang === 'kn' ? 'Kannada' : 'English';
@@ -532,6 +562,19 @@ function Contact() {
     setListening(true);
   };
 
+  const initials = (name) => {
+    return name ? name.split(' ').map(part => part[0]?.toUpperCase()).join('').slice(0, 2) : 'U';
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('agriai_email');
+    localStorage.removeItem('agriai_name');
+    localStorage.removeItem('agriai_role');
+    setIsLoggedIn(false);
+    setOpen(false);
+    navigate('/login');
+  };
+
   return (
     <Container>
       {/* Navbar */}
@@ -552,9 +595,42 @@ function Contact() {
               <option value="Hindi">हिन्दी</option>
               <option value="Kannada">ಕನ್ನಡ</option>
             </LanguageSelect>
-            <GetStartedBtn to="/login">
-              {t('homePageJoinUs', siteLang)}
-            </GetStartedBtn>
+            {!isLoggedIn && (
+              <GetStartedBtn to="/login">
+                {t('homePageJoinUs', siteLang)}
+              </GetStartedBtn>
+            )}
+            {isLoggedIn && (
+              <div style={{position:'relative', display:'flex', alignItems:'center'}}>
+                <button
+                  style={{width:40, height:40, borderRadius:'50%', background:'linear-gradient(135deg, #e8f5e2 0%, #f0faf0 100%)', border:'2px solid #53b635', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#236902', fontWeight:700, fontSize:'0.9rem', boxShadow:'0 2px 8px rgba(35,105,2,0.15)'}}
+                  onClick={() => {
+                    if (userRole === 'farmer') { navigate('/dashboard/buyer'); return; }
+                    if (userRole === 'buyer') { navigate('/dashboard/farmer'); return; }
+                    setOpen(o => !o);
+                  }}
+                  aria-label="Profile"
+                >
+                  {initials(userName)}
+                </button>
+                {open && (
+                  <div style={{position:'absolute', right:0, top:52, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'1px solid rgba(255,255,255,0.6)', boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', borderRadius:16, minWidth:240, zIndex:200}}>
+                    <div style={{display:'flex', gap:12, alignItems:'center', padding:'14px 16px', borderBottom: '1px solid rgba(83,182,53,0.1)'}}>
+                      <div style={{width:48, height:48, borderRadius: 24, background:'linear-gradient(135deg, #e8f5e2 0%, #f0faf0 100%)', display:'flex', alignItems:'center', justifyContent:'center', color:'#236902', fontWeight:800, fontSize:'1.1rem', boxShadow:'0 2px 8px rgba(35,105,2,0.1)'}}>{initials(userName)}</div>
+                      <div style={{flex:1, textAlign:'left'}}>
+                        <div style={{fontWeight:700, color:'#236902', fontSize:'0.95rem'}}>{userName || 'Profile'}</div>
+                        <div style={{fontSize:'0.8rem', color:'#53b635', fontWeight:600}}>{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'User'}</div>
+                      </div>
+                    </div>
+                    <div style={{display:'flex', flexDirection:'column'}}>
+                      <Link to="/profile" onClick={() => setOpen(false)} style={{padding:'10px 16px', color:'#236902', textDecoration:'none', fontSize:'0.9rem', fontWeight:600, transition:'all 0.2s', borderBottom:'1px solid rgba(83,182,53,0.08)', display:'block'}} onMouseEnter={(e) => e.target.style.background='rgba(83,182,53,0.08)'} onMouseLeave={(e) => e.target.style.background='transparent'}>{t('navUpdateDetails', siteLang)}</Link>
+                      <Link to={userRole === 'farmer' ? "/farmer/history" : "/history"} onClick={() => setOpen(false)} style={{padding:'10px 16px', color:'#236902', textDecoration:'none', fontSize:'0.9rem', fontWeight:600, transition:'all 0.2s', borderBottom:'1px solid rgba(83,182,53,0.08)', display:'block'}} onMouseEnter={(e) => e.target.style.background='rgba(83,182,53,0.08)'} onMouseLeave={(e) => e.target.style.background='transparent'}>{t('navHistory', siteLang)}</Link>
+                      <button onClick={handleLogout} style={{padding:'10px 16px', background:'linear-gradient(135deg, #236902 0%, #53b635 100%)', color:'#fff', border:'none', borderRadius:'0 0 16px 16px', fontSize:'0.9rem', fontWeight:700, cursor:'pointer', boxShadow:'0 4px 16px rgba(35,105,2,0.2)', transition:'all 0.2s', width:'100%'}} onMouseEnter={(e) => {e.target.style.transform='translateY(-2px)'; e.target.style.boxShadow='0 8px 24px rgba(35,105,2,0.3)';}} onMouseLeave={(e) => {e.target.style.transform='translateY(0)'; e.target.style.boxShadow='0 4px 16px rgba(35,105,2,0.2)';}}>{t('navLogout', siteLang)}</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </NavRight>
         </NavContent>
       </NavBar>

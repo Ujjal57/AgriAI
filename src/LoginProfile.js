@@ -957,7 +957,7 @@ function LoginProfile() {
   // If buyer signs in, show the homepage first per UX request; otherwise go to role dashboard
   // Dispatch a custom event so Navbar updates immediately in the same tab
   try { window.dispatchEvent(new CustomEvent('agriai:login', { detail: { email: signinData.email, role, name } })); } catch (e) {}
-  if (role === 'buyer') navigate('/');
+  if (role === 'buyer') navigate('/dashboard/farmer', { state: { name } });
   else if (role === 'farmer') navigate('/dashboard/buyer', { state: { name } });
   else navigate(`/dashboard/${role}`, { state: { name } });
       } else if (res.status === 404) {

@@ -2349,20 +2349,18 @@ const Navbar = () => {
             </span>
           </button>
           {open && (
-            <div className="navbar-profile-menu" style={{position:'absolute', right:0, top:52, background:'#fff', border:'1px solid #eee', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', borderRadius:8, minWidth:220, zIndex:200}}>
-              <div style={{display:'flex', gap:12, alignItems:'center', padding:'12px 14px', borderBottom: '1px solid #f1f1f1'}}>
-                <div style={{width:48, height:48, borderRadius: 24, background:'#e6f4ea', display:'flex', alignItems:'center', justifyContent:'center', color:'#236902', fontWeight:800}}>{initials(userName)}</div>
+            <div className="navbar-profile-menu" style={{position:'absolute', right:0, top:52, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'1px solid rgba(255,255,255,0.6)', boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', borderRadius:16, minWidth:240, zIndex:200}}>
+              <div style={{display:'flex', gap:12, alignItems:'center', padding:'14px 16px', borderBottom: '1px solid rgba(83,182,53,0.1)'}}>
+                <div style={{width:48, height:48, borderRadius: 24, background:'linear-gradient(135deg, #e8f5e2 0%, #f0faf0 100%)', display:'flex', alignItems:'center', justifyContent:'center', color:'#236902', fontWeight:800, fontSize:'1.1rem', boxShadow:'0 2px 8px rgba(35,105,2,0.1)'}}>{initials(userName)}</div>
                 <div style={{flex:1, textAlign:'left'}}>
-                  <div style={{fontWeight:700, color:'#236902'}}>{userName || 'Profile'}</div>
-                  <div style={{fontSize:12, color:'#000000ff'}}>{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'User'}</div>
+                  <div style={{fontWeight:700, color:'#236902', fontSize:'0.95rem'}}>{userName || 'Profile'}</div>
+                  <div style={{fontSize:'0.8rem', color:'#53b635', fontWeight:600}}>{userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'User'}</div>
                 </div>
               </div>
-              <div className="navbar-profile-links">
-                  <Link to="/profile" onClick={() => setOpen(false)} className="navbar-profile-link">{t('navUpdateDetails', siteLang)}</Link>
-                  <Link to={userRole === 'farmer' ? "/farmer/history" : "/history"} onClick={() => setOpen(false)} className="navbar-profile-link">{t('navHistory', siteLang)}</Link>
-                  <Link to="/contact" onClick={() => setOpen(false)} className="navbar-profile-link">{t('navContact', siteLang)}</Link>
-                  <div className="navbar-profile-divider" />
-                  <button onClick={handleLogout} className="navbar-profile-logout">{t('navLogout', siteLang)}</button>
+              <div className="navbar-profile-links" style={{display:'flex', flexDirection:'column'}}>
+                  <Link to="/profile" onClick={() => setOpen(false)} className="navbar-profile-link" style={{padding:'10px 16px', color:'#236902', textDecoration:'none', fontSize:'0.9rem', fontWeight:600, transition:'all 0.2s', borderBottom:'1px solid rgba(83,182,53,0.08)', display:'block'}} onMouseEnter={(e) => e.target.style.background='rgba(83,182,53,0.08)'} onMouseLeave={(e) => e.target.style.background='transparent'}>{t('navUpdateDetails', siteLang)}</Link>
+                  <Link to={userRole === 'farmer' ? "/farmer/history" : "/history"} onClick={() => setOpen(false)} className="navbar-profile-link" style={{padding:'10px 16px', color:'#236902', textDecoration:'none', fontSize:'0.9rem', fontWeight:600, transition:'all 0.2s', borderBottom:'1px solid rgba(83,182,53,0.08)', display:'block'}} onMouseEnter={(e) => e.target.style.background='rgba(83,182,53,0.08)'} onMouseLeave={(e) => e.target.style.background='transparent'}>{t('navHistory', siteLang)}</Link>
+                  <button onClick={handleLogout} className="navbar-profile-logout" style={{padding:'10px 16px', background:'linear-gradient(135deg, #236902 0%, #53b635 100%)', color:'#fff', border:'none', borderRadius:'0 0 16px 16px', fontSize:'0.9rem', fontWeight:700, cursor:'pointer', boxShadow:'0 4px 16px rgba(35,105,2,0.2)', transition:'all 0.2s', width:'100%'}} onMouseEnter={(e) => {e.target.style.transform='translateY(-2px)'; e.target.style.boxShadow='0 8px 24px rgba(35,105,2,0.3)';}} onMouseLeave={(e) => {e.target.style.transform='translateY(0)'; e.target.style.boxShadow='0 4px 16px rgba(35,105,2,0.2)';}}>{t('navLogout', siteLang)}</button>
               </div>
             </div>
           )}
