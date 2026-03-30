@@ -7,7 +7,8 @@ const base = process.env.REACT_APP_API_BASE || 'http://127.0.0.1:5000';
 function getTimeGreeting() {
   const now = new Date();
   const hour = now.getHours();
-  if (hour < 5) return 'Good early morning';
+  if (hour < 5) return 'Good morning';
+  if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   if (hour < 21) return 'Good evening';
   return 'Good night';
@@ -294,13 +295,17 @@ const Chatbot = () => {
 
       const mode = wantsStepwise ? 'stepwise' : (wantsDetail ? 'detailed' : 'short');
 
+      console.log(`📤 Sending to ${base}/ai/groq:`, { q: userPrompt, lang: langFlag, mode });
+
       const res = await fetch(`${base}/ai/groq`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ q: userPrompt, lang: langFlag, mode })
       });
 
+      console.log("📨 Response status:", res.status);
       const data = await res.json();
+      console.log("📨 Response data:", data);
 
       if (res.ok && data.result) {
         const resultText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
@@ -310,8 +315,14 @@ const Chatbot = () => {
         setMessages(prev => [...prev, { sender: 'bot', text: `⚠️ ${errMsg}` }]);
       }
     } catch (err) {
-      console.error("AI request failed", err);
-      setMessages(prev => [...prev, { sender: "bot", text: "⚠️ Connection failed. Please try again." }]);
+      console.error("❌ AI request failed:", err);
+      console.error("Error details:", {
+        message: err.message,
+        stack: err.stack,
+        apiBase: base
+      });
+      const errorMsg = err.message || "Connection failed";
+      setMessages(prev => [...prev, { sender: "bot", text: `⚠️ Connection failed: ${errorMsg}. Make sure the backend is running at ${base}` }]);
     } finally {
       setLoading(false);
     }
@@ -356,19 +367,7 @@ const Chatbot = () => {
                 </div>
               </div>
 
-              <div className="chatbot-header-lang-wrapper">
-                <div className="chatbot-lang-select">
-                  <select value={language} onChange={e => {
-                    const l = e.target.value; setLanguage(l);
-                    try { localStorage.setItem('agri_lang', l); } catch (e) {}
-                    try { window.dispatchEvent(new CustomEvent('agri:lang:change', { detail: { lang: l } })); } catch (e) {}
-                  }} aria-label="Select language">
-                    <option value="en">English</option>
-                    <option value="hi">Hindi</option>
-                    <option value="kn">Kannada</option>
-                  </select>
-                </div>
-              </div>
+              
 
               <div className="chatbot-header-actions">
                 <button className="chatbot-clear-btn" onClick={clearConversation} aria-label="Clear conversation" title="Clear conversation">
@@ -410,9 +409,9 @@ const Chatbot = () => {
                         title={speakingIndex === idx ? 'Stop' : 'Listen'}
                       >
                         {speakingIndex === idx ? (
-                          <svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="5" width="14" height="14" fill="#236902" /></svg>
+                          <svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="5" width="14" height="14" fill="#39FF14" /></svg>
                         ) : (
-                          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 10v4h4l5 5V5L7 10H3z" fill="#236902" /></svg>
+                          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 10v4h4l5 5V5L7 10H3z" fill="#39FF14" /></svg>
                         )}
                       </button>
                     )}

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify
 from flask import send_from_directory
 import openpyxl
@@ -13,6 +14,10 @@ import sqlite3
 import smtplib
 import ssl
 from email.message import EmailMessage
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 def send_farmer_purchase_email(to_email, farmer_name='', crop_name='', variety='', quantity='', total_price=0, buyer_name='', lang='en'):
@@ -138,6 +143,12 @@ except Exception:
 # Flask app
 app = Flask(__name__)
 CORS(app)
+
+# ✅ Health check endpoint for diagnostics
+@app.route('/health', methods=['GET', 'POST'])
+def health_check():
+    """Returns 200 OK if backend is running"""
+    return jsonify({"status": "OK", "message": "Backend is running!", "api_base": "http://127.0.0.1:5000"}), 200
 
 # Simple in-memory OTP store for email verification (email -> { otp, expires_at, purpose })
 OTP_STORE = {}

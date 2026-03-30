@@ -2,6 +2,7 @@ import React from 'react';
 import './Navbar.css';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { t } from './i18n';
+import { Leaf } from 'lucide-react';
 
 const Navbar = () => {
   const [open, setOpen] = React.useState(false);
@@ -303,9 +304,24 @@ const Navbar = () => {
   }, [farmerId]);
 
   const handleLogout = () => {
-    // For now just navigate to login page. Clear any client-side auth if added.
     setOpen(false);
-    try { localStorage.removeItem('agriai_email'); localStorage.removeItem('agriai_role'); localStorage.removeItem('agriai_name'); } catch (e) {}
+
+    try {
+      localStorage.removeItem('agriai_email');
+      localStorage.removeItem('agriai_role');
+      localStorage.removeItem('agriai_name');
+    } catch (e) {}
+
+    // update navbar state instantly
+    setIsLoggedIn(false);
+    setUserRole('');
+    setUserName('');
+
+    // notify navbar listeners (same pattern you already use for login)
+    try {
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
     navigate('/login');
   };
 
@@ -1967,14 +1983,20 @@ const Navbar = () => {
   return (<>
     <nav className="navbar">
       <div className="navbar-logo-group">
-        <span className="navbar-logo-circle">
-          <img src={require('./assets/logo192.png')} alt="AgriAI Logo" className="navbar-logo-img" />
-        </span>
-        <span className="navbar-logo">{t('siteName', siteLang)}</span>
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-2 font-display font-bold text-2xl text-foreground">
+            <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary flex items-center justify-center">
+              <Leaf className="w-4 h-4 text-neon" />
+            </div>
+            <span className="neon-shimmer">AgriAI</span>
+        </Link>
+        </div>
       </div>
       <div className="navbar-right">
         <ul className={`navbar-links ${(userRole === 'farmer' || userRole === 'buyer') ? 'centered' : ''}`}>
+          {!isLoggedIn && (
           <li><Link to="/" className="navbar-link-anim navbar-link-bold">{t('navHome', siteLang)}</Link></li>
+          )}
           {/* Show Contact Us only for guests (hide when signed in) */}
           {!isLoggedIn && (
             <li><Link to="/contact" className="navbar-link-anim navbar-link-bold">{t('navContact', siteLang)}</Link></li>
@@ -1986,7 +2008,7 @@ const Navbar = () => {
               {userRole === 'buyer' && cartCount > 0 && (
                 <li style={{position:'relative'}}>
                   <Link to="/cart" className="navbar-link-anim navbar-link-bold">{t('navCart', siteLang)}</Link>
-                  <span style={{position:'absolute', top:-8, right:-12, background:'#d32f2f', color:'#fff', borderRadius:10, padding:'0 6px', fontSize:12, lineHeight:'18px', height:18, minWidth:18, textAlign:'center'}}>{cartCount}</span>
+                  <span style={{position:'absolute', top:-8, right:-12, background:'#d32f2f', color:'#ffffff', borderRadius:10, padding:'0 6px', fontSize:12, lineHeight:'18px', height:18, minWidth:18, textAlign:'center'}}>{cartCount}</span>
                 </li>
               )}
             </>
@@ -1998,7 +2020,7 @@ const Navbar = () => {
               {userRole === 'farmer' && cartCount > 0 && (
                 <li style={{position:'relative'}}>
                   <Link to="/farmer/cart" className="navbar-link-anim navbar-link-bold">{t('navCart', siteLang)}</Link>
-                  <span style={{position:'absolute', top:-8, right:-12, background:'#d32f2f', color:'#fff', borderRadius:10, padding:'0 6px', fontSize:12, lineHeight:'18px', height:18, minWidth:18, textAlign:'center'}}>{cartCount}</span>
+                  <span style={{position:'absolute', top:-8, right:-12, background:'#d32f2f', color:'#ffffff', borderRadius:10, padding:'0 6px', fontSize:12, lineHeight:'18px', height:18, minWidth:18, textAlign:'center'}}>{cartCount}</span>
                 </li>
               )}
             </>
@@ -2009,9 +2031,9 @@ const Navbar = () => {
           <select value={siteLang} onChange={e => {
             const l = e.target.value; setSiteLang(l); try { localStorage.setItem('agri_lang', l); } catch (e) {}
             try { window.dispatchEvent(new CustomEvent('agri:lang:change', { detail: { lang: l } })); } catch (e) {}
-          }} aria-label="Site language" style={{padding:'3px 1px', border:'1px solid #e6e6e6', background:'#fff'}}>
+          }} aria-label="Site language" style={{padding:'3px 1px', border:'3px solid #130e0e', background:'#52ca43fb',color:'#ffffff'}}>
             <option value="en">English</option>
-            <option value="hi">हिन्दी</option>
+            <option value="hi">हिन्दी </option>
             <option value="kn">ಕನ್ನಡ</option>
           </select>
         </div>
@@ -2092,8 +2114,8 @@ const Navbar = () => {
             style={{background:'none', border:'none', marginLeft:2, marginRight:2, cursor:'pointer', display:'inline-flex', alignItems:'center'}}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2z" fill="#236902" />
-              <path d="M18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5S10.5 3.17 10.5 4v.68C7.63 5.36 6 7.92 6 11v5l-1.99 2H20l-2-2z" fill="#236902" />
+              <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2z" fill="#fcfffb" />
+              <path d="M18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5S10.5 3.17 10.5 4v.68C7.63 5.36 6 7.92 6 11v5l-1.99 2H20l-2-2z" fill="#ffffff" />
             </svg>
             {notifCount > 0 && (
               <span style={{position:'relative', left:-6, top:-10, background:'#d32f2f', color:'#fff', borderRadius:10, padding:'0 6px', fontSize:12, lineHeight:'18px', height:18, minWidth:18, textAlign:'center'}}>{notifCount}</span>

@@ -1,6 +1,558 @@
 import React from 'react';
-import Navbar from './Navbar';
 import { t } from './i18n';
+import Navbar from './Navbar';
+
+const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  * { box-sizing: border-box; }
+
+  .mydeals-root {
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #0a2e0a 0%, #1a5c10 30%, #2d8a1f 60%, #53b635 100%);
+    background-attachment: fixed;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  .mydeals-root::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 20%, rgba(83,182,53,0.18) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(35,105,2,0.22) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.03) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Floating orbs */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.18;
+    pointer-events: none;
+    z-index: 0;
+    animation: floatOrb 12s ease-in-out infinite;
+  }
+  .orb-1 { width: 400px; height: 400px; background: #53b635; top: -100px; left: -100px; animation-delay: 0s; }
+  .orb-2 { width: 300px; height: 300px; background: #236902; bottom: 10%; right: -80px; animation-delay: 4s; }
+  .orb-3 { width: 250px; height: 250px; background: #8fdb5e; top: 40%; left: 60%; animation-delay: 8s; }
+
+  @keyframes floatOrb {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -20px) scale(1.05); }
+    66% { transform: translate(-20px, 30px) scale(0.95); }
+  }
+
+  /* Leaf particles */
+  .leaf {
+    position: fixed;
+    width: 10px;
+    height: 10px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 0;
+    animation: leafFall linear infinite;
+  }
+  .leaf::before {
+    content: '🌿';
+    font-size: 16px;
+  }
+  .leaf-1 { left: 5%;  animation-duration: 14s; animation-delay: 0s; }
+  .leaf-2 { left: 20%; animation-duration: 18s; animation-delay: 3s; }
+  .leaf-3 { left: 40%; animation-duration: 12s; animation-delay: 6s; }
+  .leaf-4 { left: 65%; animation-duration: 16s; animation-delay: 1s; }
+  .leaf-5 { left: 85%; animation-duration: 20s; animation-delay: 9s; }
+
+  @keyframes leafFall {
+    0%   { transform: translateY(-40px) rotate(0deg); opacity: 0; }
+    10%  { opacity: 0.6; }
+    90%  { opacity: 0.3; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+
+  /* Main container */
+  .mydeals-main {
+    position: relative;
+    z-index: 1;
+    padding: 5rem 1.5rem 3rem;
+    max-width: 1280px;
+    margin: 0 auto;
+    animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
+  }
+
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(32px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Glass panel */
+  .glass-panel {
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(20px) saturate(1.6);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow:
+      0 8px 32px rgba(35,105,2,0.12),
+      0 32px 64px rgba(0,0,0,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.8);
+    padding: 2.5rem;
+    transform-style: preserve-3d;
+  }
+
+  /* Header */
+  .deals-title {
+    text-align: center;
+    font-size: 2.4rem;
+    font-weight: 800;
+    color: transparent;
+    background: linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    margin: 0 0 0.25rem;
+    letter-spacing: -0.5px;
+    text-shadow: none;
+  }
+  .deals-subtitle {
+    text-align: center;
+    font-size: 0.95rem;
+    color: #5a8a4a;
+    margin: 0 0 2rem;
+    font-weight: 500;
+  }
+
+  /* Search/sort bar */
+  .search-bar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  .search-input, .sort-select {
+    padding: 9px 14px;
+    border: 1.5px solid #d4edcc;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: rgba(255,255,255,0.9);
+    color: #1a3d0a;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  }
+  .search-input:focus, .sort-select:focus {
+    border-color: #53b635;
+    box-shadow: 0 0 0 3px rgba(83,182,53,0.15);
+    transform: translateY(-1px);
+  }
+
+  /* Form section */
+  .form-section {
+    background: linear-gradient(135deg, rgba(234,246,234,0.6) 0%, rgba(255,255,255,0.4) 100%);
+    border: 1px solid rgba(83,182,53,0.2);
+    border-radius: 16px;
+    padding: 1.75rem;
+    margin-bottom: 2rem;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+  }
+  .form-section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #236902;
+    margin: 0 0 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .form-section-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 18px;
+    background: linear-gradient(180deg, #53b635, #236902);
+    border-radius: 2px;
+  }
+
+  .form-grid {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .form-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #2d5c1a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .form-input, .form-select {
+    padding: 10px 14px;
+    border: 1.5px solid #d4edcc;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: rgba(255,255,255,0.95);
+    color: #1a3d0a;
+    outline: none;
+    transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
+  }
+  .form-input:focus, .form-select:focus {
+    border-color: #53b635;
+    box-shadow: 0 0 0 3px rgba(83,182,53,0.18), 0 2px 8px rgba(35,105,2,0.1);
+    transform: translateY(-2px);
+  }
+  .form-helper {
+    font-size: 0.74rem;
+    color: #6b9b5a;
+  }
+
+  /* File upload zone */
+  .upload-zone {
+    border: 2px dashed #b2dfa0;
+    border-radius: 12px;
+    padding: 16px 24px;
+    background: rgba(234,246,234,0.5);
+    text-align: center;
+    transition: border-color 0.2s, background 0.2s;
+    cursor: pointer;
+  }
+  .upload-zone:hover {
+    border-color: #53b635;
+    background: rgba(83,182,53,0.07);
+  }
+
+  /* Submit button */
+  .submit-btn {
+    padding: 0.85rem 2.5rem;
+    background: linear-gradient(135deg, #236902 0%, #53b635 100%);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(35,105,2,0.3), 0 1px 0 rgba(255,255,255,0.15) inset;
+    transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s, filter 0.18s;
+    letter-spacing: 0.3px;
+    position: relative;
+    overflow: hidden;
+  }
+  .submit-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+    border-radius: inherit;
+  }
+  .submit-btn:hover:not(:disabled) {
+    transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 8px 28px rgba(35,105,2,0.35);
+    filter: brightness(1.05);
+  }
+  .submit-btn:active:not(:disabled) {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 2px 8px rgba(35,105,2,0.2);
+  }
+  .submit-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:0.7;} 50%{opacity:0.5;} }
+
+  /* Toast notifications */
+  .toast {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 9999;
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    animation: toastIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 360px;
+  }
+  .toast-success { background: #236902; color: #fff; }
+  .toast-error { background: #c62828; color: #fff; }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(60px) scale(0.9); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+  }
+
+  /* Cards grid */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+  }
+
+  /* Deal card */
+  .deal-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid rgba(83,182,53,0.15);
+    box-shadow: 0 4px 16px rgba(35,105,2,0.07), 0 1px 0 rgba(255,255,255,0.9) inset;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: transform 0.35s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.35s ease;
+    transform-style: preserve-3d;
+    cursor: default;
+    animation: cardIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+  }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .deal-card:hover {
+    transform: translateY(-8px) rotateX(2deg) rotateY(-1deg) scale(1.02);
+    box-shadow: 0 20px 48px rgba(35,105,2,0.18), 0 4px 12px rgba(0,0,0,0.08);
+  }
+
+  /* Card image */
+  .card-img-wrap {
+    width: 100%;
+    height: 165px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #e8f5e2 0%, #f0faf0 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .card-img-wrap::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(transparent, rgba(255,255,255,0.8));
+    pointer-events: none;
+  }
+  .card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94);
+  }
+  .deal-card:hover .card-img { transform: scale(1.08); }
+  .card-no-img {
+    color: #b2cfa8;
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-no-img span { font-size: 2rem; }
+
+  /* Card body */
+  .card-body {
+    padding: 14px 14px 10px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-crop-name {
+    margin: 0;
+    color: #1a5c10;
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+  }
+  .card-variety-badge {
+    background: linear-gradient(135deg, #eaf6ea, #d4f0d4);
+    color: #236902;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.78rem;
+    border: 1px solid rgba(83,182,53,0.25);
+    white-space: nowrap;
+  }
+
+  .card-info-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .card-info-box {
+    background: linear-gradient(135deg, #f5fbf3 0%, #edf7ea 100%);
+    border: 1px solid rgba(83,182,53,0.12);
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+  .card-info-label {
+    font-size: 0.7rem;
+    color: #6b9b5a;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 2px;
+  }
+  .card-info-value {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #1a3d0a;
+  }
+
+  /* Status badge */
+  .status-badge {
+    text-align: center;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .status-expired { background: linear-gradient(135deg, #ffebee, #fce4ec); color: #c62828; border: 1px solid rgba(198,40,40,0.2); }
+  .status-today { background: linear-gradient(135deg, #fff8e1, #fff3cd); color: #e65100; border: 1px solid rgba(230,81,0,0.2); }
+  .status-active { background: linear-gradient(135deg, #e8f5e2, #d4f0d4); color: #2e7d32; border: 1px solid rgba(46,125,50,0.2); }
+  .status-none { background: rgba(240,240,240,0.8); color: #888; border: 1px solid rgba(0,0,0,0.06); }
+
+  /* Edit inline inputs */
+  .edit-input {
+    padding: 6px 10px;
+    border: 1.5px solid #53b635;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: #fff;
+    color: #1a3d0a;
+    outline: none;
+    width: 100%;
+    transition: box-shadow 0.2s;
+  }
+  .edit-input:focus { box-shadow: 0 0 0 3px rgba(83,182,53,0.2); }
+
+  /* Card action buttons */
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    padding: 0 14px 12px;
+  }
+  .btn-edit {
+    flex: 1;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #1565c0, #1976d2);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s;
+    box-shadow: 0 2px 8px rgba(25,118,210,0.25);
+  }
+  .btn-edit:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 6px 16px rgba(25,118,210,0.35);
+  }
+  .btn-delete {
+    flex: 1;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #b71c1c, #e53935);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s;
+    box-shadow: 0 2px 8px rgba(229,57,53,0.25);
+  }
+  .btn-delete:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 6px 16px rgba(229,57,53,0.35);
+  }
+  .btn-save {
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #236902, #53b635);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px rgba(35,105,2,0.2);
+    white-space: nowrap;
+  }
+  .btn-save:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(35,105,2,0.3); }
+  .btn-cancel {
+    padding: 6px 12px;
+    background: #e8e8e8;
+    color: #555;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s;
+    white-space: nowrap;
+  }
+  .btn-cancel:hover { transform: translateY(-1px); background: #ddd; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #6b9b5a;
+    animation: fadeSlideUp 0.6s ease both;
+  }
+  .empty-icon { font-size: 4rem; display: block; margin-bottom: 1rem; opacity: 0.6; }
+  .empty-text { font-size: 1rem; font-weight: 600; }
+
+  /* Section divider */
+  .section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(83,182,53,0.3), transparent);
+    margin: 2rem 0;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .glass-panel { padding: 1.5rem; }
+    .deals-title { font-size: 1.8rem; }
+    .cards-grid { grid-template-columns: 1fr; }
+    .search-bar { justify-content: stretch; }
+    .search-input { flex: 1; }
+    .form-grid { flex-direction: column; }
+  }
+`;
 
 const MyDeals = () => {
   const [sellerName, setSellerName] = React.useState(localStorage.getItem('agriai_name') || '');
@@ -81,11 +633,17 @@ const MyDeals = () => {
   }, []);
 
   React.useEffect(() => {
-    const id = setInterval(() => {
-      fetchListings();
-    }, 15000);
+    const id = setInterval(() => { fetchListings(); }, 15000);
     return () => clearInterval(id);
   }, [fetchListings]);
+
+  // Auto-dismiss toast
+  React.useEffect(() => {
+    if (saved) {
+      const timer = setTimeout(() => setSaved(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [saved]);
 
   const cropNameRef = React.useRef(null);
 
@@ -186,7 +744,6 @@ const MyDeals = () => {
       if (deliveryDate) formData.append('delivery_date', deliveryDate);
       if (sellerId) formData.append('buyer_id', sellerId);
       if (imageFile) formData.append('image', imageFile, imageFile.name);
-      // include user's selected language so backend can send localized emails
       if (siteLang) formData.append('lang', siteLang);
 
       const res = await fetch(`${apiBase}/deals`, { method: 'POST', body: formData });
@@ -206,273 +763,242 @@ const MyDeals = () => {
   };
 
   return (
-    <div>
-      <Navbar />
-      <main style={{padding: '6rem 1rem 2rem', background: '#53b635'}}>
-        <div style={{maxWidth:1200,margin:'0 auto',background:'#fff',padding:'2rem',boxShadow:'0 8px 24px rgba(0,0,0,0.06)'}}>
-          
-          {/* Top Row: Add New Deal */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-            position: 'relative'
-          }}>
-            <h2 style={{
-              color: '#236902',
-              margin: 0,
-              textAlign: 'center',
-              flex: '1 1 100%',
-              fontSize: '2rem'
-            }}>
-              {t('myDealsTitle', siteLang)}
-            </h2>
+    <>
+      <style>{styles}</style>
 
-            <div style={{
-              display: 'flex',
-              gap: 8,
-              alignItems: 'center',
-              position: 'absolute',
-              right: 0,
-              top: '50%',
-              transform: 'translateY(-50%)'
-            }}>
+      {/* Toast */}
+      {saved && (
+        <div className={`toast ${saved.status === 'success' ? 'toast-success' : 'toast-error'}`}>
+          <span>{saved.status === 'success' ? '✅' : '❌'}</span>
+          <span>{saved.status === 'success' ? (t('uploadButton', siteLang) + ' — OK') : (saved.message || t('failedUpdate', siteLang))}</span>
+        </div>
+      )}
+
+      <div className="mydeals-root">
+        {/* Animated orbs */}
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+
+        {/* Floating leaves */}
+        <div className="leaf leaf-1" />
+        <div className="leaf leaf-2" />
+        <div className="leaf leaf-3" />
+        <div className="leaf leaf-4" />
+        <div className="leaf leaf-5" />
+
+        <Navbar />
+
+        <main className="mydeals-main">
+          <div className="glass-panel">
+
+            {/* Header + search bar */}
+            <h2 className="deals-title">{t('myDealsTitle', siteLang)}</h2>
+            <p className="deals-subtitle">Manage your crop purchase requests</p>
+
+            <div className="search-bar">
               <input
+                className="search-input"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder={t('searchPlaceholder', siteLang)}
-                style={{ padding: 8, border: '1px solid #e5e5e5', borderRadius: 6 }}
               />
               <select
+                className="sort-select"
                 value={sort}
                 onChange={e => setSort(e.target.value)}
-                style={{ padding: 8, border: '1px solid #e5e5e5', borderRadius: 6 }}
               >
                 <option value="recent">{t('sortMostRecent', siteLang)}</option>
                 <option value="qty_desc">{t('sortQtyDesc', siteLang)}</option>
                 <option value="qty_asc">{t('sortQtyAsc', siteLang)}</option>
               </select>
             </div>
-          </div>
 
-          <div style={{height:40}} />
-
-          {/* Form Section */}
-          <form onSubmit={handleSubmit} style={{display:'grid', gap:12}}>
-            {/* Crop details row */}
-            <div style={{display:'flex', gap:12, alignItems:'flex-start', flexWrap: 'wrap'}}>
-              <div style={{flex:'0 0 220px'}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>{t('formCategoryLabel', siteLang)}</div>
-                <select value={category} onChange={e=>setCategory(e.target.value)} style={{width:'100%', padding:10}}>
-                  <option value=''>{t('selectCategoryPlaceholder', siteLang)}</option>
-                  <option value='Food Crops'>{t('catFood', siteLang)}</option>
-                  <option value='Fruits and Vegetables'>{t('catFruits', siteLang)}</option>
-                  <option value='Masalas'>{t('catMasalas', siteLang)}</option>
-                </select>
-                <div style={{fontSize:12,color:'#000',marginTop:6}}>{t('chooseCategoryText', siteLang)}</div>
-              </div>
-
-              <div style={{flex:2}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>{t('formCropNameLabel', siteLang)}</div>
-                <input ref={cropNameRef} placeholder={t('formCropNameLabel', siteLang)} value={cropName} onChange={e=>setCropName(e.target.value)} style={{width:'100%',padding:10}} required />
-                <div style={{fontSize:14,color:'#000',marginTop:6}}>{t('cropNameHelper', siteLang)}</div>
-              </div>
-
-              <div style={{flex:'0 0 220px'}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>{t('formVarietyLabel', siteLang)}</div>
-                <input placeholder={t('formVarietyLabel', siteLang)} value={variety} onChange={e=>setVariety(e.target.value)} style={{width:'100%',padding:10}} />
-                <div style={{fontSize:12,color:'#000',marginTop:6}}>{t('varietyHelper', siteLang)}</div>
-              </div>
-
-              <div style={{flex:1}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6,textAlign:'center'}}>{t('formQuantityLabel', siteLang)}</div>
-                <input placeholder={t('formQuantityLabel', siteLang)} type="number" step="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)} style={{width:'100%',padding:10}} required />
-                <div style={{fontSize:14,color:'#000',marginTop:6}}>{t('quantityHelper', siteLang)}</div>
-              </div>
-
-              <div style={{flex:'0 0 220px'}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6, textAlign:'center'}}>{t('formDeliveryDateLabel', siteLang)}</div>
-                <input type="date" min={todayStr} value={deliveryDate} onChange={e=>setDeliveryDate(e.target.value)} style={{width:'100%', padding:10}} />
-                <div style={{fontSize:12, color:'#000', marginTop:6, textAlign:'center'}}>{t('formDeliveryDateLabel', siteLang)}</div>
-              </div>
-            </div>
-
-            <div style={{display:'flex', justifyContent:'center', marginTop:8}}>
-              <div style={{flex:'0.6 4 220px', textAlign:'center'}}>
-                <div style={{fontWeight:700, color:'#000', marginBottom:6}}>{t('formImageLabel', siteLang)}</div>
-                <div style={{padding:6, border:'1px dashed #ddd', borderRadius:6, background:'#fafafa', display:'inline-block'}}>
-                  <input required type="file" accept="image/*" onChange={e=> setImageFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
-                </div>
-                <div style={{fontSize:12, color:'#000', marginTop:6}}>{t('formAttachPhoto', siteLang)}</div>
-              </div>
-            </div>
-
-            <div style={{display:'flex', justifyContent:'center'}}>
-              <button
-                type="submit"
-                style={{
-                  padding:'0.8rem 1.6rem',
-                  background:'#236902',
-                  color:'#fff',
-                  border:'none',
-                  borderRadius:6,
-                  transform: loading ? 'scale(0.98)' : 'scale(1)',
-                  transition:'transform 120ms ease, box-shadow 120ms ease',
-                  fontFamily: "'Times New Roman', Times, serif",
-                  cursor: 'pointer'
-                }}
-                disabled={loading}
-              >
-                {loading ? t('uploading', siteLang) : t('uploadButton', siteLang)}
-              </button>
-            </div>
-          </form>
-
-          {/* Crop Cards */}
-          <section style={{marginTop:18}}>
-            {visibleListings.length === 0 && (
-              <div style={{textAlign:'center'}}>
-                <div style={{marginBottom:8}}>{t('noDealsYet', siteLang)}</div>
-              </div>
-            )}
-
-            {visibleListings.length > 0 && (
-              <div style={{display:'grid', gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))', gap:16}}>
-                {visibleListings.map(l => (
-                  <div 
-                    key={l.id}
-                    style={{
-                      background:'#fff',
-                      borderRadius:8,
-                      padding:'12px 12px 1px',
-                      border:'1px solid #eaeaea',
-                      boxShadow:'0 6px 18px rgba(0,0,0,0.06)',
-                      minHeight:340,
-                      display:'flex',
-                      flexDirection:'column',
-                      justifyContent:'space-between',
-                      transition:'transform 0.3s ease, box-shadow 0.3s ease',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.transform = 'translateY(-5px) scale(1.03)';
-                      e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,0,0,0.15)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                      e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.06)';
-                    }}
-                  >
-                    <div 
-                      style={{
-                        width:'100%',
-                        height:160,
-                        borderRadius:8,
-                        overflow:'hidden',
-                        background:'#f6f6f6',
-                        display:'flex',
-                        alignItems:'center',
-                        justifyContent:'center',
-                        transition:'transform 0.4s ease',
-                      }}
-                    >
-                      {l.image_url ? (
-                        <img 
-                          src={l.image_url} 
-                          alt={l.crop_name} 
-                          style={{
-                            width:'100%',
-                            height:'100%',
-                            objectFit:'cover',
-                            display:'block',
-                            transition:'transform 0.4s ease',
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                        />
-                      ) : (
-                        <div style={{color:'#999'}}>{t('noImage', siteLang)}</div>
-                      )}
-                    </div>
-
-                    {/* Crop name + Variety side by side */}
-                    <div style={{marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
-                      <h3 style={{margin:0, color:'#236902', fontSize:18}}>{l.crop_name}</h3>
-                      {l.variety && (
-                        <span style={{
-                          background:'#eaf6ea',
-                          color:'#236902',
-                          padding:'4px 8px',
-                          borderRadius:6,
-                          fontWeight:600,
-                          fontSize:15
-                        }}>
-                          {l.variety}
-                        </span>
-                      )}
-                    </div>
-
-                    <div style={{display:'flex', gap:8, marginTop:10, flexWrap:'wrap'}}>
-                      <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:110, flex:'1 1 120px'}}>
-                        <div style={{fontSize:12, color:'#000000ff'}}>{t('cardQuantityLabel', siteLang)}</div>
-                        {editingId === l.id ? (
-                          <div style={{display:'flex', gap:6, alignItems:'center'}}>
-                            <input value={editQuantity} onChange={e=>setEditQuantity(e.target.value)} style={{width:120,padding:6}} />
-                          </div>
-                        ) : (
-                          <div style={{fontWeight:700}}>{Number(l.quantity_kg || 0).toLocaleString('en-IN')} kg</div>
-                        )}
-                      </div>
-                      <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:160, flex:'1 1 180px'}}>
-                        <div style={{fontSize:12, color:'#000000ff'}}>{t('cardDeliveryDateLabel', siteLang)}</div>
-                        {editingId === l.id ? (
-                          <div style={{display:'flex', gap:6, alignItems:'center'}}>
-                            <input type="date" min={todayStr} value={editDeliveryDate} onChange={e=>setEditDeliveryDate(e.target.value)} style={{width:150,padding:6}} />
-                            <button onClick={() => saveEdit(l.id)} style={{padding:'6px 8px', background:'#236902', color:'#fff', border:'none', borderRadius:6}}>{t('saveButton', siteLang)}</button>
-                            <button onClick={cancelEdit} style={{padding:'6px 8px', background:'#ddd', border:'none', borderRadius:6}}>{t('cancelButton', siteLang)}</button>
-                          </div>
-                        ) : (
-                          <div style={{fontWeight:700}}>{l.delivery_date ? new Date(l.delivery_date).toLocaleDateString('en-GB') : '—'}</div>
-                        )}
-                      </div>
-                      <div style={{padding:6, background:'#f3f3f3', borderRadius:6, minWidth:140, flex:'1 1 160px'}}>
-                        <div style={{fontSize:12, color:'#000000ff'}}>{t('cardUploadedLabel', siteLang)}</div>
-                        <div style={{fontWeight:700}}>{formatDate(l.created_at || l.createdAt || l.created)}</div>
-                      </div>
-                    </div>
-
-                    <div style={{marginTop:8, marginBottom:8, textAlign:'center'}}>
-                      {(() => {
-                        const today = new Date(); today.setHours(0,0,0,0);
-                        const dd = l.delivery_date ? new Date(l.delivery_date) : null;
-                        const isExpired = dd ? (dd < today) : false;
-                        const isToday = dd ? (dd.getFullYear() === today.getFullYear() && dd.getMonth() === today.getMonth() && dd.getDate() === today.getDate()) : false;
-                        if (isExpired) return (<div style={{background:'#f44336', color:'#fff', padding:'6px 8px', borderRadius:6, fontWeight:700}}>{t('expiredLabel', siteLang)}</div>);
-                        if (isToday) return (<div style={{background:'#ffb300', color:'#000', padding:'6px 8px', borderRadius:6, fontWeight:700}}>{t('expiresToday', siteLang)}</div>);
-                        return (
-                          <div style={{color:'#236902', fontWeight:700}}>
-                            {l.delivery_date ? `${t('deliveryPrefix', siteLang)}: ${new Date(l.delivery_date).toLocaleDateString('en-GB')}` : <span style={{background:'#eaf6ea', padding:'4px 6px', borderRadius:6}}>{t('noDeliveryDateLabel', siteLang)}</span>}
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Buttons */}
-                    <div style={{display:'flex', flexDirection:'row', alignItems:'center', gap:8, marginBottom:10}}>
-                      {editingId !== l.id && (
-                        <button onClick={() => startEdit(l)} style={{padding:'6px 10px', width:'80%', background:'#1976d2', color:'#fff', border:'none', borderRadius:6}}>{t('editButton', siteLang)}</button>
-                      )}
-                      <button onClick={() => deleteDeal(l.id)} style={{padding:'6px 10px', width:'80%', background:'#e53935', color:'#fff', border:'none', borderRadius:6}}>{t('deleteButton', siteLang)}</button>
-                    </div>
+            {/* Form Section */}
+            <div className="form-section">
+              <div className="form-section-title">Add New Deal</div>
+              <form onSubmit={handleSubmit}>
+                <div className="form-grid">
+                  <div className="form-field" style={{flex:'0 0 200px'}}>
+                    <label className="form-label">{t('formCategoryLabel', siteLang)}</label>
+                    <select className="form-select" value={category} onChange={e=>setCategory(e.target.value)}>
+                      <option value=''>{t('selectCategoryPlaceholder', siteLang)}</option>
+                      <option value='Food Crops'>{t('catFood', siteLang)}</option>
+                      <option value='Fruits and Vegetables'>{t('catFruits', siteLang)}</option>
+                      <option value='Masalas'>{t('catMasalas', siteLang)}</option>
+                    </select>
+                    <span className="form-helper">{t('chooseCategoryText', siteLang)}</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-      </main>
-    </div>
+
+                  <div className="form-field" style={{flex:2, minWidth:160}}>
+                    <label className="form-label">{t('formCropNameLabel', siteLang)}</label>
+                    <input ref={cropNameRef} className="form-input" placeholder={t('formCropNameLabel', siteLang)} value={cropName} onChange={e=>setCropName(e.target.value)} required />
+                    <span className="form-helper">{t('cropNameHelper', siteLang)}</span>
+                  </div>
+
+                  <div className="form-field" style={{flex:'0 0 180px'}}>
+                    <label className="form-label">{t('formVarietyLabel', siteLang)}</label>
+                    <input className="form-input" placeholder={t('formVarietyLabel', siteLang)} value={variety} onChange={e=>setVariety(e.target.value)} />
+                    <span className="form-helper">{t('varietyHelper', siteLang)}</span>
+                  </div>
+
+                  <div className="form-field" style={{flex:1, minWidth:120}}>
+                    <label className="form-label">{t('formQuantityLabel', siteLang)}</label>
+                    <input className="form-input" placeholder={t('formQuantityLabel', siteLang)} type="number" step="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)} required />
+                    <span className="form-helper">{t('quantityHelper', siteLang)}</span>
+                  </div>
+
+                  <div className="form-field" style={{flex:'0 0 180px'}}>
+                    <label className="form-label">{t('formDeliveryDateLabel', siteLang)}</label>
+                    <input className="form-input" type="date" min={todayStr} value={deliveryDate} onChange={e=>setDeliveryDate(e.target.value)} />
+                    <span className="form-helper">{t('formDeliveryDateLabel', siteLang)}</span>
+                  </div>
+                </div>
+
+                <div style={{display:'flex', justifyContent:'center', marginTop:16, gap:24, alignItems:'flex-end', flexWrap:'wrap'}}>
+                  <div className="form-field" style={{alignItems:'center'}}>
+                    <label className="form-label">{t('formImageLabel', siteLang)}</label>
+                    <div className="upload-zone">
+                      <input required type="file" accept="image/*" onChange={e => setImageFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
+                    </div>
+                    <span className="form-helper" style={{textAlign:'center'}}>{t('formAttachPhoto', siteLang)}</span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="submit-btn"
+                    disabled={loading}
+                  >
+                    {loading ? t('uploading', siteLang) : t('uploadButton', siteLang)}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="section-divider" />
+
+            {/* Cards */}
+            <section>
+              {visibleListings.length === 0 && (
+                <div className="empty-state">
+                  <span className="empty-icon">🌾</span>
+                  <div className="empty-text">{t('noDealsYet', siteLang)}</div>
+                </div>
+              )}
+
+              {visibleListings.length > 0 && (
+                <div className="cards-grid">
+                  {visibleListings.map((l, idx) => {
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const dd = l.delivery_date ? new Date(l.delivery_date) : null;
+                    const isExpired = dd ? (dd < today) : false;
+                    const isToday = dd ? (
+                      dd.getFullYear() === today.getFullYear() &&
+                      dd.getMonth() === today.getMonth() &&
+                      dd.getDate() === today.getDate()
+                    ) : false;
+
+                    return (
+                      <div
+                        key={l.id}
+                        className="deal-card"
+                        style={{ animationDelay: `${idx * 60}ms` }}
+                      >
+                        {/* Image */}
+                        <div className="card-img-wrap">
+                          {l.image_url ? (
+                            <img className="card-img" src={l.image_url} alt={l.crop_name} />
+                          ) : (
+                            <div className="card-no-img">
+                              <span>📷</span>
+                              {t('noImage', siteLang)}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="card-body">
+                          {/* Name + variety */}
+                          <div className="card-title-row">
+                            <h3 className="card-crop-name">{l.crop_name}</h3>
+                            {l.variety && <span className="card-variety-badge">{l.variety}</span>}
+                          </div>
+
+                          {/* Quantity + delivery date info */}
+                          <div className="card-info-row">
+                            <div className="card-info-box">
+                              <div className="card-info-label">{t('cardQuantityLabel', siteLang)}</div>
+                              {editingId === l.id ? (
+                                <input
+                                  className="edit-input"
+                                  value={editQuantity}
+                                  onChange={e => setEditQuantity(e.target.value)}
+                                />
+                              ) : (
+                                <div className="card-info-value">{Number(l.quantity_kg || 0).toLocaleString('en-IN')} kg</div>
+                              )}
+                            </div>
+                            <div className="card-info-box">
+                              <div className="card-info-label">{t('cardDeliveryDateLabel', siteLang)}</div>
+                              {editingId === l.id ? (
+                                <div style={{display:'flex', flexDirection:'column', gap:4}}>
+                                  <input
+                                    className="edit-input"
+                                    type="date"
+                                    min={todayStr}
+                                    value={editDeliveryDate}
+                                    onChange={e => setEditDeliveryDate(e.target.value)}
+                                  />
+                                  <div style={{display:'flex', gap:4}}>
+                                    <button className="btn-save" onClick={() => saveEdit(l.id)}>{t('saveButton', siteLang)}</button>
+                                    <button className="btn-cancel" onClick={cancelEdit}>{t('cancelButton', siteLang)}</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="card-info-value">{l.delivery_date ? new Date(l.delivery_date).toLocaleDateString('en-GB') : '—'}</div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Uploaded */}
+                          <div className="card-info-box" style={{gridColumn:'span 2'}}>
+                            <div className="card-info-label">{t('cardUploadedLabel', siteLang)}</div>
+                            <div className="card-info-value" style={{fontSize:'0.8rem'}}>{formatDate(l.created_at || l.createdAt || l.created)}</div>
+                          </div>
+
+                          {/* Status badge */}
+                          <div className={`status-badge ${
+                            isExpired ? 'status-expired' :
+                            isToday ? 'status-today' :
+                            dd ? 'status-active' : 'status-none'
+                          }`}>
+                            {isExpired
+                              ? t('expiredLabel', siteLang)
+                              : isToday
+                              ? t('expiresToday', siteLang)
+                              : dd
+                              ? `${t('deliveryPrefix', siteLang)}: ${new Date(l.delivery_date).toLocaleDateString('en-GB')}`
+                              : t('noDeliveryDateLabel', siteLang)
+                            }
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="card-actions">
+                          {editingId !== l.id && (
+                            <button className="btn-edit" onClick={() => startEdit(l)}>{t('editButton', siteLang)}</button>
+                          )}
+                          <button className="btn-delete" onClick={() => deleteDeal(l.id)}>{t('deleteButton', siteLang)}</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+        </main>
+      </div>
+    </>
   );
 };
 

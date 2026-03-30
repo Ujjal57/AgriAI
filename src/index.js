@@ -22,8 +22,8 @@ import Cart from './Cart';
 import FarmerCart from './farmer/FarmerCart';
 import MyDeals from './MyDeals';
 import reportWebVitals from './reportWebVitals';
-import Footer from './Footer';
 import Chatbot from './Chatbot';
+
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -48,7 +48,6 @@ root.render(
   <Route path="/farmer/notification" element={<Notification />} />
   <Route path="/admin/contacts" element={<ContactAdmin />} />
       </Routes>
-      <Footer />
       <Chatbot />
     </BrowserRouter>
   </React.StrictMode>
