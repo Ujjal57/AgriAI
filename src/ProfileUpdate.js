@@ -11,7 +11,7 @@ const styles = `
   .pu-root {
     min-height: 100vh;
     font-family: 'Times New Roman', Times, serif !important;
-    background: linear-gradient(135deg, #0a2e0a 0%, #1a5c10 30%, #2d8a1f 60%, #53b635 100%);
+    background: rgba(83, 255, 3, 0.12);
     background-attachment: fixed;
     position: relative;
     overflow-x: hidden;
@@ -392,8 +392,8 @@ export default function ProfileUpdate() {
               {/* Title */}
               <h2 className="pu-title">{t('profileTitle', siteLang)}</h2>
 
-              {/* Farmer ID badge */}
-              {meta && meta.id != null && (meta.role === 'farmer' || (localStorage.getItem('agriai_role') || '').toLowerCase() === 'farmer') ? (
+              {/* Farmer/Buyer ID badge */}
+              {meta && meta.id != null ? (
                 <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                   <span className="pu-id-badge">{`${t('profileIdLabel', siteLang) || 'ID'}: ${meta.id}`}</span>
                 </div>
