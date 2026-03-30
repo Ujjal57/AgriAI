@@ -678,16 +678,49 @@ function LoginProfile() {
       return;
     }
 
-    // All validations passed, now check email uniqueness before sending OTP
+    // Check email, phone, and aadhar uniqueness before sending OTP
     try {
-      const res = await fetch('http://127.0.0.1:5000/auth/check-email', {
+      // Check if email already exists
+      const emailRes = await fetch('http://127.0.0.1:5000/auth/check-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: signupData.email.trim() })
       });
-      const checkResult = await res.json();
-      if (res.ok && checkResult.exists) {
-        alert(checkResult.message || 'Email already registered.');
+      const emailResult = await emailRes.json();
+      if (emailRes.ok && emailResult.exists) {
+        alert(t('emailAlreadyExists', siteLang) || emailResult.message || 'Email already registered.');
+        return;
+      }
+    } catch (err) {
+      // if check fails, still proceed to avoid blocking; backend will reject on register
+    }
+
+    try {
+      // Check if phone already exists
+      const phoneRes = await fetch('http://127.0.0.1:5000/auth/check-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: signupData.phone.trim() })
+      });
+      const phoneResult = await phoneRes.json();
+      if (phoneRes.ok && phoneResult.exists) {
+        alert(t('phoneAlreadyExists', siteLang) || phoneResult.message || 'Phone number already registered.');
+        return;
+      }
+    } catch (err) {
+      // if check fails, still proceed to avoid blocking; backend will reject on register
+    }
+
+    try {
+      // Check if aadhar already exists
+      const aadharRes = await fetch('http://127.0.0.1:5000/auth/check-aadhar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aadhar: signupData.aadhar.trim() })
+      });
+      const aadharResult = await aadharRes.json();
+      if (aadharRes.ok && aadharResult.exists) {
+        alert(t('aadharAlreadyExists', siteLang) || aadharResult.message || 'Aadhar number already registered.');
         return;
       }
     } catch (err) {
@@ -1134,7 +1167,7 @@ function LoginProfile() {
 
       {/* Forgot Password Modal */}
       {showForgotPassword && (
-        <ModalOverlay onClick={closeForgotPassword}>
+        <ModalOverlay>
           <ModalContent onClick={(e) => e.stopPropagation()}>
             <ModalCloseButton onClick={closeForgotPassword}>&times;</ModalCloseButton>
             
@@ -1204,9 +1237,9 @@ function LoginProfile() {
 
       {/* Signup OTP Modal */}
       {showSignupOtp && (
-        <ModalOverlay onClick={() => !signupOtpVerified && setShowSignupOtp(false)}>
+        <ModalOverlay>
           <ModalContent onClick={(e) => e.stopPropagation()}>
-            <ModalCloseButton onClick={() => !signupOtpVerified && setShowSignupOtp(false)}>&times;</ModalCloseButton>
+            <ModalCloseButton onClick={() => setShowSignupOtp(false)}>&times;</ModalCloseButton>
             
             {!signupOtpVerified ? (
               <>
