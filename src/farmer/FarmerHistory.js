@@ -146,7 +146,7 @@ export default function FarmerHistory() {
     try {
       const d = new Date(iso);
       if (isNaN(d)) return String(iso);
-      return d.toLocaleString();
+      return d.toLocaleDateString();
     } catch (e) { return String(iso); }
   };
 
@@ -1769,7 +1769,7 @@ export default function FarmerHistory() {
         }
       `}</style>
       <Navbar />
-      <main style={{ padding: '6rem 1rem 14rem' }}>
+      <main style={{ padding: '6rem 1rem 2rem' }}>
         <div style={{ maxWidth: 980, margin: '0 auto', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(20px) saturate(1.6)', WebkitBackdropFilter: 'blur(20px) saturate(1.6)', border: '1px solid rgba(255,255,255,0.6)', borderRadius: '24px', padding: '2.5rem', boxShadow: '0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
           <h1 style={{ backgroundImage: 'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', textAlign: 'center', fontSize: '2rem', fontWeight: 800, margin: 0 }}>{t('historyTitle', siteLang) || 'Sales History'}</h1>
 
@@ -1855,7 +1855,7 @@ export default function FarmerHistory() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full border-t" style={{background:'oklch(0.12 0.03 160 / 0.5)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'1em 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40}}>
+      <footer className="w-full border-t" style={{background:'oklch(0.12 0.03 160 / 0.5)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'1em 0'}}>
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid md:grid-cols-4 gap-4 mb-3">
             <div>
