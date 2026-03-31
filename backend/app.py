@@ -15,6 +15,8 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 from dotenv import load_dotenv
+import uuid
+import mimetypes
 
 # Load environment variables from .env file
 load_dotenv()
@@ -4568,26 +4570,43 @@ def add_crop_listing():
             if expiry_date_val == '':
                 expiry_date_val = None
 
-        if seller_id_val:
-            sqlite_cur.execute('INSERT INTO crops (seller_id, seller_name, seller_phone, region, state, crop_name, variety, category, quantity_kg, price_per_kg, expiry_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-                               (seller_id_val, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, variety if variety else None, category if category else None, quantity_kg, price_per_kg, expiry_date_val))
-        else:
-            # include optional image for sqlite path if provided
+        # Prepare image data for SQLite insert
+        # First check if image_path was set from file upload (above)
+        # Otherwise check for base64 image in JSON
+        final_image_path = image_path_val  # This was set from file upload above if present
+        final_image_blob = None
+        final_image_mime = None
+        
+        # If no file upload, check for base64 image
+        if not final_image_path:
             img_b64 = data.get('image_base64') if isinstance(data, dict) else None
-            img_blob = None
-            img_mime = None
             if img_b64:
                 try:
                     if isinstance(img_b64, str) and img_b64.startswith('data:'):
-                        img_mime = img_b64.split(';',1)[0].split(':',1)[1]
+                        final_image_mime = img_b64.split(';',1)[0].split(':',1)[1]
                         img_b64 = img_b64.split(',',1)[1]
                     import base64
-                    img_blob = base64.b64decode(img_b64)
+                    final_image_blob = base64.b64decode(img_b64)
                 except Exception:
-                    img_blob = None
-            if img_blob is not None:
+                    final_image_blob = None
+
+        if seller_id_val:
+            if final_image_path:
+                sqlite_cur.execute('INSERT INTO crops (seller_id, seller_name, seller_phone, region, state, crop_name, variety, category, quantity_kg, price_per_kg, image_path, expiry_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                                   (seller_id_val, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, variety if variety else None, category if category else None, quantity_kg, price_per_kg, final_image_path, expiry_date_val))
+            elif final_image_blob:
+                sqlite_cur.execute('INSERT INTO crops (seller_id, seller_name, seller_phone, region, state, crop_name, variety, category, quantity_kg, price_per_kg, image_blob, image_mime, expiry_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                                   (seller_id_val, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, variety if variety else None, category if category else None, quantity_kg, price_per_kg, final_image_blob, final_image_mime, expiry_date_val))
+            else:
+                sqlite_cur.execute('INSERT INTO crops (seller_id, seller_name, seller_phone, region, state, crop_name, variety, category, quantity_kg, price_per_kg, expiry_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                                   (seller_id_val, seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, variety if variety else None, category if category else None, quantity_kg, price_per_kg, expiry_date_val))
+        else:
+            if final_image_path:
+                sqlite_cur.execute('INSERT INTO crops (seller_name, seller_phone, region, state, crop_name, variety, category, quantity_kg, price_per_kg, image_path, expiry_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                                   (seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, variety if variety else None, category if category else None, quantity_kg, price_per_kg, final_image_path, expiry_date_val))
+            elif final_image_blob is not None:
                 sqlite_cur.execute('INSERT INTO crops (seller_name, seller_phone, region, state, crop_name, variety, category, quantity_kg, price_per_kg, image_blob, image_mime, expiry_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-                                   (seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, variety if variety else None, category if category else None, quantity_kg, price_per_kg, img_blob, img_mime, expiry_date_val))
+                                   (seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, variety if variety else None, category if category else None, quantity_kg, price_per_kg, final_image_blob, final_image_mime, expiry_date_val))
             else:
                 sqlite_cur.execute('INSERT INTO crops (seller_name, seller_phone, region, state, crop_name, variety, category, quantity_kg, price_per_kg, expiry_date) VALUES (?,?,?,?,?,?,?,?,?,?)',
                                    (seller_name, seller_phone if seller_phone else None, region if region else None, state if state else None, crop_name, variety if variety else None, category if category else None, quantity_kg, price_per_kg, expiry_date_val))
