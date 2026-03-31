@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Leaf } from 'lucide-react';
 import { t } from './i18n';
+import Navbar from './Navbar';
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -53,11 +54,18 @@ const styles = `
     animation:puLeafFall linear infinite;
   }
   .pu-leaf::before{content:'🌿';font-size:16px;}
-  .pu-leaf-1{left:5%;animation-duration:14s;animation-delay:0s;}
-  .pu-leaf-2{left:20%;animation-duration:18s;animation-delay:3s;}
-  .pu-leaf-3{left:40%;animation-duration:12s;animation-delay:6s;}
-  .pu-leaf-4{left:65%;animation-duration:16s;animation-delay:1s;}
-  .pu-leaf-5{left:85%;animation-duration:20s;animation-delay:9s;}
+  .pu-leaf-1{left:5%;animation-duration:8s;animation-delay:0s;}
+  .pu-leaf-2{left:15%;animation-duration:10s;animation-delay:1s;}
+  .pu-leaf-3{left:25%;animation-duration:7s;animation-delay:2s;}
+  .pu-leaf-4{left:35%;animation-duration:9s;animation-delay:0.5s;}
+  .pu-leaf-5{left:45%;animation-duration:11s;animation-delay:3s;}
+  .pu-leaf-6{left:55%;animation-duration:8s;animation-delay:1.5s;}
+  .pu-leaf-7{left:65%;animation-duration:10s;animation-delay:2.5s;}
+  .pu-leaf-8{left:75%;animation-duration:9s;animation-delay:0s;}
+  .pu-leaf-9{left:85%;animation-duration:7s;animation-delay:4s;}
+  .pu-leaf-10{left:12%;animation-duration:12s;animation-delay:5s;}
+  .pu-leaf-11{left:38%;animation-duration:8s;animation-delay:3.5s;}
+  .pu-leaf-12{left:70%;animation-duration:10s;animation-delay:1.8s;}
   @keyframes puLeafFall {
     0%{transform:translateY(-40px) rotate(0deg);opacity:0;}
     10%{opacity:0.6;}
@@ -214,6 +222,23 @@ const styles = `
   }
   @keyframes puPulse { 0%,100%{opacity:0.7;} 50%{opacity:0.5;} }
 
+  .pu-root .navbar {
+    background: oklch(0.12 0.03 160 / 0.5) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+  }
+
+  .pu-root .navbar select {
+    background: oklch(0.12 0.03 160 / 0.6) !important;
+    border: 1px solid oklch(0.65 0.22 145 / 0.3) !important;
+    color: rgba(255,255,255,0.9) !important;
+  }
+
+  .pu-root .navbar select option {
+    background: #1a1a1a;
+    color: #ffffff;
+  }
+
   @media (max-width: 768px) {
     .pu-glass { padding: 1.5rem; }
     .pu-title { font-size: 1.6rem; }
@@ -231,7 +256,12 @@ export default function ProfileUpdate() {
   const [siteLang, setSiteLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
 
   React.useEffect(() => {
-    const onLang = (e) => { const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); setSiteLang(l); };
+    const onLang = (e) => { 
+      const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); 
+      setSiteLang(l);
+      // Auto refresh page when language is changed from navbar
+      setTimeout(() => window.location.reload(), 100);
+    };
     window.addEventListener('agri:lang:change', onLang);
     return () => { try { window.removeEventListener('agri:lang:change', onLang); } catch (e) {} };
   }, []);
@@ -343,45 +373,16 @@ export default function ProfileUpdate() {
         <div className="pu-leaf pu-leaf-3" />
         <div className="pu-leaf pu-leaf-4" />
         <div className="pu-leaf pu-leaf-5" />
+        <div className="pu-leaf pu-leaf-6" />
+        <div className="pu-leaf pu-leaf-7" />
+        <div className="pu-leaf pu-leaf-8" />
+        <div className="pu-leaf pu-leaf-9" />
+        <div className="pu-leaf pu-leaf-10" />
+        <div className="pu-leaf pu-leaf-11" />
+        <div className="pu-leaf pu-leaf-12" />
 
-        {/* Navbar */}
-        <nav className="fixed top-0 w-full z-50" style={{backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', background:'oklch(0.12 0.03 160 / 0.88)', borderBottom:'1px solid oklch(0.65 0.22 145 / 0.12)'}}>
-          <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-2 font-bold text-2xl text-white" style={{fontFamily:"'Times New Roman', Times, serif"}}>
-              <div className="w-8 h-8 rounded-lg border border-primary flex items-center justify-center" style={{background:'oklch(0.65 0.22 145 / 0.2)', borderColor:'oklch(0.65 0.22 145)'}}>
-                <Leaf className="w-4 h-4" style={{color:'oklch(0.65 0.22 145)'}} />
-              </div>
-              <span style={{background:'linear-gradient(90deg, oklch(0.65 0.22 145), oklch(0.75 0.14 75))', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text'}}>AgriAI</span>
-            </Link>
-            
-            <div className="flex items-center gap-3">
-              <select 
-                value={getLanguageName(siteLang)}
-                onChange={handleLanguageChange}
-                className="px-3 py-2 text-sm font-bold text-white rounded-lg transition-all cursor-pointer appearance-none"
-                style={{background:'oklch(0.12 0.03 160 / 0.6)', border:'1px solid oklch(0.65 0.22 145 / 0.3)', fontFamily:"'Times New Roman', Times, serif"}}
-              >
-                <option value="English">English</option>
-                <option value="Hindi">हिन्दी</option>
-                <option value="Kannada">ಕನ್ನಡ</option>
-              </select>
-              {localStorage.getItem("agriai_email") && (
-                <button
-                  onClick={() => {
-                    const userRole = localStorage.getItem('agriai_role');
-                    if (userRole === 'farmer') { navigate('/dashboard/buyer'); }
-                    else { navigate('/dashboard/farmer'); }
-                  }}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                  style={{background:'linear-gradient(135deg, #236902 0%, #53b635 100%)', boxShadow:'0 2px 8px rgba(35,105,2,0.15)'}}
-                  aria-label="Profile"
-                >
-                  {(localStorage.getItem("agriai_name") || "U").split(" ").map(n => n[0]).join("").toUpperCase()}
-                </button>
-              )}
-            </div>
-          </div>
-        </nav>
+        {/* Navbar from BuyerDashboard */}
+        <Navbar />
 
         {loading ? (
           <div className="pu-loading">{t('loading', siteLang)}</div>
@@ -477,11 +478,11 @@ export default function ProfileUpdate() {
         )}
         
         {/* Footer */}
-        <footer className="w-full border-t" style={{background:'oklch(0.12 0.03 160)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'2rem 0'}}>
+        <footer className="w-full border-t" style={{background:'oklch(0.12 0.03 160)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'1em 0'}}>
           <div className="max-w-7xl mx-auto px-6">
-            <div className="grid md:grid-cols-4 gap-8 mb-6">
+            <div className="grid md:grid-cols-4 gap-4 mb-3">
               <div>
-                <div className="flex items-center gap-2 font-bold text-xl mb-4">
+                <div className="flex items-center gap-2 font-bold text-xl mb-2">
                   <div className="w-7 h-7 rounded-lg border border-primary/40 flex items-center justify-center" style={{background:'oklch(0.65 0.22 145 / 0.2)', borderColor:'oklch(0.65 0.22 145)'}}>
                     <Leaf className="w-3.5 h-3.5" style={{color:'oklch(0.65 0.22 145)'}} />
                   </div>
@@ -498,8 +499,8 @@ export default function ProfileUpdate() {
                 { title: t('footerLegal', siteLang), links: ['footerPrivacy', 'footerTerms', { label: t('footerContact', siteLang), path: "/contact" }] },
               ].map((col) => (
                 <div key={col.title}>
-                  <h4 className="font-semibold text-white mb-4" style={{fontFamily:"'Times New Roman', Times, serif"}}>{col.title}</h4>
-                  <ul className="space-y-2">
+                  <h4 className="font-semibold text-white mb-2" style={{fontFamily:"'Times New Roman', Times, serif"}}>{col.title}</h4>
+                  <ul className="space-y-1">
                     {col.links.map((link) => {
                       const label = typeof link === 'string' ? t(link, siteLang) : link.label;
                       const path = typeof link === 'string' ? "/" : link.path;
@@ -522,7 +523,7 @@ export default function ProfileUpdate() {
               ))}
             </div>
 
-            <div className="pt-6 flex justify-center items-center text-white text-sm" style={{borderTop:'1px solid oklch(0.65 0.22 145 / 0.12)', fontFamily:"'Times New Roman', Times, serif"}}>
+            <div className="pt-3 flex justify-center items-center text-white text-sm" style={{borderTop:'1px solid oklch(0.65 0.22 145 / 0.12)', fontFamily:"'Times New Roman', Times, serif"}}>
               <span>
                 © {new Date().getFullYear()} AgriAI. {t('footerRights', siteLang)}
               </span>

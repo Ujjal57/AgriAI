@@ -188,16 +188,18 @@ const styles = `
     animation:ctLeafFall linear infinite;
   }
   .ct-leaf::before{content:'🌿';font-size:16px;}
-  .ct-leaf-1{left:5%;animation-duration:14s;animation-delay:0s;}
-  .ct-leaf-2{left:20%;animation-duration:18s;animation-delay:3s;}
-  .ct-leaf-3{left:40%;animation-duration:12s;animation-delay:6s;}
-  .ct-leaf-4{left:65%;animation-duration:16s;animation-delay:1s;}
-  .ct-leaf-5{left:85%;animation-duration:20s;animation-delay:9s;}
-  .ct-leaf-6{left:12%;animation-duration:15s;animation-delay:2s;}
-  .ct-leaf-7{left:35%;animation-duration:17s;animation-delay:5s;}
-  .ct-leaf-8{left:55%;animation-duration:13s;animation-delay:4s;}
-  .ct-leaf-9{left:75%;animation-duration:19s;animation-delay:7s;}
-  .ct-leaf-10{left:25%;animation-duration:16s;animation-delay:8s;}
+  .ct-leaf-1{left:5%;animation-duration:8s;animation-delay:0s;}
+  .ct-leaf-2{left:15%;animation-duration:10s;animation-delay:1s;}
+  .ct-leaf-3{left:25%;animation-duration:7s;animation-delay:2s;}
+  .ct-leaf-4{left:35%;animation-duration:9s;animation-delay:0.5s;}
+  .ct-leaf-5{left:45%;animation-duration:11s;animation-delay:3s;}
+  .ct-leaf-6{left:55%;animation-duration:8s;animation-delay:1.5s;}
+  .ct-leaf-7{left:65%;animation-duration:10s;animation-delay:2.5s;}
+  .ct-leaf-8{left:75%;animation-duration:9s;animation-delay:0s;}
+  .ct-leaf-9{left:85%;animation-duration:7s;animation-delay:4s;}
+  .ct-leaf-10{left:12%;animation-duration:12s;animation-delay:5s;}
+  .ct-leaf-11{left:38%;animation-duration:8s;animation-delay:3.5s;}
+  .ct-leaf-12{left:70%;animation-duration:10s;animation-delay:1.8s;}
   @keyframes ctLeafFall {
     0%{transform:translateY(-40px) rotate(0deg);opacity:0;}
     10%{opacity:0.6;}
@@ -654,6 +656,8 @@ function Contact() {
           <div className="ct-leaf ct-leaf-8" />
           <div className="ct-leaf ct-leaf-9" />
           <div className="ct-leaf ct-leaf-10" />
+          <div className="ct-leaf ct-leaf-11" />
+          <div className="ct-leaf ct-leaf-12" />
 
           {/* Thank You overlay */}
           {showThankYou && (

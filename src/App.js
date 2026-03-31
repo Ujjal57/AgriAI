@@ -221,7 +221,7 @@ export default function App() {
             ))}
           </div>
             {localStorage.getItem("agriai_email") ? (
-            <Link to="/dashboard/farmer" className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold">{(localStorage.getItem("agriai_name") || "U").split(" ").map(n => n[0]).join("").toUpperCase()}
+            <Link to={(localStorage.getItem("agriai_role") === 'farmer' ? "/dashboard/buyer" : "/dashboard/farmer")} className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold">{(localStorage.getItem("agriai_name") || "U").split(" ").map(n => n[0]).join("").toUpperCase()}
             </Link>
             ) : (
               <div className="flex items-center gap-3">

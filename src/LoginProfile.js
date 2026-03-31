@@ -1045,16 +1045,18 @@ function LoginProfile() {
             content: '🌿';
             font-size: 16px;
           }
-          .lp-leaf-1 { left: 5%; animation-duration: 14s; animation-delay: 0s; }
-          .lp-leaf-2 { left: 20%; animation-duration: 18s; animation-delay: 3s; }
-          .lp-leaf-3 { left: 40%; animation-duration: 12s; animation-delay: 6s; }
-          .lp-leaf-4 { left: 65%; animation-duration: 16s; animation-delay: 1s; }
-          .lp-leaf-5 { left: 85%; animation-duration: 20s; animation-delay: 9s; }
-          .lp-leaf-6 { left: 12%; animation-duration: 15s; animation-delay: 2s; }
-          .lp-leaf-7 { left: 35%; animation-duration: 17s; animation-delay: 5s; }
-          .lp-leaf-8 { left: 55%; animation-duration: 13s; animation-delay: 4s; }
-          .lp-leaf-9 { left: 75%; animation-duration: 19s; animation-delay: 7s; }
-          .lp-leaf-10 { left: 25%; animation-duration: 16s; animation-delay: 8s; }
+          .lp-leaf-1 { left: 5%; animation-duration: 8s; animation-delay: 0s; }
+          .lp-leaf-2 { left: 15%; animation-duration: 10s; animation-delay: 1s; }
+          .lp-leaf-3 { left: 25%; animation-duration: 7s; animation-delay: 2s; }
+          .lp-leaf-4 { left: 35%; animation-duration: 9s; animation-delay: 0.5s; }
+          .lp-leaf-5 { left: 45%; animation-duration: 11s; animation-delay: 3s; }
+          .lp-leaf-6 { left: 55%; animation-duration: 8s; animation-delay: 1.5s; }
+          .lp-leaf-7 { left: 65%; animation-duration: 10s; animation-delay: 2.5s; }
+          .lp-leaf-8 { left: 75%; animation-duration: 9s; animation-delay: 0s; }
+          .lp-leaf-9 { left: 85%; animation-duration: 7s; animation-delay: 4s; }
+          .lp-leaf-10 { left: 12%; animation-duration: 12s; animation-delay: 5s; }
+          .lp-leaf-11 { left: 38%; animation-duration: 8s; animation-delay: 3.5s; }
+          .lp-leaf-12 { left: 70%; animation-duration: 10s; animation-delay: 1.8s; }
           @keyframes lpLeafFall {
             0% {
               transform: translateY(0) rotate(0deg);
@@ -1084,6 +1086,8 @@ function LoginProfile() {
         <div className="lp-leaf lp-leaf-8" />
         <div className="lp-leaf lp-leaf-9" />
         <div className="lp-leaf lp-leaf-10" />
+        <div className="lp-leaf lp-leaf-11" />
+        <div className="lp-leaf lp-leaf-12" />
 
         <StyledContainer>
           <SignUpContainer signinIn={signIn}>
