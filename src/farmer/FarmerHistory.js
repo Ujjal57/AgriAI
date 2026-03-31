@@ -1,4 +1,6 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
+import { Leaf } from 'lucide-react';
 import Navbar from '../Navbar';
 import logo from '../assets/logo192.png';
 import { t } from '../i18n';
@@ -185,7 +187,16 @@ export default function FarmerHistory() {
     return () => { mounted = false; };
   }, [orders]);
 
-  
+  React.useEffect(() => {
+    const onLang = (e) => { 
+      const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); 
+      setSiteLang(l);
+      // Auto refresh page when language is changed from navbar
+      setTimeout(() => window.location.reload(), 100);
+    };
+    window.addEventListener('agri:lang:change', onLang);
+    return () => { try { window.removeEventListener('agri:lang:change', onLang); } catch (e) {} };
+  }, []);
 
   const handleDelete = async (idKey) => {
     if (!window.confirm(t('confirmDelete', siteLang) || 'Delete this deal? This action cannot be undone.')) return;
@@ -1740,22 +1751,42 @@ export default function FarmerHistory() {
     };
 
   return (
-    <div style={{ background: '#53b635', minHeight: '100vh', color: '#fff' }}>
+    <div className="fh-root" style={{ background: 'rgba(83, 255, 3, 0.12)', backgroundAttachment: 'fixed', minHeight: '100vh', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+      <style>{`
+        .fh-root .navbar {
+          background: oklch(0.12 0.03 160 / 0.5) !important;
+          backdrop-filter: blur(12px) !important;
+          -webkit-backdrop-filter: blur(12px) !important;
+        }
+        .fh-root .navbar select {
+          background: oklch(0.12 0.03 160 / 0.6) !important;
+          border: 1px solid oklch(0.65 0.22 145 / 0.3) !important;
+          color: rgba(255,255,255,0.9) !important;
+        }
+        .fh-root .navbar select option {
+          background: #1a1a1a;
+          color: #ffffff;
+        }
+      `}</style>
       <Navbar />
-      <main style={{ padding: '6rem 1rem 2rem' }}>
-        <div style={{ maxWidth: 980, margin: '0 auto', background: '#fff', padding: '1.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
-          <h1 style={{ color: '#236902', textAlign: 'center' }}>{t('historyTitle', siteLang) || 'Sales History'}</h1>
+      <main style={{ padding: '6rem 1rem 14rem' }}>
+        <div style={{ maxWidth: 980, margin: '0 auto', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(20px) saturate(1.6)', WebkitBackdropFilter: 'blur(20px) saturate(1.6)', border: '1px solid rgba(255,255,255,0.6)', borderRadius: '24px', padding: '2.5rem', boxShadow: '0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
+          <h1 style={{ backgroundImage: 'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', textAlign: 'center', fontSize: '2rem', fontWeight: 800, margin: 0 }}>{t('historyTitle', siteLang) || 'Sales History'}</h1>
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12, alignItems: 'center', justifyContent: 'space-between' }}>
             <input
               placeholder={t('historySearchPlaceholder', siteLang) || 'Search by Contract ID or crop name'}
               value={query}
               onChange={e => setQuery(e.target.value)}
-              style={{ flex: '1 1 280px', minWidth: 240, padding: 10, border: '1px solid #e5e5e5', borderRadius: 6, color: '#333' }}
+              style={{ flex: '1 1 280px', minWidth: 240, padding: '10px 14px', border: '1.5px solid #d4edcc', borderRadius: 10, color: '#1a3d0a', background: 'rgba(255,255,255,0.95)', fontFamily: 'inherit', fontSize: '0.9rem', outline: 'none', transition: 'border-color 0.25s, box-shadow 0.25s, transform 0.2s' }}
+              onFocus={(e) => { e.target.style.borderColor = '#53b635'; e.target.style.boxShadow = '0 0 0 3px rgba(83,182,53,0.18), 0 2px 8px rgba(35,105,2,0.1)'; e.target.style.transform = 'translateY(-2px)'; }}
+              onBlur={(e) => { e.target.style.borderColor = '#d4edcc'; e.target.style.boxShadow = 'none'; e.target.style.transform = 'translateY(0)'; }}
             />
             <div>
-              <label style={{ marginRight: 8, fontWeight: 700 }}>{t('sortLabel', siteLang) || 'Sort:'}</label>
-              <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)} style={{ padding: 10, border: '1px solid #e5e5e5', borderRadius: 6 }}>
+              <label style={{ marginRight: 8, fontWeight: 700, color: '#2d5c1a', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('sortLabel', siteLang) || 'Sort:'}</label>
+              <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid #d4edcc', borderRadius: 10, color: '#1a3d0a', background: 'rgba(255,255,255,0.95)', fontFamily: 'inherit', fontSize: '0.9rem', outline: 'none', transition: 'border-color 0.25s, box-shadow 0.25s, transform 0.2s' }}
+                onFocus={(e) => { e.target.style.borderColor = '#53b635'; e.target.style.boxShadow = '0 0 0 3px rgba(83,182,53,0.18), 0 2px 8px rgba(35,105,2,0.1)'; e.target.style.transform = 'translateY(-2px)'; }}
+                onBlur={(e) => { e.target.style.borderColor = '#d4edcc'; e.target.style.boxShadow = 'none'; e.target.style.transform = 'translateY(0)'; }}>
                 <option value="all">{t('all', siteLang) || 'All'}</option>
                 <option value="latest">{t('latest', siteLang) || 'Latest'}</option>
                 <option value="old">{t('old', siteLang) || 'Old'}</option>
@@ -1766,7 +1797,7 @@ export default function FarmerHistory() {
           {filtered.length === 0 ? (
             <div style={{ textAlign: 'center', marginTop: 24 }}>
               <div style={{ fontSize: 52, lineHeight: 1 }}>🧾</div>
-              <div style={{ marginTop: 8 }}>{t('historyNoPurchases', siteLang) || 'No matching sales yet.'}</div>
+              <div style={{ marginTop: 8, color: '#1a3d0a' }}>{t('historyNoPurchases', siteLang) || 'No matching sales yet.'}</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
@@ -1779,31 +1810,39 @@ export default function FarmerHistory() {
                   || 0;
                 
                 return (
-                  <div key={idKey} style={{ border: '1px solid #eee', borderRadius: 8, overflow: 'hidden' }}>
-                    <div style={{ padding: '12px 14px', background: '#f7faf7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <div key={idKey} style={{ border: '1px solid rgba(83,182,53,0.15)', borderRadius: 12, overflow: 'hidden', background: 'rgba(255,255,255,0.5)' }}>
+                    <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(234,246,234,0.8), rgba(212,240,212,0.8))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flexDirection: 'column', alignItems: 'flex-start' }}>
                         <div style={{ fontWeight: 800, color: '#236902' }}>{(t('contractLabel', siteLang) || 'Contract') + ': '}{idKey}</div>
-                        <div style={{ color: '#333', marginTop: 4 }}>{formatDateTime(o.contract_datetime || o.created_at)}</div>
+                        <div style={{ color: '#2d5c1a', marginTop: 4, fontSize: '0.9rem' }}>{formatDateTime(o.contract_datetime || o.created_at)}</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <div style={{ fontWeight: 800, color: '#236902', whiteSpace: 'nowrap', marginRight: 10 }}>{formatCurrency(farmerAmount)}</div>
-                        <button onClick={() => openInvoice(o)} style={{ background: '#1976d2', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 6 }}>{t('viewContract', siteLang) || 'View Contract'}</button>
+                        <button 
+                          onClick={() => openInvoice(o)} 
+                          style={{ background: 'linear-gradient(135deg, #236902 0%, #53b635 100%)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 10, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(35,105,2,0.2)', transition: 'transform 0.18s, box-shadow 0.18s, filter 0.18s' }}
+                          onMouseEnter={(e) => { e.target.style.transform = 'translateY(-3px) scale(1.03)'; e.target.style.boxShadow = '0 8px 24px rgba(35,105,2,0.35)'; e.target.style.filter = 'brightness(1.08)'; }}
+                          onMouseLeave={(e) => { e.target.style.transform = 'translateY(0) scale(1)'; e.target.style.boxShadow = '0 4px 12px rgba(35,105,2,0.2)'; e.target.style.filter = 'brightness(1)'; }}
+                        >
+                          {t('viewContract', siteLang) || 'View Contract'}
+                        </button>
                         {/* Show contract status instead of a generic Details button */}
                         {(() => {
                           const st = (o._db_contract && o._db_contract.status) || o.status || 'pending';
                           const s = String(st).toLowerCase();
-                          let bg = '#f0f0f0';
+                          let bg = '#f5f5f5';
                           let color = '#333';
-                          if (s === 'accepted' || s === 'accept' || s === 'approved') { bg = '#2e7d32'; color = '#fff'; }
-                          else if (s === 'pending' || s === 'awaiting' || s === 'pending_confirmation') { bg = '#fdd835'; color = '#000'; }
-                          else if (s === 'rejected' || s === 'declined' || s === 'cancelled') { bg = '#c62828'; color = '#fff'; }
+                          let border = '1px solid #ddd';
+                          if (s === 'accepted' || s === 'accept' || s === 'approved') { bg = '#4caf50'; color = '#fff'; border = '1px solid #45a049'; }
+                          else if (s === 'pending' || s === 'awaiting' || s === 'pending_confirmation') { bg = '#ffeb3b'; color = '#000'; border = '1px solid #fdd835'; }
+                          else if (s === 'rejected' || s === 'declined' || s === 'cancelled') { bg = '#f44336'; color = '#fff'; border = '1px solid #e53935'; }
                           return (
-                            <button disabled style={{ background: bg, color, border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'default' }}>{(t(s, siteLang) || (st && String(st).toUpperCase()) || 'STATUS')}</button>
+                            <button disabled style={{ background: bg, color, border, padding: '8px 14px', borderRadius: 10, cursor: 'default', fontWeight: 600, fontSize: '0.85rem' }}>{(t(s, siteLang) || (st && String(st).toUpperCase()) || 'STATUS')}</button>
                           );
                         })()}
                         {( ((o._db_contract && String(o._db_contract.status).toLowerCase() === 'pending')
                              || String(o.status || '').toLowerCase() === 'pending') && (
-                          <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'transparent', color: '#c62828', border: '1px solid #f5c6c6', padding: '6px 10px', borderRadius: 6, marginLeft: 6 }}>{'🗑️'}</button>
+                          <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'rgba(198,40,40,0.1)', color: '#c62828', border: '1px solid rgba(198,40,40,0.3)', padding: '8px 12px', borderRadius: 10, marginLeft: 6, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, transition: 'all 0.2s' }}>{'🗑️'}</button>
                         ))}
                       </div>
                     </div>
@@ -1814,6 +1853,60 @@ export default function FarmerHistory() {
           )}
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="w-full border-t" style={{background:'oklch(0.12 0.03 160 / 0.5)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'1em 0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40}}>
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid md:grid-cols-4 gap-4 mb-3">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-xl mb-2">
+                <div className="w-7 h-7 rounded-lg border border-primary/40 flex items-center justify-center" style={{background:'oklch(0.65 0.22 145 / 0.2)', borderColor:'oklch(0.65 0.22 145)'}}>
+                  <Leaf className="w-3.5 h-3.5" style={{color:'oklch(0.65 0.22 145)'}} />
+                </div>
+                <span style={{color:'oklch(0.65 0.22 145)', fontFamily:"'Times New Roman', Times, serif"}}>AgriAI</span>
+              </div>
+              <p className="text-white text-sm leading-relaxed" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                {t('footerDescription', siteLang)}
+              </p>
+            </div>
+
+            {[
+              { title: t('footerPlatform', siteLang), links: ['footerAbout', 'footerHowItWorks', 'footerFeatures', 'footerPricing'] },
+              { title: t('footerUsers', siteLang), links: ['footerFarmers', 'footerBuyers', 'footerAgribusiness', 'footerPartners'] },
+              { title: t('footerLegal', siteLang), links: ['footerPrivacy', 'footerTerms', { label: t('footerContact', siteLang), path: "/contact" }] },
+            ].map((col) => (
+              <div key={col.title}>
+                <h4 className="font-semibold text-white mb-2" style={{fontFamily:"'Times New Roman', Times, serif"}}>{col.title}</h4>
+                <ul className="space-y-1">
+                  {col.links.map((link) => {
+                    const label = typeof link === 'string' ? t(link, siteLang) : link.label;
+                    const path = typeof link === 'string' ? "/" : link.path;
+                    return (
+                      <li key={label}>
+                        {path === "/contact" ? (
+                          <Link to="/contact" className="text-white text-sm transition-colors" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                            {label}
+                          </Link>
+                        ) : (
+                          <a href={path} className="text-white text-sm transition-colors" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                            {label}
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-3 flex justify-center items-center text-white text-sm" style={{borderTop:'1px solid oklch(0.65 0.22 145 / 0.12)', fontFamily:"'Times New Roman', Times, serif"}}>
+            <span>
+              © {new Date().getFullYear()} AgriAI. {t('footerRights', siteLang)}
+            </span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
