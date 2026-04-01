@@ -1,5 +1,7 @@
 import React from 'react';
 import Navbar from '../Navbar';
+import { Link } from 'react-router-dom';
+import { Leaf } from 'lucide-react';
 import logo192 from '../assets/logo192.png';
 import { t } from '../i18n';
 
@@ -31,7 +33,12 @@ const FarmerCart = () => {
 
   const [siteLang, setSiteLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
   React.useEffect(() => {
-    const onLang = (e) => { const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); setSiteLang(l); };
+    const onLang = (e) => { 
+      const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); 
+      setSiteLang(l); 
+      // Refresh the page when language changes
+      setTimeout(() => window.location.reload(), 100);
+    };
     try { window.addEventListener('agri:lang:change', onLang); } catch (e) {}
     return () => { try { window.removeEventListener('agri:lang:change', onLang); } catch (e) {} };
   }, []);
@@ -202,6 +209,14 @@ const FarmerCart = () => {
         const signature = generateDigitalSignature(email, otp);
         setDigitalSignature(signature);
         setOtpVerified(true);
+        // Regenerate contract with verified signatures to show names and dates
+        setTimeout(() => {
+          try {
+            generateContract(true);  // Pass true to show verified names
+          } catch (e) {
+            console.warn('Contract regeneration after OTP failed:', e);
+          }
+        }, 100);
         // update contract metadata with signature details so backend receives it
         try {
           setContractMetadata(prev => ({ ...(prev || {}), digital_signature: signature.signature_hash, signature_method: signature.signature_method, signature_email: signature.signer_email, signature_timestamp: signature.signature_timestamp }));
@@ -948,12 +963,20 @@ const FarmerCart = () => {
       alert(t('purchaseFailed', siteLang));
     }
   };
-   const generateContract = async () => {
+   const generateContract = async (isOtpVerified = false) => {
     try {
+      // Use the isOtpVerified parameter (for regeneration after OTP) or the state value
+      const otpVerificationStatus = isOtpVerified || otpVerified;
+      
       // pick up the current language from localStorage (ignore state latency)
       const lang = localStorage.getItem('agri_lang') || 'en';
       const langName = lang === 'en' ? 'English' : (lang === 'hi' ? 'हिंदी' : (lang === 'kn' ? 'ಕನ್ನಡ' : 'English'));
       console.log('generateContract language', lang);
+
+      // Get current signed-in user's info
+      const userRole = localStorage.getItem('agriai_role') || ''; // 'farmer' or 'buyer'
+      const signedInUserName = localStorage.getItem('agriai_name') || '';
+      console.log('Current user role:', userRole, 'Name:', signedInUserName);
 
       // Attempt to obtain buyer and farmer details from localStorage / items
       let farmerName = localStorage.getItem('agriai_name') || '';
@@ -1252,338 +1275,448 @@ const FarmerCart = () => {
   <title>AgriAI Contract</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     body {
       font-family: 'Times New Roman', Times, serif;
-      color: #111;
-      padding: 24px;
-      line-height: 1.6;
+      color: #1a1a1a;
+      line-height: 1.8;
+      background: #fff;
     }
-       h1 {
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 3px solid #236902;
+    }
+    .header img {
+      width: 80px;
+      height: auto;
+      margin: 0 auto 16px auto;
+      display: block;
+    }
+    h1 {
       text-align: center;
       color: #236902;
-      margin: 0;
+      margin: 8px 0;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
     }
-       h2 {
-      margin-top: 18px;
+    h2 {
+      color: #1a5c10;
+      margin: 12px 0 8px 0;
+      font-size: 18px;
+      font-weight: 700;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e0e0e0;
     }
-       .section {
-      margin-top: 16px;
+    h3 {
+      color: #236902;
+      margin: 10px 0 6px 0;
+      font-size: 15px;
+      font-weight: 700;
     }
-      table {
-      border-collapse: collapse;
+    p {
+      margin: 6px 0;
+      text-align: justify;
+      font-size: 14px;
+    }
+    .section {
+      margin: 12px 0;
+      padding: 8px 0;
+    }
+    ul {
+      margin: 6px 0 6px 24px;
+      font-size: 14px;
+      list-style-type: disc;
+    }
+    li {
+      margin: 3px 0;
+      list-style-type: disc;
+    }
+    table {
       width: 100%;
-      margin-top: 12px;
+      border-collapse: collapse;
+      margin: 12px 0;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
-      th, td {
+    th {
+      background: #236902;
+      color: #fff;
+      padding: 12px 8px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 13px;
       border: 1px solid #ddd;
-      padding: 8px;
     }
-      th {
-      background: #f7f7f7;
-      text-align: left;
+    td {
+      padding: 10px 8px;
+      border: 1px solid #ddd;
+      text-align: center;
+      font-size: 13px;
     }
-      pre {
-      white-space: pre-wrap;
-      font-family: 'Times New Roman', Times, serif;
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    tr:hover {
+      background: #f0f7ff;
+    }
+    strong {
+      font-weight: 700;
+      color: #1a5c10;
+    }
+    .party-section {
+      background: #f5f9f5;
+      padding: 12px;
+      border-left: 4px solid #236902;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    .signature-section {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 2px solid #ddd;
+      display: flex;
+      justify-content: space-around;
+      gap: 32px;
+    }
+    .signature-line {
+      text-align: center;
+      width: 200px;
+    }
+    .signature-line p {
+      margin: 4px 0;
+      font-size: 15px;
+    }
+    .signature-line .line {
+      border-top: 1px solid #000;
+      margin: 24px 0 4px 0;
+      min-height: 20px;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .section {
+        page-break-inside: avoid;
+      }
+      h2 {
+        page-break-after: avoid;
+      }
     }
   </style>
 </head>
 <body>
-<div style="text-align:center; margin-bottom:20px;">
-    <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
-    <h1>
-                 एग्री एआई<br/>
-      संविदा कृषि अनुबंध
-    </h1>
-    
-  </div>
-  <section class="section">
-  <h2>पक्षकार</h2>
-  <p><strong>पक्ष A – खरीदार / कंपनी</strong></p>
-  <p><b>नाम:</b> ${buyerName}</p>
-  <p><b>खरीदार आईडी: </b> ${buyerId || '[Buyer ID]'}</p>
-  <p><b>पता:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
-  <p><strong>पक्ष B – किसान / उत्पादक</strong></p>
-  <p><b>नाम: </b> ${farmerName}</p>
-  <p><b>किसान आईडी:</b> ${farmerId}</p>
-  <p><b>पता:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
-   <p>
-      पक्ष A और पक्ष B को सामूहिक रूप से “पक्षकार” कहा जाएगा।
-      एग्री एआई केवल एक डिजिटल सुविधा मंच के रूप में कार्य करता है और किसी भी पक्ष का खरीदार, विक्रेता, परिवहनकर्ता, बीमाकर्ता या एजेंट नहीं है।
-    </p>
-  </section>
+<div class="header">
+  <img src="${logo192}" alt="AgriAI" />
+  <h1>एग्रीएआई कृषि समझौता</h1></div>
 
   <section class="section">
-    <h2>1. अनुबंध का उद्देश्य</h2>
+  <h2>अनुबंध के पक्षकार</h2>
+  <div class="party-section">
+    <p><strong>पक्ष A – खरीदार / कंपनी</strong></p>
+    <p><b>नाम:</b> ${buyerName}</p>
+    <p><b>खरीदार आईडी:</b> ${buyerId || '[Buyer ID]'}</p>
+    <p><b>पता:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+  </div>
+
+  <div class="party-section">
+    <p><strong>पक्ष B – किसान / उत्पादक</strong></p>
+    <p><b>नाम:</b> ${farmerName}</p>
+    <p><b>किसान आईडी:</b> ${farmerId}</p>
+    <p><b>पता:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+  </div>
+
+  <p>
+     पक्ष A और पक्ष B को सामूहिक रूप से “पक्षकार” कहा जाएगा।
+     AgriAI केवल एक डिजिटल सुविधा मंच के रूप में कार्य करता है और किसी भी पक्ष का खरीदार, विक्रेता, परिवहनकर्ता, बीमाकर्ता या प्रतिनिधि नहीं है।
+  </p>
+</section>
+
+  <section class="section">
+    <h2>1. समझौते का उद्देश्य</h2>
     <p>
-      यह अनुबंध उन शर्तों और नियमों को परिभाषित करता है जिनके अंतर्गत किसान कृषि उपज का उत्पादन एवं आपूर्ति करेगा तथा खरीदार पूर्व-निर्धारित मूल्य पर उसे खरीदेगा, जिससे:
+      यह समझौता उन नियमों और शर्तों को परिभाषित करता है जिनके अंतर्गत किसान
+      कृषि उत्पाद का उत्पादन और आपूर्ति करने के लिए सहमत होता है,
+      तथा खरीदार पूर्व-निर्धारित मूल्य पर ऐसे उत्पाद को खरीदने के लिए सहमत होता है,
+      जिससे सुनिश्चित होता है:
     </p>
     <ul>
-      <li>किसान को सुनिश्चित बाज़ार उपलब्ध हो</li>
-      <li>निष्पक्ष एवं पारदर्शी मूल्य निर्धारण हो</li>
-      <li>समय पर और सुरक्षित भुगतान हो</li>
-      <li>बिचौलियों पर निर्भरता कम हो</li>
+      <li>किसान के लिए सुनिश्चित बाजार उपलब्धता</li>
+      <li>निष्पक्ष और पारदर्शी मूल्य निर्धारण</li>
+      <li>समय पर और सुरक्षित भुगतान</li>
+      <li>बिचौलियों पर निर्भरता में कमी</li>
     </ul>
-  </section>
+</section>
 
   <section class="section">
     <h2>2. अनुबंध का प्रकार एवं अवधि</h2>
-    <p>अनुबंध का प्रकार: ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p>
-    <p>अनुबंध अवधि: ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p>
-    <p>प्रारंभ तिथि: ${startDate}</p>
-    <p>समाप्ति तिथि: ${endDate}</p>
-    <p>कुल अवधि: ${days} Days</p>
+    <p><b>अनुबंध का स्वरूप:</b> ${contractNature === 'pre-harvest' ? 'पूर्व-फसल उत्पादन अनुबंध' : 'फसल कटाई के बाद क्रय अनुबंध'}</p>
+    <p><b>अनुबंध अवधि:</b> ${contractDuration === 'one-time' ? 'एक बार' : (contractDuration === 'seasonal' ? 'मौसमी' : 'वार्षिक')}</p>
+    <p><b>प्रारंभ तिथि:</b> ${startDate}</p>
+    <p><b>समाप्ति तिथि:</b> ${endDate}</p>
+    <p><b>अवधि:</b> ${days} दिन</p>
     <p>
-     कटाई उपरांत क्रय अनुबंध के अंतर्गत उपज पहले से उत्पादित या कटाई की जा चुकी है। इस अनुबंध के अंतर्गत कोई उत्पादन दायित्व उत्पन्न नहीं होगा।
+      इस फसल कटाई के बाद क्रय अनुबंध के अंतर्गत, उत्पाद पहले ही इस समझौते के निष्पादन से पूर्व उगाया या काटा जा चुका है। इस अनुबंध के तहत कोई भी खेती संबंधी दायित्व उत्पन्न नहीं होता।
     </p>
+
     <h3>2.1 अनुबंध स्वीकृति एवं वार्ता अवधि</h3>
     <p>
-      यह अनुबंध किसान द्वारा डिजिटल रूप से भेजे जाने के 48 घंटों तक वैध रहेगा।
+      यह क्रय अनुबंध किसान द्वारा AgriAI प्लेटफ़ॉर्म के माध्यम से खरीदार को डिजिटल रूप से भेजे जाने के समय से अड़तालीस (48) घंटों की अवधि तक स्वीकृति हेतु वैध रहेगा।
     </p>
     <p>
-      इस अवधि में खरीदार को निम्न में से एक कार्य करना होगा:
+      इस 48 घंटे की अवधि के भीतर, खरीदार को प्लेटफ़ॉर्म के माध्यम से निम्न में से एक कार्रवाई करनी होगी:
     </p>
     <ul>
-      <li>अनुबंध स्वीकार करना</li>
-      <li>अनुबंध अस्वीकार करना</li>
-      <li>मूल्य वार्ता का अनुरोध करना</li>
+      <li>अनुबंध को वर्तमान रूप में स्वीकार करें; या</li>
+      <li>अनुबंध को अस्वीकार करें; या</li>
+      <li>वार्ता (नेगोशिएशन) का अनुरोध करें।</li>
     </ul>
     <p>
-      यदि 48 घंटों के भीतर कोई कार्यवाही नहीं की जाती है, तो अनुबंध स्वतः निरस्त माना जाएगा।
+      यदि खरीदार 48 घंटे की वैधता अवधि के भीतर कोई कार्रवाई नहीं करता है, तो अनुबंध स्वतः समाप्त हो जाएगा और किसी भी पक्ष पर इसका कोई कानूनी या बाध्यकारी प्रभाव नहीं होगा।
     </p>
-    
-  </section>
+    <p>
+      मूल्य वार्ता का कोई भी अनुरोध समय-सीमित होगा और वार्ता शुरू होने के समय से अड़तालीस (48) घंटों के भीतर पूरा किया जाना चाहिए। यदि इस अवधि के भीतर कोई सहमति नहीं बनती है, तो वार्ता स्वतः समाप्त हो जाएगी और अनुबंध रद्द माना जाएगा।
+    </p>
+</section>
 
   <section class="section">
     <h2>3. डेटा गोपनीयता एवं प्लेटफ़ॉर्म अनुपालन</h2>
     <p>
-      एग्री एआई द्वारा संकलित सभी व्यक्तिगत, कृषि एवं लेनदेन संबंधी डेटा:
+      AgriAI प्लेटफ़ॉर्म के माध्यम से एकत्रित सभी व्यक्तिगत, कृषि एवं लेन-देन संबंधी डेटा:
     </p>
     <ul>
-      <li>सुरक्षित रूप से संग्रहीत किए जाएंगे</li>
-      <li>केवल अनुबंध निष्पादन, भुगतान निपटान, बीमा सुविधा एवं कानूनी अनुपालन हेतु उपयोग किए जाएंगे</li>
+      <li>सुरक्षित रूप से संग्रहीत किया जाएगा</li>
+      <li>अनुबंध के निष्पादन एवं नवीनीकरण हेतु उपयोग किया जाएगा</li>
+      <li>भुगतान निपटान के लिए उपयोग किया जाएगा</li>
+      <li>बीमा सुविधा प्रदान करने के लिए उपयोग किया जाएगा</li>
+      <li>कानूनी एवं नियामक अनुपालन सुनिश्चित करने के लिए उपयोग किया जाएगा</li>
     </ul>
     <p>
-      यह अनुबंध डिजिटल पर्सनल डेटा प्रोटेक्शन अधिनियम, 2023 के अनुरूप है।
+      यह समझौता डिजिटल व्यक्तिगत डेटा संरक्षण अधिनियम, 2023 के पूर्णतः अनुरूप है।
     </p>
+</section>
+
+  <section class="section">
+    <h2>4. वस्तु विवरण</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>क्रम संख्या</th>
+          <th>फसल का नाम</th>
+          <th>प्रकार</th>
+          <th>मात्रा (किग्रा)</th>
+          <th>मूल्य (₹/किग्रा)</th>
+          <th>कुल राशि (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+</section>
+
+  <section class="section">
+    <h2>5. मूल्य एवं भुगतान की शर्तें</h2>
+    
+    <h3>5.1 किसान की भुगतान संरचना</h3>
+    <p><b>कुल मात्रा:</b> ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
+    <p><b>प्रति इकाई मूल्य:</b> ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
+    <p><b>उप-योग:</b> ${formatCurrency(totalCropTradeValue)}</p>
+    <p><b>प्लेटफ़ॉर्म शुल्क:</b> ${formatCurrency(totalPlatformFee)}</p>
+    <p><b>जीएसटी (18%):</b> ${formatCurrency(totalGst)}</p>
+    <p><b style="font-size: 16px; color: #236902;">कुल राशि (कटौती के बाद):</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(totalAmountInvoice)}</b></p>
+
+    <h3 style="margin-top: 20px;">5.2 खरीदार की भुगतान संरचना</h3>
+    <p><b>कुल मात्रा:</b> ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
+    <p><b>प्रति इकाई मूल्य:</b> ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
+    <p><b>उप-योग:</b> ${formatCurrency(totalCropTradeValue)}</p>
+    <p><b>प्लेटफ़ॉर्म शुल्क:</b> ${formatCurrency(buyerPlatformFee)}</p>
+    <p><b>जीएसटी (18%):</b> ${formatCurrency(buyerGst)}</p>
+    <p><b style="font-size: 16px; color: #236902;">देय कुल राशि:</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(buyerTotalAmount)}</b></p>
+
+    <h3 style="margin-top: 20px;">5.3 भुगतान अनुसूची</h3>
+    <ul>
+      <li><b>अग्रिम (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – अनुबंध की पुष्टि पर देय</li>
+      <li><b>डिलीवरी के समय (50%):</b> ${formatCurrency(totalCropTradeValue * 0.50)} – सफल डिलीवरी पर देय</li>
+      <li><b>अंतिम (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – गुणवत्ता स्वीकृति के 7 कार्य दिवसों के भीतर देय</li>
+    </ul>
+
+    <h3 style="margin-top: 20px;">5.4 भुगतान का तरीका</h3>
+    <p>बैंक ट्रांसफर / यूपीआई / चेक</p>
+    <p>इस समझौते के तहत किए गए सभी भुगतानों के लिए खरीदार डिजिटल या भौतिक रसीद जारी करेगा।</p>
+</section>
+
+  <section class="section">
+    <h2>6. डिलीवरी, लॉजिस्टिक्स एवं परिवहन</h2>
+
+    <h3>6.1 AgriAI की भूमिका</h3>
+    <p>
+    AgriAI केवल एक डिजिटल तकनीकी प्लेटफ़ॉर्म के रूप में कार्य करता है, जो खरीदारों और किसानों के बीच लेन-देन को सुगम बनाता है।
+    AgriAI को किसी भी स्थिति में खरीदार, विक्रेता, व्यापारी, कमीशन एजेंट, परिवहनकर्ता या वस्तुओं के संरक्षक के रूप में नहीं माना जाएगा।
+    बिक्री और खरीद से संबंधित सभी दायित्व पूरी तरह से पक्षकारों के बीच ही रहेंगे।
+    </p>
+    
+    <h3>6.2 परिवहन</h3>
+    <p>
+    परिवहन AgriAI प्लेटफ़ॉर्म पर उपलब्ध या स्वीकृत तृतीय-पक्ष लॉजिस्टिक्स सेवा प्रदाताओं के माध्यम से किया जाएगा।
+    लॉजिस्टिक्स प्रदाता और वाहन के प्रकार का चयन फसल के प्रकार, मात्रा, दूरी और हैंडलिंग आवश्यकताओं के आधार पर किया जाएगा।
+    </p>
+
+    <h3>6.3 डिलीवरी शुल्क</h3>
+    <p>
+    डिलीवरी शुल्क तृतीय-पक्ष लॉजिस्टिक्स प्रदाता द्वारा वास्तविक दूरी, वाहन के प्रकार, लोडिंग आवश्यकताओं और स्थान के आधार पर निर्धारित किया जाएगा।
+    ये शुल्क सीधे खरीदार द्वारा लॉजिस्टिक्स प्रदाता को भुगतान किए जाएंगे।
+    AgriAI डिलीवरी मूल्य निर्धारण तय करने या उस पर बातचीत करने के लिए जिम्मेदार नहीं होगा।
+    </p>
+
+    <h3>6.4 जोखिम का हस्तांतरण</h3>
+    <p>
+    परिवहन के दौरान उत्पाद से संबंधित जोखिम और जिम्मेदारी लॉजिस्टिक्स प्रदाता के पास रहेगी।
+    सफल डिलीवरी और हस्ताक्षरित डिलीवरी प्रमाण (POD) प्राप्त होने के बाद ही जोखिम खरीदार को स्थानांतरित होगा।
+    </p>
+
+    <h3>6.5 देरी, क्षति एवं हानि</h3>
+    <p>
+    परिवहन के दौरान होने वाली किसी भी देरी, क्षति, कमी या हानि का निर्धारण लॉजिस्टिक्स प्रदाता के नियमों और शर्तों के अनुसार किया जाएगा।
+    AgriAI ऐसी किसी भी दावे के लिए उत्तरदायी नहीं होगा।
+    </p>
+
+    <h3>6.6 डिलीवरी का प्रमाण</h3>
+    <p>
+    डिलीवरी की पुष्टि भौतिक रसीद, डिजिटल पुष्टि और/या AgriAI प्लेटफ़ॉर्म पर दर्ज इलेक्ट्रॉनिक POD के माध्यम से की जाएगी।
+    AgriAI द्वारा बनाए गए डिजिटल रिकॉर्ड डिलीवरी के वैध प्रमाण माने जाएंगे।
+    </p>
+</section>
+  <section class="section">
+    <h2>7. गुणवत्ता मानक, निरीक्षण एवं स्वीकृति</h2>
+
+    <p>
+      आपूर्ति किया गया उत्पाद इस समझौते में उल्लिखित पारस्परिक रूप से सहमत विनिर्देशों के अनुरूप होना चाहिए।
+    </p>
+
+    <p>
+      खरीदार डिलीवरी की तिथि से 3 (तीन) कार्य दिवसों के भीतर गुणवत्ता निरीक्षण पूरा करेगा।
+    </p>
+
+    <p>
+      किसी भी अस्वीकृति को निरीक्षण अवधि के भीतर AgriAI प्लेटफ़ॉर्म के माध्यम से लिखित रूप में उठाना होगा,
+      जिसमें स्पष्ट, वैध और सत्यापन योग्य कारण बताए जाने चाहिए।
+    </p>
+
+    <p>
+      यदि 3 कार्य दिवसों के भीतर कोई विवाद नहीं उठाया जाता है, तो उत्पाद को स्वीकृत माना जाएगा।
+    </p>
+
+    <p>
+      उचित अस्वीकृति की स्थिति में, वापसी परिवहन लागत खरीदार द्वारा वहन की जाएगी, जब तक कि यह सिद्ध न हो जाए कि दोष प्रेषण से पूर्व उत्पन्न हुआ था।
+    </p>
+</section>
+
+<section class="section">
+    <h2>8. जोखिम, दायित्व एवं बीमा</h2>
+
+    <p>
+      किसान मानक कृषि एवं फसल कटाई के बाद की प्रक्रियाओं का पालन करेगा।
+    </p>
+
+    <p>
+      प्रेषण से पहले प्राकृतिक आपदाओं या फोर्स मेज्योर के कारण फसल हानि की स्थिति में, दायित्वों की पारस्परिक रूप से समीक्षा की जा सकती है।
+      यदि प्रधानमंत्री फसल बीमा योजना (PMFBY) या अन्य अनुमोदित बीमाकर्ताओं के अंतर्गत बीमा लागू होता है, तो वह किसान के नाम पर ही रहेगा।
+    </p>
+
+    <p>
+      प्राप्त होने वाला कोई भी बीमा मुआवजा केवल किसान का होगा।
+    </p>
+
+    <p>
+      डिलीवरी और स्वीकृति मानी जाने के बाद, सभी जोखिम, स्वामित्व एवं दायित्व पूर्णतः खरीदार को स्थानांतरित हो जाएंगे।
+    </p>
+</section>
+
+  <section class="section">
+    <h2>9. फोर्स मेज्योर</h2>
+
+    <p>
+      किसी भी पक्ष को ऐसी परिस्थितियों के कारण हुई विफलता या देरी के लिए उत्तरदायी नहीं ठहराया जाएगा,
+      जो उनके उचित नियंत्रण से बाहर हों, जैसे प्राकृतिक आपदाएं, सरकारी प्रतिबंध, युद्ध, हड़ताल,
+      परिवहन में व्यवधान या अन्य अप्रत्याशित आपदाएं।
+    </p>
+
+    <p>
+      ऐसी परिस्थितियों के समाप्त होने के बाद दायित्व पुनः लागू हो जाएंगे।
+    </p>
+</section>
+
+  <section class="section">
+    <h2>10. विवाद समाधान एवं क्षेत्राधिकार</h2>
+
+    <p>
+      इस समझौते से उत्पन्न किसी भी विवाद को पहले AgriAI प्लेटफ़ॉर्म के माध्यम से आपसी चर्चा द्वारा सौहार्दपूर्वक सुलझाया जाएगा।
+    </p>
+
+    <p>
+      यदि 15 दिनों के भीतर समाधान नहीं होता है, तो विवादों को मध्यस्थता एवं सुलह अधिनियम, 1996 के अंतर्गत मध्यस्थता के लिए भेजा जाएगा।
+      मध्यस्थता का स्थान AgriAI द्वारा निर्धारित किया जाएगा।
+    </p>
+
+    <p>
+      मध्यस्थता के अधीन रहते हुए, <strong>बेंगलुरु, कर्नाटक</strong> की अदालतों को इस समझौते के तहत उत्पन्न प्रवर्तन और कानूनी कार्यवाहियों के लिए विशेष क्षेत्राधिकार प्राप्त होगा।
+    </p>
+</section>
+
+  <section class="section">
+    <h2>11. समाप्ति</h2>
+
+    <p>
+      किसी भी पक्ष द्वारा इस समझौते का समाप्ति किया जा सकता है यदि कोई महत्वपूर्ण उल्लंघन होता है,
+      जैसे कि भुगतान न करना, डिलीवरी न करना, गलत प्रस्तुतीकरण, या सहमत शर्तों का उल्लंघन।
+    </p>
+
+    <p>
+      निर्धारित समयसीमा से अधिक भुगतान में चूक की स्थिति में, दोषी पक्ष को खाता निलंबन,
+      दंडात्मक शुल्क तथा कानून के अंतर्गत अनुमत वसूली कार्यवाही का सामना करना पड़ सकता है।
+    </p>
+</section>
+
+  <section class="section">
+    <h2>12. समझौते की भाषा</h2>
+
+  <p>
+    इस समझौते को किसान को <strong>${siteLang === 'en' ? 'अंग्रेज़ी' : (siteLang === 'hi' ? 'हिंदी' : (siteLang === 'kn' ? 'कन्नड़' : 'अंग्रेज़ी'))} (भाषा) </strong>में समझाया और अनुवादित किया गया है।
+    किसी भी असंगति की स्थिति में, अंग्रेज़ी संस्करण मान्य होगा।
+  </p>
+</section>
+
+<section class="section">
+    <h2>13. निष्पादन एवं डिजिटल स्वीकृति</h2>
+
+  <p>
+    इस समझौते को AgriAI प्लेटफ़ॉर्म के माध्यम से इलेक्ट्रॉनिक रूप से निष्पादित किया जा सकता है।
+    पंजीकृत क्रेडेंशियल्स का उपयोग करते हुए डिजिटल स्वीकृति कानूनी रूप से बाध्यकारी सहमति मानी जाएगी।
+  </p>
+
+  <section class="signature-section">
+    <div class="signature-line">
+      <p><b>खरीदार / कंपनी</b></p>
+      <p>नाम: ${otpVerificationStatus && userRole === 'buyer' ? signedInUserName : '________________'}</p>
+      <p>तिथि: ${otpVerificationStatus && userRole === 'buyer' ? startDate : '________________'}</p>
+    </div>
+    <div class="signature-line">
+      <p><b>किसान / उत्पादक</b></p>
+      <p>नाम: ${otpVerificationStatus && userRole === 'farmer' ? signedInUserName : '________________'}</p>
+      <p>तिथि: ${otpVerificationStatus && userRole === 'farmer' ? startDate : '________________'}</p>
+    </div>
   </section>
 
-  <section class="section">
-  <h2>4. वस्तु विवरण</h2>
-  <table style="border-collapse:collapse;width:100%;margin-top:12px;">
-    <thead>
-      <tr>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">क्रम सं.</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">फसल का नाम</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">किस्म</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">मात्रा</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">मूल्य (₹/किग्रा)</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">कुल राशि</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml}
-    </tbody>
-  </table>
-</section>
-
-  <section class="section">
-  <h2>5. मूल्य एवं भुगतान शर्तें</h2>
-
-  <p><strong>5.1 किसान</strong></p>
-  <p>कुल मात्रा: ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
-  <p>मूल्य: ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
-  <p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(totalPlatformFee)}</p>
-  <p>प्लेटफ़ॉर्म शुल्क पर जीएसटी: ${formatCurrency(totalGst)}</p>
-  <p><strong>कुल देय राशि (कटौती पश्चात): ${formatCurrency(totalAmountInvoice)}</strong></p>
-
-  <p><strong>5.2 खरीदार</strong></p>
-  <p>कुल मात्रा: ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
-  <p>मूल्य: ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
-  <p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(buyerPlatformFee)}</p>
-  <p>प्लेटफ़ॉर्म शुल्क पर जीएसटी: ${formatCurrency(buyerGst)}</p>
-  <p><strong>कुल देय राशि (जोड़कर): ${formatCurrency(buyerTotalAmount)}</strong></p>
-  
-
-  <p><strong>5.3 भुगतान अनुसूची</strong></p>
-  <p>कुल फसल व्यापार मूल्य का 25% खरीदार द्वारा अनुबंध पुष्टि के समय एग्रीएआई प्लेटफ़ॉर्म के माध्यम से अग्रिम के रूप में भुगतान किया जाएगा।</p>
-  <p>कुल फसल व्यापार मूल्य का 50% सफल डिलीवरी के तुरंत बाद भुगतान किया जाएगा।</p>
-  <p>शेष 25% गुणवत्ता निरीक्षण एवं औपचारिक स्वीकृति के 7 (सात) कार्य दिवसों के भीतर भुगतान किया जाएगा।</p>
-
-  <p><strong>5.4 भुगतान का तरीका</strong></p>
-  <p>बैंक ट्रांसफर / यूपीआई / चेक</p>
-  <p>खरीदार इस अनुबंध के अंतर्गत किए गए सभी भुगतानों के लिए डिजिटल या भौतिक रसीद जारी करेगा।</p>
-
-</section>
-  <section class="section">
-  <h2>6. डिलीवरी, लॉजिस्टिक्स एवं परिवहन</h2>
-
-  <p><strong>6.1 एग्रीएआई की भूमिका</strong></p>
-  <p>
-    एग्रीएआई केवल एक डिजिटल प्रौद्योगिकी प्लेटफ़ॉर्म के रूप में कार्य करता है, जो खरीदारों और किसानों के बीच लेनदेन को सुगम बनाता है।
-    एग्रीएआई को किसी भी स्थिति में खरीदार, विक्रेता, व्यापारी, कमीशन एजेंट, परिवहनकर्ता या माल का संरक्षक नहीं माना जाएगा।
-    बिक्री एवं खरीद से संबंधित सभी दायित्व पूर्णतः पक्षकारों के बीच ही रहेंगे।
+  <p style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #ddd; font-size: 12px; color: #000; font-weight: bold;">
+    <b>गवाह:</b> AgriAI प्लेटफ़ॉर्म | डिजिटल रिकॉर्ड: ${new Date().toISOString()}
   </p>
-
-  <p><strong>6.2 डिलीवरी सुविधा</strong></p>
-  <p>
-    परिवहन एग्रीएआई प्लेटफ़ॉर्म पर उपलब्ध या अनुमोदित तृतीय-पक्ष लॉजिस्टिक्स सेवा प्रदाताओं के माध्यम से कराया जाएगा।
-    लॉजिस्टिक्स प्रदाता एवं वाहन का चयन फसल की प्रकृति, मात्रा, दूरी तथा संभाल आवश्यकताओं के आधार पर किया जाएगा।
-  </p>
-
-  <p><strong>6.3 डिलीवरी शुल्क</strong></p>
-  <p>
-    डिलीवरी शुल्क तृतीय-पक्ष लॉजिस्टिक्स प्रदाता द्वारा वास्तविक दूरी, वाहन के प्रकार, लोडिंग आवश्यकताओं एवं स्थान के आधार पर निर्धारित किया जाएगा।
-    यह शुल्क सीधे खरीदार द्वारा लॉजिस्टिक्स प्रदाता को भुगतान किया जाएगा।
-    एग्रीएआई डिलीवरी शुल्क निर्धारित करने या उसके संबंध में किसी भी प्रकार की वार्ता करने के लिए उत्तरदायी नहीं होगा।
-  </p>
-
-  <p><strong>6.4 जोखिम का हस्तांतरण</strong></p>
-  <p>
-    परिवहन के दौरान उपज का जोखिम एवं उत्तरदायित्व लॉजिस्टिक्स प्रदाता के पास रहेगा।
-    सफल डिलीवरी तथा हस्ताक्षरित डिलीवरी प्रमाण (Proof of Delivery - POD) के पश्चात जोखिम खरीदार को हस्तांतरित होगा।
-  </p>
-
-  <p><strong>6.5 विलंब, क्षति एवं हानि</strong></p>
-  <p>
-    परिवहन के दौरान होने वाली किसी भी प्रकार की देरी, क्षति, कमी या हानि लॉजिस्टिक्स प्रदाता के नियमों एवं शर्तों के अनुसार नियंत्रित होगी।
-    एग्रीएआई ऐसे किसी भी दावे के लिए उत्तरदायी नहीं होगा।
-  </p>
-
-  <p><strong>6.6 डिलीवरी का प्रमाण</strong></p>
-  <p>
-    डिलीवरी की पुष्टि भौतिक रसीद, डिजिटल पुष्टि और/या एग्रीएआई प्लेटफ़ॉर्म पर दर्ज इलेक्ट्रॉनिक POD के माध्यम से की जाएगी।
-    एग्रीएआई द्वारा सुरक्षित रखे गए डिजिटल अभिलेख डिलीवरी के वैध साक्ष्य माने जाएंगे।
-  </p>
-
-</section>
-
-  <section class="section">
-  <h2>7. गुणवत्ता मानक, निरीक्षण एवं स्वीकृति</h2>
-
-  <p>
-    आपूर्ति की गई उपज इस अनुबंध में उल्लिखित पारस्परिक रूप से सहमत विनिर्देशों के अनुरूप होगी।
-  </p>
-
-  <p>
-    खरीदार डिलीवरी की तिथि से 3 (तीन) कार्य दिवसों के भीतर गुणवत्ता निरीक्षण पूर्ण करेगा।
-  </p>
-
-  <p>
-    किसी भी अस्वीकृति को निरीक्षण अवधि के भीतर एग्रीएआई प्लेटफ़ॉर्म के माध्यम से लिखित रूप में दर्ज करना अनिवार्य होगा,
-    जिसमें स्पष्ट, वैध एवं सत्यापन योग्य कारणों का उल्लेख होना चाहिए।
-  </p>
-
-  <p>
-    यदि 3 कार्य दिवसों के भीतर कोई विवाद या आपत्ति दर्ज नहीं की जाती है, तो उपज को स्वीकृत माना जाएगा।
-  </p>
-
-  <p>
-    यदि अस्वीकृति उचित एवं प्रमाणित पाई जाती है, तो वापसी परिवहन व्यय खरीदार द्वारा वहन किया जाएगा,
-    जब तक कि यह सिद्ध न हो जाए कि दोष प्रेषण (डिस्पैच) से पूर्व उत्पन्न हुआ था।
-  </p>
-
-</section>
-
-  <section class="section">
-  <h2>8. जोखिम, दायित्व एवं बीमा</h2>
-
-  <p>
-    किसान मानक कृषि एवं कटाई उपरांत (पोस्ट-हार्वेस्ट) प्रथाओं का पालन करेगा।
-  </p>
-
-  <p>
-    प्रेषण (डिस्पैच) से पूर्व प्राकृतिक आपदा या अप्रत्याशित परिस्थितियों (फोर्स मेज्योर) के कारण फसल हानि की स्थिति में,
-    पक्षकार आपसी सहमति से दायित्वों की समीक्षा कर सकते हैं।
-    यदि फसल बीमा सरकार की योजनाओं जैसे 
-    <strong>प्रधानमंत्री फसल बीमा योजना (PMFBY)</strong> या किसी अनुमोदित बीमाकर्ता के अंतर्गत लागू है,
-    तो वह किसान के नाम पर ही रहेगा।
-  </p>
-
-  <p>
-    किसी भी बीमा दावे के अंतर्गत प्राप्त क्षतिपूर्ति राशि पर पूर्ण अधिकार केवल किसान का होगा।
-  </p>
-
-  <p>
-    सफल डिलीवरी एवं स्वीकृति के पश्चात उपज से संबंधित सभी जोखिम, स्वामित्व एवं दायित्व पूर्णतः खरीदार को हस्तांतरित हो जाएंगे।
-  </p>
-
-</section>
-
-
-  <section class="section">
-  <h2>9. अप्रत्याशित परिस्थितियाँ (Force Majeure)</h2>
-
-  <p>
-    किसी भी पक्ष को ऐसी परिस्थितियों के कारण हुई विफलता या विलंब के लिए उत्तरदायी नहीं ठहराया जाएगा,
-    जो उसके उचित नियंत्रण से परे हों, जिनमें प्राकृतिक आपदाएँ, सरकारी प्रतिबंध, युद्ध, हड़ताल,
-    परिवहन व्यवधान या अन्य अप्रत्याशित आपदाएँ शामिल हैं।
-  </p>
-
-  <p>
-    ऐसी परिस्थितियों के समाप्त होते ही अनुबंध के दायित्व पुनः प्रभावी हो जाएंगे।
-  </p>
-</section>
-
-<section class="section">
-  <h2>10. विवाद समाधान एवं अधिकार क्षेत्र</h2>
-
-  <p>
-    इस अनुबंध से उत्पन्न किसी भी विवाद को सर्वप्रथम एग्रीएआई प्लेटफ़ॉर्म के माध्यम से आपसी चर्चा द्वारा सौहार्दपूर्ण तरीके से सुलझाने का प्रयास किया जाएगा।
-  </p>
-
-  <p>
-    यदि 15 (पंद्रह) दिनों के भीतर विवाद का समाधान नहीं होता है, तो इसे मध्यस्थता एवं सुलह अधिनियम, 1996 के अंतर्गत मध्यस्थता के लिए संदर्भित किया जाएगा।
-    मध्यस्थता का स्थान (Seat of Arbitration) एग्रीएआई द्वारा निर्धारित किया जाएगा।
-  </p>
-
-  <p>
-    मध्यस्थता के अधीन रहते हुए, इस अनुबंध से संबंधित प्रवर्तन एवं अन्य कानूनी कार्यवाहियों के लिए
-    <strong>बेंगलुरु, कर्नाटक</strong> की न्यायालयों को विशेष (Exclusive) अधिकार क्षेत्र प्राप्त होगा।
-  </p>
-</section>
-
-  <section class="section">
-  <h2>11. समाप्ति</h2>
-
-  <p>
-    किसी भी पक्ष द्वारा इस अनुबंध की किसी महत्वपूर्ण शर्त के उल्लंघन की स्थिति में,
-    जिसमें भुगतान न करना, डिलीवरी न करना, मिथ्या प्रस्तुतीकरण (Misrepresentation) या सहमत शर्तों का उल्लंघन शामिल है,
-    यह अनुबंध समाप्त किया जा सकता है।
-  </p>
-
-  <p>
-    सहमत समयसीमा से परे भुगतान में चूक की स्थिति में, चूक करने वाले पक्ष के विरुद्ध
-    खाता निलंबन, दंडात्मक शुल्क तथा विधि द्वारा अनुमत वसूली कार्यवाही की जा सकती है।
-  </p>
-</section>
-
-<section class="section">
-  <h2>12. अनुबंध की भाषा</h2>
-
-  <p>
-    यह अनुबंध किसान को ${langName} (भाषा) में समझाया एवं अनुवादित किया गया है।
-    किसी भी असंगति की स्थिति में अंग्रेज़ी संस्करण प्रभावी एवं मान्य होगा।
-  </p>
-</section>
-
-<section class="section">
-  <h2>13. निष्पादन एवं डिजिटल स्वीकृति</h2>
-
-  <p>
-    यह अनुबंध एग्रीएआई प्लेटफ़ॉर्म के माध्यम से इलेक्ट्रॉनिक रूप से निष्पादित किया जा सकता है।
-    पंजीकृत क्रेडेंशियल्स के माध्यम से दी गई डिजिटल स्वीकृति विधिक रूप से बाध्यकारी सहमति मानी जाएगी।
-  </p>
-
-  <p>खरीदार / अधिकृत प्रतिनिधि</p>
-  <p>हस्ताक्षर: ___________________________</p>
-  <p>तिथि: ___________________________</p>
-
-  <p>किसान / उत्पादक</p>
-  <p>हस्ताक्षर: ___________________________</p>
-  <p>तिथि: ___________________________</p>
-
-  <p>गवाह : <strong>एग्री एआई</strong></p>
 </section>
 
 </body>
@@ -1591,447 +1724,460 @@ const FarmerCart = () => {
 
       // Kannada contract HTML
       const htmlKn = `<!doctype html>
-<html>
+      <html>
 <head>
   <meta charset="utf-8" />
   <title>AgriAI Contract</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     body {
       font-family: 'Times New Roman', Times, serif;
-      color: #111;
-      padding: 24px;
-      line-height: 1.6;
+      color: #1a1a1a;
+      line-height: 1.8;
+      background: #fff;
     }
-       h1 {
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 3px solid #236902;
+    }
+    .header img {
+      width: 80px;
+      height: auto;
+      margin: 0 auto 16px auto;
+      display: block;
+    }
+    h1 {
       text-align: center;
       color: #236902;
-      margin: 0;
+      margin: 8px 0;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
     }
-       h2 {
-      margin-top: 18px;
+    h2 {
+      color: #1a5c10;
+      margin: 12px 0 8px 0;
+      font-size: 18px;
+      font-weight: 700;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e0e0e0;
     }
-       .section {
-      margin-top: 16px;
+    h3 {
+      color: #236902;
+      margin: 10px 0 6px 0;
+      font-size: 15px;
+      font-weight: 700;
     }
-      table {
-      border-collapse: collapse;
+    p {
+      margin: 6px 0;
+      text-align: justify;
+      font-size: 14px;
+    }
+    .section {
+      margin: 12px 0;
+      padding: 8px 0;
+    }
+    ul {
+      margin: 6px 0 6px 24px;
+      font-size: 14px;
+      list-style-type: disc;
+    }
+    li {
+      margin: 3px 0;
+      list-style-type: disc;
+    }
+    table {
       width: 100%;
-      margin-top: 12px;
+      border-collapse: collapse;
+      margin: 12px 0;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
-      th, td {
+    th {
+      background: #236902;
+      color: #fff;
+      padding: 12px 8px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 13px;
       border: 1px solid #ddd;
-      padding: 8px;
     }
-      th {
-      background: #f7f7f7;
-      text-align: left;
+    td {
+      padding: 10px 8px;
+      border: 1px solid #ddd;
+      text-align: center;
+      font-size: 13px;
     }
-      pre {
-      white-space: pre-wrap;
-      font-family: 'Times New Roman', Times, serif;
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    tr:hover {
+      background: #f0f7ff;
+    }
+    strong {
+      font-weight: 700;
+      color: #1a5c10;
+    }
+    .party-section {
+      background: #f5f9f5;
+      padding: 12px;
+      border-left: 4px solid #236902;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    .signature-section {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 2px solid #ddd;
+      display: flex;
+      justify-content: space-around;
+      gap: 32px;
+    }
+    .signature-line {
+      text-align: center;
+      width: 200px;
+    }
+    .signature-line p {
+      margin: 4px 0;
+      font-size: 15px;
+    }
+    .signature-line .line {
+      border-top: 1px solid #000;
+      margin: 24px 0 4px 0;
+      min-height: 20px;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .section {
+        page-break-inside: avoid;
+      }
+      h2 {
+        page-break-after: avoid;
+      }
     }
   </style>
 </head>
 <body>
-<div style="text-align:center; margin-bottom:20px;">
-    <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
-    <h1>
-  ಅಗ್ರಿ AI<br/>
-  ಒಪ್ಪಂದ ಕೃಷಿ ಒಪ್ಪಂದ 
-</h1>
-
-</div>
+<div class="header">
+  <img src="${logo192}" alt="AgriAI" />
+<h1>ಅಗ್ರಿಎಐ ಕೃಷಿ ಒಪ್ಪಂದ</h1></div>
 
 <section class="section">
-  <h2>ಪಕ್ಷಗಳು </h2>
+  <h2>ಒಪ್ಪಂದದ ಪಕ್ಷಗಳು</h2>
+  <div class="party-section">
+    <p><strong>ಪಕ್ಷ A – ಖರೀದಿದಾರ / ಕಂಪನಿ</strong></p>
+    <p><b>ಹೆಸರು:</b> ${buyerName}</p>
+    <p><b>ಖರೀದಿದಾರ ಐಡಿ:</b> ${buyerId || '[Buyer ID]'}</p>
+    <p><b>ವಿಳಾಸ:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+  </div>
 
-  <p><strong>ಪಕ್ಷ A – ಖರೀದಿದಾರ / ಕಂಪನಿ</strong></p>
-  <p><b>ಹೆಸರು:</b> ${buyerName}</p>
-  <p><b>ಖರೀದಿದಾರ ಐಡಿ:</b> ${buyerId || '[Buyer ID]'}</p>
-  <p><b>ವಿಳಾಸ:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
-
-  <p><strong>ಪಕ್ಷ B – ರೈತ / ಉತ್ಪಾದಕ</strong></p>
-  <p><b>ಹೆಸರು:</b> ${farmerName}</p>
-  <p><b>ರೈತ ಐಡಿ:</b> ${farmerId}</p>
-  <p><b>ವಿಳಾಸ:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
+  <div class="party-section">
+    <p><strong>ಪಕ್ಷ B – ರೈತ / ಉತ್ಪಾದಕ</strong></p>
+    <p><b>ಹೆಸರು:</b> ${farmerName}</p>
+    <p><b>ರೈತ ಐಡಿ:</b> ${farmerId}</p>
+    <p><b>ವಿಳಾಸ:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+  </div>
 
   <p>
-    ಪಕ್ಷ A ಮತ್ತು ಪಕ್ಷ B ಒಟ್ಟಾಗಿ “ಪಕ್ಷಗಳು” ಎಂದು ಕರೆಯಲ್ಪಡುತ್ತವೆ.
-    ಅಗ್ರಿAI ಕೇವಲ ಡಿಜಿಟಲ್ ಸೌಲಭ್ಯ ಒದಗಿಸುವ ವೇದಿಕೆಯಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ ಮತ್ತು ಯಾವುದೇ ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ಸಾರಿಗೆದಾರ, ವಿಮೆದಾರ ಅಥವಾ ಯಾವುದಾದರೂ ಪಕ್ಷದ ಪ್ರತಿನಿಧಿಯಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುವುದಿಲ್ಲ.
+     ಪಕ್ಷ A ಮತ್ತು ಪಕ್ಷ B ಅವರನ್ನು ಒಟ್ಟಾಗಿ “ಪಕ್ಷಗಳು” ಎಂದು ಕರೆಯಲಾಗುತ್ತದೆ।
+     AgriAI ಕೇವಲ ಡಿಜಿಟಲ್ ಸೌಲಭ್ಯ ವೇದಿಕೆಯಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ ಮತ್ತು ಯಾವುದೇ ಪಕ್ಷದ ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ಸಾರಿಗೆದಾರ, ವಿಮೆದಾರ ಅಥವಾ ಪ್ರತಿನಿಧಿಯಲ್ಲ.
   </p>
 </section>
 
-<section class="section">
-  <h2>1. ಒಪ್ಪಂದದ ಉದ್ದೇಶ </h2>
-
-  <p>
-    ಈ ಒಪ್ಪಂದವು ರೈತನು ಕೃಷಿ ಉತ್ಪನ್ನಗಳನ್ನು ಉತ್ಪಾದಿಸಿ ಖರೀದಿದಾರರಿಗೆ ಪೂರೈಸಲು ಹಾಗೂ ಖರೀದಿದಾರನು ಪೂರ್ವನಿರ್ಧರಿತ ಬೆಲೆಗೆ ಆ ಉತ್ಪನ್ನಗಳನ್ನು ಖರೀದಿಸಲು ಒಪ್ಪಿಕೊಂಡಿರುವ ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳನ್ನು ವಿವರಿಸುತ್ತದೆ. ಇದರ ಮೂಲಕ ಕೆಳಗಿನ ಉದ್ದೇಶಗಳನ್ನು ಸಾಧಿಸಲಾಗುತ್ತದೆ:
-  </p>
-
-  <ul>
-    <li>ರೈತನಿಗೆ ಖಚಿತ ಮಾರುಕಟ್ಟೆ ಪ್ರವೇಶ</li>
-    <li>ನ್ಯಾಯಸಮ್ಮತ ಮತ್ತು ಪಾರದರ್ಶಕ ಬೆಲೆ ನಿಗದಿ</li>
-    <li>ಸಮಯೋಚಿತ ಮತ್ತು ಸುರಕ್ಷಿತ ಪಾವತಿ</li>
-    <li>ಮಧ್ಯವರ್ತಿಗಳ ಮೇಲಿನ ಅವಲಂಬನೆ ಕಡಿತ</li>
-  </ul>
-</section>
-<section class="section">
-  <h2>2. ಒಪ್ಪಂದದ ಪ್ರಕಾರ ಮತ್ತು ಅವಧಿ </h2>
-
-  <p>
-    ಒಪ್ಪಂದದ ಸ್ವರೂಪ:
-    ${contractNature === 'pre-harvest'
-      ? 'ಕೊಯ್ಲು ಪೂರ್ವ ಉತ್ಪಾದನಾ ಒಪ್ಪಂದ (Pre-Harvest Production Contract)'
-      : 'ಕೊಯ್ಲು ನಂತರ ಖರೀದಿ ಒಪ್ಪಂದ (Post-Harvest Procurement Contract)'}
-  </p>
-
-  <p>
-    ಒಪ್ಪಂದ ಅವಧಿ:
-    ${contractDuration === 'one-time'
-      ? 'ಒಮ್ಮೆ ಮಾತ್ರ (One-Time)'
-      : (contractDuration === 'seasonal'
-          ? 'ಋತು ಆಧಾರಿತ (Seasonal)'
-          : 'ವಾರ್ಷಿಕ (Yearly)')}
-  </p>
-
-  <p><b>ಪ್ರಾರಂಭ ದಿನಾಂಕ:</b> ${startDate}</p>
-  <p><b>ಅಂತಿಮ ದಿನಾಂಕ:</b> ${endDate}</p>
-  <p><b>ಒಟ್ಟು ಅವಧಿ:</b> ${days} ದಿನಗಳು</p>
-
-  <p>
-    ಈ ಕೊಯ್ಲು ನಂತರದ ಖರೀದಿ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ, ಕೃಷಿ ಉತ್ಪನ್ನವನ್ನು ಈ ಒಪ್ಪಂದವನ್ನು ಜಾರಿಗೆ ತರುವ ಮೊದಲುಲೇ ಬೆಳೆಯಲಾಗಿದ್ದು ಅಥವಾ ಕೊಯ್ಲು ಮಾಡಲಾಗಿದೆ. ಆದ್ದರಿಂದ, ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಯಾವುದೇ ಕೃಷಿ ಉತ್ಪಾದನಾ ಕर्तವ್ಯ ಅಥವಾ ಬೆಳೆ ಬೆಳೆಸುವ ಬಾಧ್ಯತೆ ಉಂಟಾಗುವುದಿಲ್ಲ.
-  </p>
-
-  <h3><strong>2.1 ಒಪ್ಪಂದ ಸ್ವೀಕೃತಿ ಮತ್ತು ಮಾತುಕತೆ ಅವಧಿ </strong></h3>
-
-  <p>
-    ಈ ಖರೀದಿ ಒಪ್ಪಂದವು ರೈತನು ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಖರೀದಿದಾರರಿಗೆ ಡಿಜಿಟಲ್ ರೀತಿಯಲ್ಲಿ ಕಳುಹಿಸಿದ ಸಮಯದಿಂದ ನಾಲ್ವತ್ತೆಂಟು (48) ಗಂಟೆಗಳ ಅವಧಿಯವರೆಗೆ ಸ್ವೀಕೃತಿಗಾಗಿ ಮಾನ್ಯವಾಗಿರುತ್ತದೆ.
-  </p>
-
-  <p>
-    ಈ 48 ಗಂಟೆಗಳ ಅವಧಿಯೊಳಗೆ, ಖರೀದಿದಾರನು ವೇದಿಕೆಯ ಮೂಲಕ ಕೆಳಗಿನ ಕ್ರಮಗಳಲ್ಲಿ ಒಂದನ್ನು ಕೈಗೊಳ್ಳಬೇಕು:
-  </p>
-
-  <ul>
-    <li>ಒಪ್ಪಂದವನ್ನು ಪ್ರಸ್ತುತ ರೂಪದಲ್ಲೇ ಸ್ವೀಕರಿಸುವುದು; ಅಥವಾ</li>
-    <li>ಒಪ್ಪಂದವನ್ನು ತಿರಸ್ಕರಿಸುವುದು; ಅಥವಾ</li>
-    <li>ಬೆಲೆ ಮಾತುಕತೆಗೆ ವಿನಂತಿಸುವುದು.</li>
-  </ul>
-
-  <p>
-    ಖರೀದಿದಾರನು 48 ಗಂಟೆಗಳ ಮಾನ್ಯ ಅವಧಿಯೊಳಗೆ ಯಾವುದೇ ಕ್ರಮ ಕೈಗೊಳ್ಳದಿದ್ದರೆ,
-    ಒಪ್ಪಂದವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅವಧಿ ಮುಗಿದಂತೆ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ ಮತ್ತು
-    ಯಾವುದೇ ಪಕ್ಷಕ್ಕೂ ಕಾನೂನುಬದ್ಧ ಅಥವಾ ಬಾಧ್ಯತೆಯ ಪರಿಣಾಮ ಉಂಟಾಗುವುದಿಲ್ಲ.
-  </p>
-
-  <p>
-    ಬೆಲೆ ಮಾತುಕತೆಗೆ ಸಂಬಂಧಿಸಿದ ಯಾವುದೇ ವಿನಂತಿ ಸಮಯ ಮಿತಿಯೊಳಗೆ ಪೂರ್ಣಗೊಳ್ಳಬೇಕು
-    ಮತ್ತು ಮಾತುಕತೆ ಪ್ರಾರಂಭವಾದ ಸಮಯದಿಂದ ನಾಲ್ವತ್ತೆಂಟು (48) ಗಂಟೆಗಳೊಳಗೆ
-    ಅಂತಿಮಗೊಳ್ಳಬೇಕು. ಈ ಅವಧಿಯೊಳಗೆ ಒಪ್ಪಂದ ಸಾಧಿಸಲ್ಪಡದಿದ್ದರೆ,
-    ಮಾತುಕತೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ರದ್ದು ಆಗುತ್ತದೆ ಮತ್ತು ಒಪ್ಪಂದವೂ
-    ರದ್ದುಗೊಂಡಂತೆ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
-  </p>
+  <section class="section">
+    <h2>1. ಒಪ್ಪಂದದ ಉದ್ದೇಶ</h2>
+    <p>
+      ಈ ಒಪ್ಪಂದವು ಯಾವ ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳ ಅಡಿಯಲ್ಲಿ ರೈತನು ಕೃಷಿ ಉತ್ಪನ್ನವನ್ನು ಉತ್ಪಾದಿಸಿ
+      ಖರೀದಿದಾರನಿಗೆ ಪೂರೈಕೆ ಮಾಡಲು ಒಪ್ಪಿಕೊಳ್ಳುತ್ತಾನೆ ಮತ್ತು ಖರೀದಿದಾರನು ಪೂರ್ವನಿರ್ಧರಿತ ಬೆಲೆಗೆ
+      ಆ ಉತ್ಪನ್ನವನ್ನು ಖರೀದಿಸಲು ಒಪ್ಪಿಕೊಳ್ಳುತ್ತಾನೆ ಎಂಬುದನ್ನು ವಿವರಿಸುತ್ತದೆ, ಇದರಿಂದ:
+    </p>
+    <ul>
+      <li>ರೈತನಿಗೆ ಖಚಿತ ಮಾರುಕಟ್ಟೆ ಪ್ರವೇಶ</li>
+      <li>ನ್ಯಾಯಸಮ್ಮತ ಮತ್ತು ಪಾರದರ್ಶಕ ಬೆಲೆ ನಿಗದಿ</li>
+      <li>ಸಮಯೋಚಿತ ಮತ್ತು ಸುರಕ್ಷಿತ ಪಾವತಿ</li>
+      <li>ಮಧ್ಯವರ್ತಿಗಳ ಮೇಲೆ ಅವಲಂಬನೆ ಕಡಿತ</li>
+    </ul>
 </section>
 
 <section class="section">
-  <h2>3. ಡೇಟಾ ಗೌಪ್ಯತೆ ಮತ್ತು ವೇದಿಕೆ ಅನುಸರಣೆ </h2>
+    <h2>2. ಒಪ್ಪಂದದ ಪ್ರಕಾರ ಮತ್ತು ಅವಧಿ</h2>
+    <p><b>ಒಪ್ಪಂದದ ಸ್ವರೂಪ:</b> ${contractNature === 'pre-harvest' ? 'ಕೊಯ್ಲಿಗೆ ಮುನ್ನ ಉತ್ಪಾದನಾ ಒಪ್ಪಂದ' : 'ಕೊಯ್ಲಿನ ನಂತರ ಖರೀದಿ ಒಪ್ಪಂದ'}</p>
+    <p><b>ಒಪ್ಪಂದದ ಅವಧಿ:</b> ${contractDuration === 'one-time' ? 'ಒಮ್ಮೆ ಮಾತ್ರ' : (contractDuration === 'seasonal' ? 'ಮೌಸಮಿ' : 'ವಾರ್ಷಿಕ')}</p>
+    <p><b>ಪ್ರಾರಂಭ ದಿನಾಂಕ:</b> ${startDate}</p>
+    <p><b>ಅಂತ್ಯ ದಿನಾಂಕ:</b> ${endDate}</p>
+    <p><b>ಅವಧಿ:</b> ${days} ದಿನಗಳು</p>
+    <p>
+      ಈ ಕೊಯ್ಲಿನ ನಂತರದ ಖರೀದಿ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ, ಉತ್ಪನ್ನವು ಈಗಾಗಲೇ ಈ ಒಪ್ಪಂದ ಜಾರಿಗೆ ಬರುವ ಮೊದಲು ಬೆಳೆಸಲ್ಪಟ್ಟಿದೆ ಅಥವಾ ಕೊಯ್ಯಲ್ಪಟ್ಟಿದೆ.
+      ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಯಾವುದೇ ಬೆಳೆ ಉತ್ಪಾದನಾ ಬಾಧ್ಯತೆ ಇರುವುದಿಲ್ಲ.
+    </p>
 
-  <p>
-    ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಸಂಗ್ರಹಿಸಲಾದ ಎಲ್ಲಾ ವೈಯಕ್ತಿಕ,
-    ಕೃಷಿ ಸಂಬಂಧಿತ ಮತ್ತು ವ್ಯವಹಾರ ಸಂಬಂಧಿತ ಮಾಹಿತಿಯನ್ನು:
-  </p>
-
-  <ul>
-    <li>ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ</li>
-    <li>ಕೆಳಗಿನ ಉದ್ದೇಶಗಳಿಗೆ ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ:</li>
-    <li>ಒಪ್ಪಂದ ಜಾರಿಗೆ ಮತ್ತು ನವೀಕರಣಕ್ಕೆ</li>
-    <li>ಪಾವತಿ ಸಮನ್ವಯ ಮತ್ತು ಪರಿಹಾರಕ್ಕಾಗಿ</li>
-    <li>ವಿಮೆ ಸೌಲಭ್ಯ ಒದಗಿಸಲು</li>
-    <li>ಕಾನೂನು ಮತ್ತು ನಿಯಂತ್ರಣ ಅನುಸರಣೆಗೆ</li>
-  </ul>
-
-  <p>
-    ಈ ಒಪ್ಪಂದವು ಡಿಜಿಟಲ್ ಪರ್ಸನಲ್ ಡೇಟಾ ಪ್ರೊಟೆಕ್ಷನ್ ಕಾಯ್ದೆ, 2023
-    (Digital Personal Data Protection Act, 2023) ಗೆ ಸಂಪೂರ್ಣವಾಗಿ ಅನುಗುಣವಾಗಿದೆ.
-  </p>
-</section>
-<section class="section">
-  <h2>4. ವಸ್ತು ವಿವರಗಳು </h2>
-
-  <table style="border-collapse:collapse;width:100%;margin-top:12px;">
-    <thead>
-      <tr>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಕ್ರಮ ಸಂಖ್ಯೆ</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಬೆಳೆ ಹೆಸರು</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">ವೈವಿಧ್ಯ (Variety)</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಪ್ರಮಾಣ</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಬೆಲೆ (₹/ಕೆಜಿ)</th>
-        <th style="padding:8px;border:1px solid #ddd;text-align:center">ಮೊತ್ತ</th>
-      </tr>
-    </thead>
-
-    <tbody>
-      ${rowsHtml}
-    </tbody>
-  </table>
+    <h3>2.1 ಒಪ್ಪಂದದ ಅಂಗೀಕಾರ ಮತ್ತು ಮಾತುಕತೆ ಅವಧಿ</h3>
+    <p>
+      ಈ ಖರೀದಿ ಒಪ್ಪಂದವು AgriAI ವೇದಿಕೆಯ ಮೂಲಕ ರೈತರಿಂದ ಖರೀದಿದಾರರಿಗೆ ಡಿಜಿಟಲ್ ರೀತಿಯಲ್ಲಿ ಕಳುಹಿಸಲಾದ ಸಮಯದಿಂದ
+      ನಲವತ್ತೆಂಟು (48) ಗಂಟೆಗಳವರೆಗೆ ಅಂಗೀಕಾರಕ್ಕೆ ಮಾನ್ಯವಾಗಿರುತ್ತದೆ.
+    </p>
+    <p>
+      ಈ 48 ಗಂಟೆಗಳ ಅವಧಿಯಲ್ಲಿ, ಖರೀದಿದಾರನು ಕೆಳಗಿನ ಕ್ರಮಗಳಲ್ಲಿ ಒಂದನ್ನು ಕೈಗೊಳ್ಳಬೇಕು:
+    </p>
+    <ul>
+      <li>ಒಪ್ಪಂದವನ್ನು ಪ್ರಸ್ತುತ ರೂಪದಲ್ಲೇ ಅಂಗೀಕರಿಸುವುದು; ಅಥವಾ</li>
+      <li>ಒಪ್ಪಂದವನ್ನು ತಿರಸ್ಕರಿಸುವುದು; ಅಥವಾ</li>
+      <li>ಮಾತುಕತೆ (ನೆಗೋಶಿಯೇಷನ್) ಕೋರಿಕೆ ಸಲ್ಲಿಸುವುದು.</li>
+    </ul>
+    <p>
+      ಖರೀದಿದಾರನು 48 ಗಂಟೆಗಳ ಮಾನ್ಯತಾ ಅವಧಿಯೊಳಗೆ ಯಾವುದೇ ಕ್ರಮ ಕೈಗೊಳ್ಳದಿದ್ದರೆ, ಒಪ್ಪಂದವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅವಧಿ ಮುಗಿಯುತ್ತದೆ
+      ಮತ್ತು ಯಾವುದೇ ಪಕ್ಷಕ್ಕೂ ಕಾನೂನುಬದ್ಧ ಅಥವಾ ಬಾಧ್ಯತೆಯ ಪರಿಣಾಮ ಇರುವುದಿಲ್ಲ.
+    </p>
+    <p>
+      ಬೆಲೆ ಮಾತುಕತೆಗಾಗಿ ಸಲ್ಲಿಸಲಾದ ಯಾವುದೇ ವಿನಂತಿ ಸಮಯಬದ್ಧವಾಗಿದ್ದು, ಮಾತುಕತೆ ಪ್ರಾರಂಭವಾದ ಸಮಯದಿಂದ ನಲವತ್ತೆಂಟು (48) ಗಂಟೆಗಳೊಳಗೆ ಪೂರ್ಣಗೊಳ್ಳಬೇಕು.
+      ಈ ಅವಧಿಯಲ್ಲಿ ಯಾವುದೇ ಒಪ್ಪಂದಕ್ಕೆ ಬರದಿದ್ದರೆ, ಮಾತುಕತೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ರದ್ದು ಆಗುತ್ತದೆ ಮತ್ತು ಒಪ್ಪಂದವೂ ರದ್ದು ಎಂದು ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
+    </p>
 </section>
 
-<section class="section">
-  <h2>5. ಬೆಲೆ ಮತ್ತು ಪಾವತಿ ನಿಯಮಗಳು </h2>
-
-  <p><strong>5.1 ರೈತ </strong></p>
-  <p>ಒಟ್ಟು ಪ್ರಮಾಣ: ${totalContractQty.toLocaleString('en-IN')} ಕೆಜಿ</p>
-  <p>ಬೆಲೆ: ${formatCurrency(avgPricePerKg)} ಪ್ರತಿ ಕೆಜಿ</p>
-  <p>ವೇದಿಕೆ ಶುಲ್ಕ (Platform Fee): ${formatCurrency(totalPlatformFee)}</p>
-  <p>ವೇದಿಕೆ ಶುಲ್ಕದ ಮೇಲೆ GST: ${formatCurrency(totalGst)}</p>
-  <p><strong>ಒಟ್ಟು ಮೊತ್ತ (ಕಡಿತದ ನಂತರ): ${formatCurrency(totalAmountInvoice)}</strong></p>
-
-  <p><strong>5.2 ಖರೀದಿದಾರ </strong></p>
-  <p>ಒಟ್ಟು ಪ್ರಮಾಣ: ${totalContractQty.toLocaleString('en-IN')} ಕೆಜಿ</p>
-  <p>ಬೆಲೆ: ${formatCurrency(avgPricePerKg)} ಪ್ರತಿ ಕೆಜಿ</p>
-  <p>ವೇದಿಕೆ ಶುಲ್ಕ (Platform Fee): ${formatCurrency(buyerPlatformFee)}</p>
-  <p>ವೇದಿಕೆ ಶುಲ್ಕದ ಮೇಲೆ GST: ${formatCurrency(buyerGst)}</p>
-  <p><strong>ಒಟ್ಟು ಮೊತ್ತ (ಸೇರಿಕೆಯ ನಂತರ): ${formatCurrency(buyerTotalAmount)}</strong></p>
-
-  <p><strong>5.3 ಪಾವತಿ ವೇಳಾಪಟ್ಟಿ </strong></p>
-
-  <p>
-    ಒಟ್ಟು ಬೆಳೆ ವಹಿವಾಟಿನ ಮೌಲ್ಯದ 25% ಅನ್ನು ಖರೀದಿದಾರನು
-    ಒಪ್ಪಂದ ದೃಢೀಕರಣದ ಸಮಯದಲ್ಲಿ ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಮುಂಗಡವಾಗಿ ಪಾವತಿಸಬೇಕು.
-  </p>
-
-  <p>
-    ಒಟ್ಟು ಬೆಳೆ ವಹಿವಾಟಿನ ಮೌಲ್ಯದ 50% ಅನ್ನು ಉತ್ಪನ್ನದ
-    ಯಶಸ್ವಿ ವಿತರಣೆಯ ತಕ್ಷಣ ಪಾವತಿಸಬೇಕು.
-  </p>
-
-  <p>
-    ಉತ್ಪನ್ನದ ಗುಣಮಟ್ಟ ಪರಿಶೀಲನೆ ಮತ್ತು ಅಧಿಕೃತ ಸ್ವೀಕೃತಿಯ ನಂತರ
-    ಉಳಿದ 25% ಮೊತ್ತವನ್ನು 7 (ಏಳು) ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಪಾವತಿಸಬೇಕು.
-  </p>
-
-  <p><strong>5.4 ಪಾವತಿ ವಿಧಾನ </strong></p>
-
-  <p>ಬ್ಯಾಂಕ್ ವರ್ಗಾವಣೆ / UPI / ಚೆಕ್</p>
-
-  <p>
-    ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಮಾಡಿದ ಎಲ್ಲಾ ಪಾವತಿಗಳಿಗೆ ಖರೀದಿದಾರನು
-    ಡಿಜಿಟಲ್ ಅಥವಾ ಭೌತಿಕ ರಸೀದಿಗಳನ್ನು ನೀಡಬೇಕು.
-  </p>
-
-</section>
-<section class="section">
-  <h2>6. ವಿತರಣೆ, ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಮತ್ತು ಸಾರಿಗೆ </h2>
-
-  <p><strong>6.1 ಅಗ್ರಿAI ಯ ಪಾತ್ರ </strong></p>
-  <p>
-    ಅಗ್ರಿAI ಖರೀದಿದಾರರು ಮತ್ತು ರೈತರ ನಡುವೆ ವ್ಯವಹಾರಗಳನ್ನು ಸುಗಮಗೊಳಿಸುವ
-    ಡಿಜಿಟಲ್ ತಂತ್ರಜ್ಞಾನ ವೇದಿಕೆಯಾಗಿ ಮಾತ್ರ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ.
-    ಅಗ್ರಿAI ಅನ್ನು ಯಾವುದೇ ಸಂದರ್ಭದಲ್ಲೂ ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ವ್ಯಾಪಾರಿ,
-    ಕಮಿಷನ್ ಏಜೆಂಟ್, ಸಾರಿಗೆದಾರ ಅಥವಾ ಸರಕುಗಳ ಸಂರಕ್ಷಕ ಎಂದು ಪರಿಗಣಿಸಲಾಗುವುದಿಲ್ಲ.
-    ಮಾರಾಟ ಮತ್ತು ಖರೀದಿಗೆ ಸಂಬಂಧಿಸಿದ ಎಲ್ಲಾ ಬಾಧ್ಯತೆಗಳು ಸಂಪೂರ್ಣವಾಗಿ
-    ಸಂಬಂಧಿತ ಪಕ್ಷಗಳ ನಡುವೆಯೇ ಇರುತ್ತವೆ.
-  </p>
-
-  <p><strong>6.2 ವಿತರಣಾ ಸೌಲಭ್ಯ </strong></p>
-  <p>
-    ಸಾರಿಗೆ ಸೇವೆಯನ್ನು ಅಗ್ರಿAI ವೇದಿಕೆಯಲ್ಲಿ ಲಭ್ಯವಿರುವ ಅಥವಾ ಅನುಮೋದಿತ
-    ತೃತೀಯ ಪಕ್ಷ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಸೇವಾ ಪೂರೈಕೆದಾರರ ಮೂಲಕ ವ್ಯವಸ್ಥೆ ಮಾಡಲಾಗುತ್ತದೆ.
-    ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರ ಹಾಗೂ ವಾಹನದ ಆಯ್ಕೆ ಬೆಳೆ ಸ್ವರೂಪ,
-    ಪ್ರಮಾಣ, ದೂರ ಮತ್ತು ನಿರ್ವಹಣಾ ಅಗತ್ಯತೆಗಳ ಆಧಾರದ ಮೇಲೆ ನಿರ್ಧರಿಸಲಾಗುತ್ತದೆ.
-  </p>
-
-  <p><strong>6.3 ವಿತರಣಾ ಶುಲ್ಕಗಳು </strong></p>
-  <p>
-    ವಿತರಣಾ ಶುಲ್ಕಗಳನ್ನು ತೃತೀಯ ಪಕ್ಷ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರು
-    ನಿಜವಾದ ದೂರ, ವಾಹನದ ಪ್ರಕಾರ, ಲೋಡಿಂಗ್ ಅಗತ್ಯತೆಗಳು ಮತ್ತು ಸ್ಥಳದ ಆಧಾರದ ಮೇಲೆ ನಿರ್ಧರಿಸುತ್ತಾರೆ.
-    ಈ ಶುಲ್ಕಗಳನ್ನು ಖರೀದಿದಾರನು ನೇರವಾಗಿ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರಿಗೆ ಪಾವತಿಸಬೇಕು.
-    ವಿತರಣಾ ಬೆಲೆ ನಿರ್ಧಾರ ಅಥವಾ ಮಾತುಕತೆಯಲ್ಲಿ ಅಗ್ರಿAI ಯಾವುದೇ ಜವಾಬ್ದಾರಿಯನ್ನು ಹೊಂದಿರುವುದಿಲ್ಲ.
-  </p>
-
-  <p><strong>6.4 ಅಪಾಯದ ವರ್ಗಾವಣೆ </strong></p>
-  <p>
-    ಸಾಗಣೆಯ ಅವಧಿಯಲ್ಲಿ ಉತ್ಪನ್ನದ ಅಪಾಯ ಮತ್ತು ಜವಾಬ್ದಾರಿ
-    ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರಲ್ಲೇ ಇರುತ್ತದೆ.
-    ಯಶಸ್ವಿ ವಿತರಣೆ ಹಾಗೂ ಸಹಿ ಮಾಡಲಾದ ವಿತರಣಾ ದೃಢೀಕರಣ (Proof of Delivery – POD)
-    ನಂತರ ಮಾತ್ರ ಅಪಾಯವು ಖರೀದಿದಾರರಿಗೆ ವರ್ಗಾಯಿಸಲಾಗುತ್ತದೆ.
-  </p>
-
-  <p><strong>6.5 ವಿಳಂಬ, ಹಾನಿ ಮತ್ತು ನಷ್ಟ </strong></p>
-  <p>
-    ಸಾಗಣೆ ವೇಳೆ ಉಂಟಾಗುವ ಯಾವುದೇ ವಿಳಂಬ, ಹಾನಿ, ಕೊರತೆ ಅಥವಾ ನಷ್ಟವು
-    ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರ ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳ ಪ್ರಕಾರ ನಿರ್ವಹಿಸಲಾಗುತ್ತದೆ.
-    ಇಂತಹ ಯಾವುದೇ ದಾವೆಗಳಿಗೆ ಅಗ್ರಿAI ಜವಾಬ್ದಾರಿಯಾಗಿರುವುದಿಲ್ಲ.
-  </p>
-
-  <p><strong>6.6 ವಿತರಣಾ ದೃಢೀಕರಣ </strong></p>
-  <p>
-    ವಿತರಣೆಯನ್ನು ಭೌತಿಕ ರಸೀದಿ, ಡಿಜಿಟಲ್ ದೃಢೀಕರಣ ಮತ್ತು/ಅಥವಾ
-    ಅಗ್ರಿAI ವೇದಿಕೆಯಲ್ಲಿ ದಾಖಲಾಗುವ ಎಲೆಕ್ಟ್ರಾನಿಕ್ POD ಮೂಲಕ ದೃಢೀಕರಿಸಲಾಗುತ್ತದೆ.
-    ಅಗ್ರಿAI ನಿರ್ವಹಿಸುವ ಡಿಜಿಟಲ್ ದಾಖಲೆಗಳು ಮಾನ್ಯವಾದ
-    ವಿತರಣಾ ಸಾಕ್ಷ್ಯವಾಗಿ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
-  </p>
-
-</section>
-<section class="section">
-  <h2>7. ಗುಣಮಟ್ಟದ ಮಾನದಂಡಗಳು, ಪರಿಶೀಲನೆ ಮತ್ತು ಸ್ವೀಕೃತಿ
-   
-  </h2>
-
-  <p>
-    ಪೂರೈಸಲಾಗುವ ಕೃಷಿ ಉತ್ಪನ್ನವು ಈ ಒಪ್ಪಂದದಲ್ಲಿ ಪರಸ್ಪರ ಒಪ್ಪಿಕೊಂಡಿರುವ
-    ನಿರ್ದಿಷ್ಟ ಗುಣಮಟ್ಟದ ಮಾನದಂಡಗಳನ್ನು ಪೂರೈಸಿರಬೇಕು.
-  </p>
-
-  <p>
-    ವಿತರಣೆಯ ದಿನಾಂಕದಿಂದ 3 (ಮೂರು) ಕಾರ್ಯದಿನಗಳೊಳಗೆ
-    ಖರೀದಿದಾರನು ಗುಣಮಟ್ಟ ಪರಿಶೀಲನೆಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಬೇಕು.
-  </p>
-
-  <p>
-    ಯಾವುದೇ ತಿರಸ್ಕಾರವನ್ನು ಪರಿಶೀಲನಾ ಅವಧಿಯೊಳಗೆ ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ
-    ಲಿಖಿತ ರೂಪದಲ್ಲಿ ಸಲ್ಲಿಸಬೇಕು ಹಾಗೂ ಮಾನ್ಯ ಮತ್ತು ಪರಿಶೀಲಿಸಬಹುದಾದ
-    ಕಾರಣಗಳನ್ನು ಸ್ಪಷ್ಟವಾಗಿ ಉಲ್ಲೇಖಿಸಬೇಕು.
-  </p>
-
-  <p>
-    3 ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಯಾವುದೇ ವಿವಾದ ದಾಖಲಿಸಲಾಗದಿದ್ದರೆ,
-    ಉತ್ಪನ್ನವನ್ನು ಸ್ವೀಕರಿಸಲಾಗಿದೆ ಎಂದು ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
-  </p>
-
-  <p>
-    ಸಮರ್ಥನೀಯ ತಿರಸ್ಕಾರದ ಸಂದರ್ಭದಲ್ಲಿ, ದೋಷವು ಸಾಗಣೆಗೆ ಮುನ್ನವೇ ಉಂಟಾಗಿದೆ
-    ಎಂದು ಸಾಬೀತಾಗದ ಹೊರತು, ಮರಳಿ ಸಾಗಣೆ ವೆಚ್ಚವನ್ನು ಖರೀದಿದಾರನು ಭರಿಸಬೇಕು.
-  </p>
+  <section class="section">
+    <h2>3. ಡೇಟಾ ಗೌಪ್ಯತೆ ಮತ್ತು ವೇದಿಕೆ ಅನುಸರಣೆ</h2>
+    <p>
+      AgriAI ವೇದಿಕೆಯ ಮೂಲಕ ಸಂಗ್ರಹಿಸಲಾದ ಎಲ್ಲಾ ವೈಯಕ್ತಿಕ, ಕೃಷಿ ಹಾಗೂ ವ್ಯವಹಾರ ಸಂಬಂಧಿತ ಡೇಟಾ:
+    </p>
+    <ul>
+      <li>ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ</li>
+      <li>ಒಪ್ಪಂದ ಜಾರಿಗೆ ಹಾಗೂ ನವೀಕರಣಕ್ಕಾಗಿ ಬಳಸಲಾಗುತ್ತದೆ</li>
+      <li>ಪಾವತಿ ನಿವಾರಣೆಗಾಗಿ ಬಳಸಲಾಗುತ್ತದೆ</li>
+      <li>ವಿಮೆ ಸೌಲಭ್ಯಕ್ಕಾಗಿ ಬಳಸಲಾಗುತ್ತದೆ</li>
+      <li>ಕಾನೂನು ಮತ್ತು ನಿಯಾಮಕ ಅನುಸರಣೆಗಾಗಿ ಬಳಸಲಾಗುತ್ತದೆ</li>
+    </ul>
+    <p>
+      ಈ ಒಪ್ಪಂದವು ಡಿಜಿಟಲ್ ವೈಯಕ್ತಿಕ ಡೇಟಾ ಸಂರಕ್ಷಣಾ ಕಾಯ್ದೆ, 2023ಕ್ಕೆ ಸಂಪೂರ್ಣವಾಗಿ ಅನುಗುಣವಾಗಿದೆ.
+    </p>
 </section>
 
 <section class="section">
-  <h2>8. ಅಪಾಯ, ಜವಾಬ್ದಾರಿ ಮತ್ತು ವಿಮೆ
+    <h2>4. ವಸ್ತು ವಿವರಗಳು</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ಕ್ರಮ ಸಂಖ್ಯೆ</th>
+          <th>ಬೆಳೆ ಹೆಸರು</th>
+          <th>ವೈವಿಧ್ಯ</th>
+          <th>ಪ್ರಮಾಣ (ಕೆಜಿ)</th>
+          <th>ಬೆಲೆ (₹/ಕೆಜಿ)</th>
+          <th>ಮೊತ್ತ (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+</section>
+
+  <section class="section">
+    <h2>5. ಬೆಲೆ ಮತ್ತು ಪಾವತಿ ನಿಯಮಗಳು</h2>
     
-  </h2>
+    <h3>5.1 ರೈತನ ಪಾವತಿ ರಚನೆ</h3>
+    <p><b>ಒಟ್ಟು ಪ್ರಮಾಣ:</b> ${totalContractQty.toLocaleString('en-IN')} ಕೆಜಿ</p>
+    <p><b>ಪ್ರತಿ ಘಟಕದ ಬೆಲೆ:</b> ${formatCurrency(avgPricePerKg)} ಪ್ರತಿ ಕೆಜಿ</p>
+    <p><b>ಉಪಮೊತ್ತ:</b> ${formatCurrency(totalCropTradeValue)}</p>
+    <p><b>ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಶುಲ್ಕ:</b> ${formatCurrency(totalPlatformFee)}</p>
+    <p><b>ಜಿಎಸ್‌ಟಿ (18%):</b> ${formatCurrency(totalGst)}</p>
+    <p><b style="font-size: 16px; color: #236902;">ಒಟ್ಟು ಮೊತ್ತ (ಕಡಿತದ ನಂತರ):</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(totalAmountInvoice)}</b></p>
 
-  <p>
-    ರೈತನು ಸಾಮಾನ್ಯ ಕೃಷಿ ಮತ್ತು ಕೊಯ್ಲಿನ ನಂತರದ
-    ಪ್ರಮಾಣಿತ ವಿಧಾನಗಳನ್ನು ಅನುಸರಿಸಬೇಕು.
-  </p>
+    <h3 style="margin-top: 20px;">5.2 ಖರೀದಿದಾರರ ಪಾವತಿ ರಚನೆ</h3>
+    <p><b>ಒಟ್ಟು ಪ್ರಮಾಣ:</b> ${totalContractQty.toLocaleString('en-IN')} ಕೆಜಿ</p>
+    <p><b>ಪ್ರತಿ ಘಟಕದ ಬೆಲೆ:</b> ${formatCurrency(avgPricePerKg)} ಪ್ರತಿ ಕೆಜಿ</p>
+    <p><b>ಉಪಮೊತ್ತ:</b> ${formatCurrency(totalCropTradeValue)}</p>
+    <p><b>ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಶುಲ್ಕ:</b> ${formatCurrency(buyerPlatformFee)}</p>
+    <p><b>ಜಿಎಸ್‌ಟಿ (18%):</b> ${formatCurrency(buyerGst)}</p>
+    <p><b style="font-size: 16px; color: #236902;">ಪಾವತಿಸಬೇಕಾದ ಒಟ್ಟು ಮೊತ್ತ:</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(buyerTotalAmount)}</b></p>
 
-  <p>
-    ಸಾಗಣೆಗೆ ಮುನ್ನ ಪ್ರಕೃತಿ ವಿಕೋಪಗಳು ಅಥವಾ ಫೋರ್ಸ್ ಮಜ್ಯೂರ್
-    (Force Majeure) ಪರಿಸ್ಥಿತಿಗಳಿಂದ ಬೆಳೆ ನಷ್ಟವಾದಲ್ಲಿ,
-    ಪಕ್ಷಗಳ ಪರಸ್ಪರ ಒಪ್ಪಿಗೆಯೊಂದಿಗೆ ಬಾಧ್ಯತೆಗಳನ್ನು ಮರುಪರಿಶೀಲಿಸಬಹುದು.
-    ಪ್ರಧಾನಮಂತ್ರಿ ಫಸಲ್ ಬೀಮಾ ಯೋಜನೆ (PMFBY) ಅಥವಾ ಇತರ
-    ಅನುಮೋದಿತ ವಿಮಾ ಯೋಜನೆಗಳ ಅಡಿಯಲ್ಲಿ ಪಡೆದಿರುವ ಬೆಳೆ ವಿಮೆ
-    ರೈತನ ಹೆಸರಿನಲ್ಲೇ ಮುಂದುವರಿಯುತ್ತದೆ.
-  </p>
+    <h3 style="margin-top: 20px;">5.3 ಪಾವತಿ ವೇಳಾಪಟ್ಟಿ</h3>
+    <ul>
+      <li><b>ಮುಂಗಡ (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – ಒಪ್ಪಂದ ದೃಢೀಕರಣದ ವೇಳೆ ಪಾವತಿಸಬೇಕು</li>
+      <li><b>ಡಿಲಿವರಿ ಸಮಯದಲ್ಲಿ (50%):</b> ${formatCurrency(totalCropTradeValue * 0.50)} – ಯಶಸ್ವಿ ಡಿಲಿವರಿಯ ನಂತರ ಪಾವತಿಸಬೇಕು</li>
+      <li><b>ಅಂತಿಮ (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – ಗುಣಮಟ್ಟ ಸ್ವೀಕೃತಿಯಾದ ನಂತರ 7 ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಪಾವತಿಸಬೇಕು</li>
+    </ul>
 
-  <p>
-    ಯಾವುದೇ ವಿಮಾ ಪರಿಹಾರ ಮೊತ್ತ ಸಂಪೂರ್ಣವಾಗಿ ರೈತನಿಗೇ ಸೇರಿರುತ್ತದೆ.
-  </p>
-
-  <p>
-    ವಿತರಣೆ ಪೂರ್ಣಗೊಂಡು ಉತ್ಪನ್ನವನ್ನು ಸ್ವೀಕರಿಸಲಾಗಿದೆ ಎಂದು ಪರಿಗಣಿಸಿದ ನಂತರ,
-    ಎಲ್ಲಾ ಅಪಾಯಗಳು, ಮಾಲೀಕತ್ವ ಮತ್ತು ಜವಾಬ್ದಾರಿಗಳು ಸಂಪೂರ್ಣವಾಗಿ
-    ಖರೀದಿದಾರರಿಗೆ ವರ್ಗಾಯಿಸಲಾಗುತ್ತವೆ.
-  </p>
+    <h3 style="margin-top: 20px;">5.4 ಪಾವತಿ ವಿಧಾನ</h3>
+    <p>ಬ್ಯಾಂಕ್ ವರ್ಗಾವಣೆ / ಯುಪಿಐ / ಚೆಕ್</p>
+    <p>ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಮಾಡಿದ ಎಲ್ಲಾ ಪಾವತಿಗಳಿಗೆ ಖರೀದಿದಾರರು ಡಿಜಿಟಲ್ ಅಥವಾ ಭೌತಿಕ ರಸೀದಿಗಳನ್ನು ನೀಡಬೇಕು.</p>
 </section>
-<section class="section">
-  <h2>9. ಅನಿವಾರ್ಯ ಪರಿಸ್ಥಿತಿಗಳು </h2>
+  <section class="section">
+    <h2>6. ವಿತರಣೆ, ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಮತ್ತು ಸಾರಿಗೆ</h2>
 
-  <p>
-    ಪ್ರಕೃತಿ ವಿಕೋಪಗಳು, ಸರ್ಕಾರಿ ನಿರ್ಬಂಧಗಳು, ಯುದ್ಧ, ಮುಷ್ಕರಗಳು,
-    ಸಾರಿಗೆ ವ್ಯತ್ಯಯಗಳು ಅಥವಾ ಯಾವುದೇ ಅನಿರೀಕ್ಷಿತ ವಿಪತ್ತುಗಳಂತಹ
-    ಸಮಂಜಸ ನಿಯಂತ್ರಣದ ಹೊರಗಿನ ಘಟನೆಗಳಿಂದ ಉಂಟಾಗುವ ವಿಫಲತೆ ಅಥವಾ
-    ವಿಳಂಬಕ್ಕಾಗಿ ಯಾವುದೇ ಪಕ್ಷ ಜವಾಬ್ದಾರಿಯಾಗಿರುವುದಿಲ್ಲ.
-  </p>
-
-  <p>
-    ಇಂತಹ ಪರಿಸ್ಥಿತಿಗಳು ಕೊನೆಗೊಂಡ ನಂತರ, ಒಪ್ಪಂದದ ಬಾಧ್ಯತೆಗಳು
-    ಮರುಪ್ರಾರಂಭವಾಗುತ್ತವೆ.
-  </p>
-</section>
-
-<section class="section">
-  <h2>10. ವಿವಾದ ಪರಿಹಾರ ಮತ್ತು ನ್ಯಾಯಾಧಿಕಾರ
+    <h3>6.1 AgriAI ಯ ಪಾತ್ರ</h3>
+    <p>
+    AgriAI ಕೇವಲ ಖರೀದಿದಾರರು ಮತ್ತು ರೈತರ ನಡುವೆ ವ್ಯವಹಾರಗಳನ್ನು ಸುಗಮಗೊಳಿಸುವ ಡಿಜಿಟಲ್ ತಂತ್ರಜ್ಞಾನ ವೇದಿಕೆಯಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ।
+    AgriAI ಅನ್ನು ಯಾವುದೇ ರೀತಿಯಲ್ಲಿ ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ವ್ಯಾಪಾರಿ, ಕಮಿಷನ್ ಏಜೆಂಟ್, ಸಾರಿಗೆದಾರ ಅಥವಾ ಸರಕುಗಳ ಸಂರಕ್ಷಕ ಎಂದು ಪರಿಗಣಿಸಲಾಗುವುದಿಲ್ಲ।
+    ಮಾರಾಟ ಮತ್ತು ಖರೀದಿಗೆ ಸಂಬಂಧಿಸಿದ ಎಲ್ಲಾ ಬಾಧ್ಯತೆಗಳು ಸಂಪೂರ್ಣವಾಗಿ ಪಕ್ಷಗಳ ನಡುವೆ ಮಾತ್ರ ಇರುತ್ತವೆ।
+    </p>
     
-  </h2>
+    <h3>6.2 ಸಾರಿಗೆ</h3>
+    <p>
+    ಸಾರಿಗೆ AgriAI ವೇದಿಕೆಯಲ್ಲಿ ಲಭ್ಯವಿರುವ ಅಥವಾ ಅನುಮೋದಿತ ತೃತೀಯ-ಪಕ್ಷ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಸೇವಾ ಪೂರೈಕೆದಾರರ ಮೂಲಕ ವ್ಯವಸ್ಥೆ ಮಾಡಲಾಗುತ್ತದೆ।
+    ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರ ಮತ್ತು ವಾಹನದ ಆಯ್ಕೆ ಬೆಳೆ ಸ್ವರೂಪ, ಪ್ರಮಾಣ, ದೂರ ಮತ್ತು ಹ್ಯಾಂಡ್ಲಿಂಗ್ ಅಗತ್ಯಗಳ ಆಧಾರದ ಮೇಲೆ ನಿರ್ಧರಿಸಲಾಗುತ್ತದೆ।
+    </p>
 
-  <p>
-    ಈ ಒಪ್ಪಂದದಿಂದ ಉಂಟಾಗುವ ಯಾವುದೇ ವಿವಾದವನ್ನು ಮೊದಲು
-    ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಪರಸ್ಪರ ಚರ್ಚೆಯ ಮೂಲಕ ಸ್ನೇಹಪೂರ್ವಕವಾಗಿ
-    ಪರಿಹರಿಸಲು ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತದೆ.
-  </p>
+    <h3>6.3 ವಿತರಣೆ ಶುಲ್ಕ</h3>
+    <p>
+    ವಿತರಣೆ ಶುಲ್ಕವನ್ನು ತೃತೀಯ-ಪಕ್ಷ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರು ನಿಜವಾದ ದೂರ, ವಾಹನದ ಪ್ರಕಾರ, ಲೋಡಿಂಗ್ ಅಗತ್ಯಗಳು ಮತ್ತು ಸ್ಥಳದ ಆಧಾರದ ಮೇಲೆ ನಿರ್ಧರಿಸುತ್ತಾರೆ।
+    ಈ ಶುಲ್ಕವನ್ನು ಖರೀದಿದಾರರು ನೇರವಾಗಿ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರಿಗೆ ಪಾವತಿಸಬೇಕು।
+    AgriAI ವಿತರಣೆ ಬೆಲೆ ನಿರ್ಧಾರ ಅಥವಾ ಮಾತುಕತೆಗೆ ಜವಾಬ್ದಾರಿಯಲ್ಲ।
+    </p>
 
-  <p>
-    15 ದಿನಗಳೊಳಗೆ ವಿವಾದ ಪರಿಹಾರವಾಗದಿದ್ದರೆ,
-    Arbitration and Conciliation Act, 1996 ಅನ್ವಯ
-    ಮಧ್ಯಸ್ಥಿಕೆ (Arbitration)ಗೆ ಸಲ್ಲಿಸಲಾಗುತ್ತದೆ.
-    ಮಧ್ಯಸ್ಥಿಕೆಯ ಸ್ಥಳವನ್ನು ಅಗ್ರಿAI ನಿರ್ಧರಿಸುತ್ತದೆ.
-  </p>
+    <h3>6.4 ಅಪಾಯದ ವರ್ಗಾವಣೆ</h3>
+    <p>
+    ಸಾಗಣೆ ಸಮಯದಲ್ಲಿ ಉತ್ಪನ್ನಕ್ಕೆ ಸಂಬಂಧಿಸಿದ ಅಪಾಯ ಮತ್ತು ಜವಾಬ್ದಾರಿ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರಲ್ಲೇ ಇರುತ್ತದೆ।
+    ಯಶಸ್ವಿ ವಿತರಣೆ ಮತ್ತು ಸಹಿ ಮಾಡಲಾದ ಡೆಲಿವರಿ ಪ್ರಮಾಣಪತ್ರ (POD) ನಂತರ ಮಾತ್ರ ಅಪಾಯ ಖರೀದಿದಾರರಿಗೆ ವರ್ಗಾಯಿಸಲಾಗುತ್ತದೆ।
+    </p>
 
-  <p>
-    ಮಧ್ಯಸ್ಥಿಕೆ ಪ್ರಕ್ರಿಯೆಗೆ ಒಳಪಟ್ಟಿರುವುದರ ಜೊತೆಗೆ,
-    ಈ ಒಪ್ಪಂದದ ಜಾರಿಗೆ ಸಂಬಂಧಿಸಿದ ಎಲ್ಲಾ ಕಾನೂನು ಕ್ರಮಗಳಿಗೆ
-    <strong>ಬೆಂಗಳೂರು, ಕರ್ನಾಟಕ</strong> ನ್ಯಾಯಾಲಯಗಳಿಗೆ
-    ವಿಶೇಷ ನ್ಯಾಯಾಧಿಕಾರ (Exclusive Jurisdiction) ಇರುತ್ತದೆ.
-  </p>
+    <h3>6.5 ವಿಳಂಬ, ಹಾನಿ ಮತ್ತು ನಷ್ಟ</h3>
+    <p>
+    ಸಾಗಣೆ ಸಮಯದಲ್ಲಿ ಸಂಭವಿಸುವ ಯಾವುದೇ ವಿಳಂಬ, ಹಾನಿ, ಕೊರತೆ ಅಥವಾ ನಷ್ಟವು ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರ ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳ ಪ್ರಕಾರ ನಿರ್ವಹಿಸಲಾಗುತ್ತದೆ।
+    ಇಂತಹ ಯಾವುದೇ ದಾವೆಗಳಿಗೆ AgriAI ಜವಾಬ್ದಾರಿಯಲ್ಲ।
+    </p>
+
+    <h3>6.6 ವಿತರಣೆಯ ಪ್ರಮಾಣ</h3>
+    <p>
+    ವಿತರಣೆಯನ್ನು ಭೌತಿಕ ರಸೀದಿ, ಡಿಜಿಟಲ್ ದೃಢೀಕರಣ ಮತ್ತು/ಅಥವಾ AgriAI ವೇದಿಕೆಯಲ್ಲಿ ದಾಖಲಾಗಿರುವ ಎಲೆಕ್ಟ್ರಾನಿಕ್ POD ಮೂಲಕ ದೃಢೀಕರಿಸಲಾಗುತ್ತದೆ।
+    AgriAI ನಿರ್ವಹಿಸುವ ಡಿಜಿಟಲ್ ದಾಖಲೆಗಳು ಮಾನ್ಯ ವಿತರಣಾ ಸಾಕ್ಷ್ಯವಾಗಿರುತ್ತವೆ।
+    </p>
+</section>
+  <section class="section">
+    <h2>7. ಗುಣಮಟ್ಟದ ಮಾನದಂಡಗಳು, ಪರಿಶೀಲನೆ ಮತ್ತು ಸ್ವೀಕೃತಿ</h2>
+
+    <p>
+      ಪೂರೈಸಲಾದ ಉತ್ಪನ್ನವು ಈ ಒಪ್ಪಂದದಲ್ಲಿ ಪರಸ್ಪರ ಒಪ್ಪಿಕೊಂಡಿರುವ ನಿರ್ದಿಷ್ಟತೆಗಳನ್ನು ಪೂರೈಸಬೇಕು।
+    </p>
+
+    <p>
+      ಖರೀದಿದಾರರು ವಿತರಣೆಯ ದಿನಾಂಕದಿಂದ 3 (ಮೂರು) ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಗುಣಮಟ್ಟ ಪರಿಶೀಲನೆಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಬೇಕು।
+    </p>
+
+    <p>
+      ಯಾವುದೇ ತಿರಸ್ಕಾರವನ್ನು ಪರಿಶೀಲನಾ ಅವಧಿಯೊಳಗೆ AgriAI ವೇದಿಕೆಯ ಮೂಲಕ ಲಿಖಿತವಾಗಿ ಸಲ್ಲಿಸಬೇಕು,
+      ಮತ್ತು ಅದರಲ್ಲಿಯೇ ಸ್ಪಷ್ಟ, ಮಾನ್ಯ ಹಾಗೂ ಪರಿಶೀಲಿಸಬಹುದಾದ ಕಾರಣಗಳನ್ನು ನೀಡಬೇಕು।
+    </p>
+
+    <p>
+      3 ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಯಾವುದೇ ವಿವಾದವನ್ನು ಉಂಟುಮಾಡದಿದ್ದರೆ, ಉತ್ಪನ್ನವನ್ನು ಸ್ವೀಕರಿಸಲಾಗಿದೆ ಎಂದು ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ।
+    </p>
+
+    <p>
+      ಸಮಂಜಸವಾದ ತಿರಸ್ಕಾರದ ಸಂದರ್ಭದಲ್ಲಿ, ಮರಳಿ ಸಾಗಣೆ ವೆಚ್ಚವನ್ನು ಖರೀದಿದಾರರು ಭರಿಸಬೇಕು,
+      ದೋಷವು ರವಾನೆಗೆ ಮೊದಲು ಉಂಟಾಗಿದೆ ಎಂದು ಸಾಬೀತಾಗದ ಹೊರತು।
+    </p>
 </section>
 
 <section class="section">
-  <h2>11. ಒಪ್ಪಂದ ರದ್ದುಪಡಿಸುವಿಕೆ </h2>
+    <h2>8. ಅಪಾಯ, ಜವಾಬ್ದಾರಿ ಮತ್ತು ವಿಮೆ</h2>
 
-  <p>
-    ಪಾವತಿ ವಿಫಲತೆ, ವಿತರಣೆ ವಿಫಲತೆ, ತಪ್ಪು ಮಾಹಿತಿ ನೀಡುವುದು
-    ಅಥವಾ ಒಪ್ಪಿಕೊಂಡ ನಿಯಮಗಳನ್ನು ಉಲ್ಲಂಘಿಸುವಂತಹ ಪ್ರಮುಖ ಉಲ್ಲಂಘನೆಗಳ
-    ಸಂದರ್ಭಗಳಲ್ಲಿ ಯಾವುದೇ ಪಕ್ಷ ಈ ಒಪ್ಪಂದವನ್ನು ರದ್ದುಪಡಿಸಬಹುದು.
-  </p>
+    <p>
+      ರೈತನು ಮಾನದಂಡ ಕೃಷಿ ಮತ್ತು ಕೊಯ್ಲಿನ ನಂತರದ ವಿಧಾನಗಳನ್ನು ಅನುಸರಿಸಬೇಕು।
+    </p>
 
-  <p>
-    ಒಪ್ಪಂದದಲ್ಲಿ ನಿಗದಿಪಡಿಸಿದ ಸಮಯ ಮಿತಿಯನ್ನು ಮೀರಿ ಪಾವತಿ ವಿಫಲವಾದಲ್ಲಿ,
-    ತಪ್ಪಿತಸ್ಥ ಪಕ್ಷದ ಖಾತೆಯನ್ನು ಅಮಾನತುಗೊಳಿಸುವುದು,
-    ದಂಡ ವಿಧಿಸುವುದು ಹಾಗೂ ಕಾನೂನು ಅನುಮತಿಸಿದಂತೆ
-    ವಸೂಲಿ ಕ್ರಮಗಳನ್ನು ಕೈಗೊಳ್ಳಬಹುದು.
-  </p>
+    <p>
+      ರವಾನೆಗೆ ಮೊದಲು ಪ್ರಕೃತಿ ವಿಪತ್ತುಗಳು ಅಥವಾ ಫೋರ್ಸ್ ಮಜ್ಯೂರ್ ಕಾರಣದಿಂದ ಬೆಳೆ ನಷ್ಟವಾದಲ್ಲಿ,
+      ಬಾಧ್ಯತೆಗಳನ್ನು ಪರಸ್ಪರವಾಗಿ ಪರಿಶೀಲಿಸಬಹುದು।
+      PMFBY ಅಥವಾ ಇತರ ಮಾನ್ಯ ವಿಮಾ ಯೋಜನೆಗಳ ಅಡಿಯಲ್ಲಿ ವಿಮೆ ಇದ್ದರೆ, ಅದು ರೈತನ ಹೆಸರಿನಲ್ಲೇ ಉಳಿಯುತ್ತದೆ।
+    </p>
+
+    <p>
+      ಯಾವುದೇ ವಿಮಾ ಪರಿಹಾರವು ಸಂಪೂರ್ಣವಾಗಿ ರೈತನಿಗೆ ಸೇರಿರುತ್ತದೆ।
+    </p>
+
+    <p>
+      ವಿತರಣೆ ಮತ್ತು ಸ್ವೀಕೃತಿಯ ನಂತರ, ಎಲ್ಲಾ ಅಪಾಯಗಳು, ಮಾಲೀಕತ್ವ ಮತ್ತು ಜವಾಬ್ದಾರಿಗಳು ಸಂಪೂರ್ಣವಾಗಿ ಖರೀದಿದಾರರಿಗೆ ವರ್ಗಾಯಿಸಲಾಗುತ್ತವೆ।
+    </p>
+</section>
+
+  <section class="section">
+    <h2>9. ಫೋರ್ಸ್ ಮಜ್ಯೂರ್</h2>
+
+    <p>
+      ಯಾವುದೇ ಪಕ್ಷವು ತಮ್ಮ ನಿಯಂತ್ರಣದ ಹೊರಗಿನ ಪರಿಸ್ಥಿತಿಗಳಿಂದ ಉಂಟಾಗುವ ವಿಫಲತೆ ಅಥವಾ ವಿಳಂಬಕ್ಕಾಗಿ ಜವಾಬ್ದಾರರಾಗುವುದಿಲ್ಲ,
+      ಉದಾಹರಣೆಗೆ ಪ್ರಕೃತಿ ವಿಪತ್ತುಗಳು, ಸರ್ಕಾರಿ ನಿರ್ಬಂಧಗಳು, ಯುದ್ಧ, ಮುಷ್ಕರಗಳು,
+      ಸಾರಿಗೆ ವ್ಯತ್ಯಯಗಳು ಅಥವಾ ಅನಿರೀಕ್ಷಿತ ಅನಾಹುತಗಳು।
+    </p>
+
+    <p>
+      ಇಂತಹ ಪರಿಸ್ಥಿತಿಗಳು ಅಂತ್ಯಗೊಂಡ ನಂತರ ಬಾಧ್ಯತೆಗಳು ಮರುಪ್ರಾರಂಭವಾಗುತ್ತವೆ।
+    </p>
 </section>
 
 <section class="section">
-  <h2>12. ಒಪ್ಪಂದದ ಭಾಷೆ </h2>
+    <h2>10. ವಿವಾದ ಪರಿಹಾರ ಮತ್ತು ನ್ಯಾಯಾಧಿಕಾರ</h2>
 
-  <p>
-    ಈ ಒಪ್ಪಂದವನ್ನು ರೈತನಿಗೆ
-    ${lang === 'en'
-      ? 'ಇಂಗ್ಲಿಷ್'
-      : (lang === 'hi'
-          ? 'ಹಿಂದಿ'
-          : (lang === 'kn'
-              ? 'ಕನ್ನಡ'
-              : 'ಇಂಗ್ಲಿಷ್'))}
-    ಭಾಷೆಯಲ್ಲಿ ವಿವರಿಸಿ ಅನುವಾದಿಸಲಾಗಿದೆ.
-    ಯಾವುದೇ ವ್ಯತ್ಯಾಸ ಉಂಟಾದಲ್ಲಿ, ಇಂಗ್ಲಿಷ್ ಆವೃತ್ತಿಯೇ ಅಂತಿಮವಾಗಿ ಮಾನ್ಯವಾಗುತ್ತದೆ.
-  </p>
+    <p>
+      ಈ ಒಪ್ಪಂದದಿಂದ ಉಂಟಾಗುವ ಯಾವುದೇ ವಿವಾದವನ್ನು ಮೊದಲು AgriAI ವೇದಿಕೆಯ ಮೂಲಕ ಪರಸ್ಪರ ಚರ್ಚೆಯಿಂದ ಸ್ನೇಹಪೂರ್ಣವಾಗಿ ಪರಿಹರಿಸಲಾಗುತ್ತದೆ।
+    </p>
+
+    <p>
+      15 ದಿನಗಳೊಳಗೆ ಪರಿಹಾರವಾಗದಿದ್ದರೆ, ವಿವಾದಗಳನ್ನು ಮಧ್ಯಸ್ಥಿಕೆ ಮತ್ತು ಸಮ್ಮತಿ ಕಾಯ್ದೆ, 1996ರ ಅಡಿಯಲ್ಲಿ ಮಧ್ಯಸ್ಥಿಕೆಗೆ ಒಪ್ಪಿಸಲಾಗುತ್ತದೆ।
+      ಮಧ್ಯಸ್ಥಿಕೆಯ ಸ್ಥಳವನ್ನು AgriAI ನಿರ್ಧರಿಸುತ್ತದೆ।
+    </p>
+
+    <p>
+      ಮಧ್ಯಸ್ಥಿಕೆಯ ಅಧೀನದಲ್ಲಿದ್ದು, <strong>ಬೆಂಗಳೂರು, ಕರ್ನಾಟಕ</strong> ನ್ಯಾಯಾಲಯಗಳಿಗೆ ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಉಂಟಾಗುವ ಜಾರಿಮಾಡುವಿಕೆ ಮತ್ತು ಕಾನೂನು ಕ್ರಮಗಳಿಗೆ ವಿಶೇಷ ನ್ಯಾಯಾಧಿಕಾರ ಇರುತ್ತದೆ।
+    </p>
 </section>
+
+  <section class="section">
+    <h2>11. ಒಪ್ಪಂದದ ರದ್ದುಪಡಿಸುವಿಕೆ</h2>
+
+    <p>
+      ಯಾವುದೇ ಪಕ್ಷವು ಈ ಒಪ್ಪಂದವನ್ನು ಮಹತ್ವದ ಉಲ್ಲಂಘನೆಯ ಕಾರಣದಿಂದ ರದ್ದುಪಡಿಸಬಹುದು,
+      ಉದಾಹರಣೆಗೆ ಪಾವತಿ ಮಾಡದಿರುವುದು, ವಿತರಣೆ ಮಾಡದಿರುವುದು, ತಪ್ಪು ಮಾಹಿತಿಯನ್ನು ನೀಡುವುದು ಅಥವಾ ಒಪ್ಪಂದದ ನಿಯಮಗಳನ್ನು ಉಲ್ಲಂಘಿಸುವುದು।
+    </p>
+
+    <p>
+      ಒಪ್ಪಿಕೊಂಡ ಸಮಯಾವಧಿಯನ್ನು ಮೀರಿದ ಪಾವತಿ ವಿಫಲವಾದಲ್ಲಿ, ತಪ್ಪಿತಸ್ಥ ಪಕ್ಷವು ಖಾತೆ ಸ್ಥಗಿತ,
+      ದಂಡ ಶುಲ್ಕಗಳು ಮತ್ತು ಕಾನೂನು ಅನುಮತಿಸಿದ ವಸೂಲಿ ಕ್ರಮಗಳನ್ನು ಎದುರಿಸಬಹುದು।
+    </p>
+</section>
+
 <section class="section">
-  <h2>13. ಜಾರಿಗೆ ತರುವುದು ಮತ್ತು ಡಿಜಿಟಲ್ ಸ್ವೀಕೃತಿ
-    
-  </h2>
+    <h2>12. ಒಪ್ಪಂದದ ಭಾಷೆ</h2>
 
-  <p>
-    ಈ ಒಪ್ಪಂದವನ್ನು ಅಗ್ರಿAI ವೇದಿಕೆಯ ಮೂಲಕ ಎಲೆಕ್ಟ್ರಾನಿಕ್ ವಿಧಾನದಲ್ಲಿ
-    ಜಾರಿಗೆ ತರಬಹುದು.
-    ನೋಂದಾಯಿತ ವಿವರಗಳನ್ನು ಬಳಸಿಕೊಂಡು ನೀಡುವ ಡಿಜಿಟಲ್ ಸ್ವೀಕೃತಿ
-    ಕಾನೂನುಬದ್ಧವಾಗಿ ಬಾಧ್ಯಕರ ಒಪ್ಪಿಗೆಯಾಗಿ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.
-  </p>
-
-  <p>ಖರೀದಿದಾರ / ಅಧಿಕೃತ ಪ್ರತಿನಿಧಿ</p>
-  <p>ಸಹಿ: ___________________________</p>
-  <p>ದಿನಾಂಕ: ___________________________</p>
-
-  <p>ರೈತ / ಉತ್ಪಾದಕ</p>
-  <p>ಸಹಿ: ___________________________</p>
-  <p>ದಿನಾಂಕ: ___________________________</p>
-
-  <p>ಸಾಕ್ಷಿ : <strong>AgriAI</strong></p>
+    <p>
+      ಈ ಒಪ್ಪಂದವನ್ನು ರೈತನಿಗೆ <strong>${siteLang === 'en' ? 'English' : (siteLang === 'hi' ? 'ಹಿಂದಿ' : (siteLang === 'kn' ? 'ಕನ್ನಡ' : 'English'))} (ಭಾಷೆ)</strong> ನಲ್ಲಿ ವಿವರಿಸಿ ಅನುವಾದಿಸಲಾಗಿದೆ।
+      ಯಾವುದೇ ವ್ಯತ್ಯಾಸ ಕಂಡುಬಂದಲ್ಲಿ, ಇಂಗ್ಲಿಷ್ ಆವೃತ್ತಿಯೇ ಮಾನ್ಯವಾಗುತ್ತದೆ।
+    </p>
 </section>
+
+<section class="section">
+    <h2>13. ಜಾರಿಗೊಳಿಸುವಿಕೆ ಮತ್ತು ಡಿಜಿಟಲ್ ಅಂಗೀಕಾರ</h2>
+
+    <p>
+      ಈ ಒಪ್ಪಂದವನ್ನು AgriAI ವೇದಿಕೆಯ ಮೂಲಕ ಎಲೆಕ್ಟ್ರಾನಿಕ್ ರೀತಿಯಲ್ಲಿ ಜಾರಿಗೊಳಿಸಬಹುದು।
+      ನೋಂದಾಯಿತ ವಿವರಗಳನ್ನು ಬಳಸಿ ನೀಡುವ ಡಿಜಿಟಲ್ ಅಂಗೀಕಾರವು ಕಾನೂನುಬದ್ಧವಾಗಿ ಬಾಧ್ಯತೆಯ ಒಪ್ಪಿಗೆಯಾಗಿ ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ।
+    </p>
+
+    <section class="signature-section">
+      <div class="signature-line">
+        <p><b>ಖರೀದಿದಾರ / ಕಂಪನಿ</b></p>
+        <p>ಹೆಸರು: ${otpVerificationStatus && userRole === 'buyer' ? signedInUserName : '________________'}</p>
+        <p>ದಿನಾಂಕ: ${otpVerificationStatus && userRole === 'buyer' ? startDate : '________________'}</p>
+      </div>
+      <div class="signature-line">
+        <p><b>ರೈತ / ಉತ್ಪಾದಕ</b></p>
+        <p>ಹೆಸರು: ${otpVerificationStatus && userRole === 'farmer' ? signedInUserName : '________________'}</p>
+        <p>ದಿನಾಂಕ: ${otpVerificationStatus && userRole === 'farmer' ? startDate : '________________'}</p>
+      </div>
+    </section>
+
+    <p style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #ddd; font-size: 12px; color: #000; font-weight: bold;">
+      <b>ಸಾಕ್ಷಿ:</b> AgriAI ವೇದಿಕೆ | ಡಿಜಿಟಲ್ ದಾಖಲೆ: ${new Date().toISOString()}
+    </p>
+</section>
+
 </body>
 </html>`;
       // Select template based on language (use lang fetched above)
@@ -2042,66 +2188,168 @@ const FarmerCart = () => {
   <title>AgriAI Contract</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     body {
       font-family: 'Times New Roman', Times, serif;
-      color: #111;
-      padding: 24px;
-      line-height: 1.6;
+      color: #1a1a1a;
+      line-height: 1.8;
+      background: #fff;
     }
-       h1 {
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 3px solid #236902;
+    }
+    .header img {
+      width: 80px;
+      height: auto;
+      margin: 0 auto 16px auto;
+      display: block;
+    }
+    h1 {
       text-align: center;
       color: #236902;
-      margin: 0;
+      margin: 8px 0;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
     }
-       h2 {
-      margin-top: 18px;
+    h2 {
+      color: #1a5c10;
+      margin: 12px 0 8px 0;
+      font-size: 18px;
+      font-weight: 700;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e0e0e0;
     }
-       .section {
-      margin-top: 16px;
+    h3 {
+      color: #236902;
+      margin: 10px 0 6px 0;
+      font-size: 15px;
+      font-weight: 700;
     }
-      table {
-      border-collapse: collapse;
+    p {
+      margin: 6px 0;
+      text-align: justify;
+      font-size: 14px;
+    }
+    .section {
+      margin: 12px 0;
+      padding: 8px 0;
+    }
+    ul {
+      margin: 6px 0 6px 24px;
+      font-size: 14px;
+      list-style-type: disc;
+    }
+    li {
+      margin: 3px 0;
+      list-style-type: disc;
+    }
+    table {
       width: 100%;
-      margin-top: 12px;
+      border-collapse: collapse;
+      margin: 12px 0;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
-      th, td {
+    th {
+      background: #236902;
+      color: #fff;
+      padding: 12px 8px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 13px;
       border: 1px solid #ddd;
-      padding: 8px;
     }
-      th {
-      background: #f7f7f7;
-      text-align: left;
+    td {
+      padding: 10px 8px;
+      border: 1px solid #ddd;
+      text-align: center;
+      font-size: 13px;
     }
-      pre {
-      white-space: pre-wrap;
-      font-family: 'Times New Roman', Times, serif;
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    tr:hover {
+      background: #f0f7ff;
+    }
+    strong {
+      font-weight: 700;
+      color: #1a5c10;
+    }
+    .party-section {
+      background: #f5f9f5;
+      padding: 12px;
+      border-left: 4px solid #236902;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    .signature-section {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 2px solid #ddd;
+      display: flex;
+      justify-content: space-around;
+      gap: 32px;
+    }
+    .signature-line {
+      text-align: center;
+      width: 200px;
+    }
+    .signature-line p {
+      margin: 4px 0;
+      font-size: 15px;
+    }
+    .signature-line .line {
+      border-top: 1px solid #000;
+      margin: 24px 0 4px 0;
+      min-height: 20px;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .section {
+        page-break-inside: avoid;
+      }
+      h2 {
+        page-break-after: avoid;
+      }
     }
   </style>
 </head>
 <body>
-<div style="text-align:center; margin-bottom:20px;">
-    <img src="${logo192}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px" />
-    <h1>
-      Agri AI<br/>
-      CONTRACT FARMING AGREEMENT
-    </h1>
-    
-  </div>
+<div class="header">
+  <img src="${logo192}" alt="AgriAI" />
+  <h1>AGRIAI FARMING AGREEMENT</h1></div>
+
   <section class="section">
-  <h2>PARTIES</h2>
-  <p><strong>Party A – Buyer / Company</strong></p>
-  <p><b>Name:</b> ${buyerName}</p>
-  <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
-  <p><b>Address:</b> ${buyerState || '[Buyer State]'}, ${buyerRegion || '[Buyer Region]'}</p>
-  <p><strong>Party B – Farmer / Producer</strong></p>
-  <p><b>Name:</b> ${farmerName}</p>
-  <p><b>Farmer ID:</b> ${farmerId}</p>
-  <p><b>Address:</b> ${farmerState ? ('' + farmerState) : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : ', ' + farmerRegion) : ''}</p>
-   <p>
-      Party A and Party B are collectively referred to as “the Parties.”
+  <h2>PARTIES TO THE CONTRACT</h2>
+  <div class="party-section">
+    <p><strong>Party A – Buyer / Company</strong></p>
+    <p><b>Name:</b> ${buyerName}</p>
+    <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
+    <p><b>Address:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+  </div>
+
+  <div class="party-section">
+    <p><strong>Party B – Farmer / Producer</strong></p>
+    <p><b>Name:</b> ${farmerName}</p>
+    <p><b>Farmer ID:</b> ${farmerId}</p>
+    <p><b>Address:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+  </div>
+
+  <p>
+     Party A and Party B are collectively referred to as “the Parties.”
       AgriAI acts solely as a digital facilitation platform and is not a buyer, seller, transporter, insurer, or agent of either Party.
-    </p>
-  </section>
+  </p>
+</section>
 
   <section class="section">
     <h2>1. PURPOSE OF AGREEMENT</h2>
@@ -2120,16 +2368,15 @@ const FarmerCart = () => {
 
   <section class="section">
     <h2>2. CONTRACT TYPE & DURATION</h2>
-    <p>Contract Nature: ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p>
-    <p>Contract Duration: ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p>
-    <p>Start Date: ${startDate}</p>
-    <p>End Date: ${endDate}</p>
-    <p>Duration: ${days} Days</p>
+    <p><b>Contract Nature:</b> ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p>
+    <p><b>Contract Duration:</b> ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p>
+    <p><b>Start Date:</b> ${startDate}</p>
+    <p><b>End Date:</b> ${endDate}</p>
+    <p><b>Duration:</b> ${days} Days</p>
     <p>
       Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract. Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract.
     </p>
-  
-    <h3><strong>2.1 Contract Acceptance &amp; Negotiation Window</strong></h3>
+    <h3>2.1 Contract Acceptance & Negotiation Window</h3>
     <p>
       This procurement contract shall remain valid for acceptance for a period of forty-eight (48) hours from the time it is digitally sent by the Farmer to the Buyer through the AgriAI platform.
     </p>
@@ -2139,8 +2386,11 @@ const FarmerCart = () => {
     <ul>
       <li>Accept the contract in its current form; or</li>
       <li>Reject the contract; or</li>
-      <li>Request a price negotiation.</li>
+      <li>Request a negotiation.</li>
     </ul>
+    <p><p>
+      If the Buyer does not take any action within the 48-hour validity period, the contract shall automatically expire and shall have no legal or binding effect on either Party.
+    </p>
     <p>
       If the Buyer does not take any action within the 48-hour validity period, the contract shall automatically expire and shall have no legal or binding effect on either Party.
     </p>
@@ -2156,7 +2406,6 @@ const FarmerCart = () => {
     </p>
     <ul>
       <li>Stored securely</li>
-      <li>Used strictly for:</li>
       <li>Contract execution and renewal</li>
       <li>Payment settlement</li>
       <li>Insurance facilitation</li>
@@ -2169,15 +2418,15 @@ const FarmerCart = () => {
 
   <section class="section">
     <h2>4. COMMODITY DETAILS</h2>
-    <table style="border-collapse:collapse;width:100%;margin-top:12px;">
+    <table>
       <thead>
         <tr>
-          <th style="padding:8px;border:1px solid #ddd;text-align:center">Sl. No</th>
-          <th style="padding:8px;border:1px solid #ddd;text-align:center">Crop Name</th>
-          <th style="padding:8px;border:1px solid #ddd;text-align:center">Variety</th>
-          <th style="padding:8px;border:1px solid #ddd;text-align:center">Quantity</th>
-          <th style="padding:8px;border:1px solid #ddd;text-align:center">Price (₹/kg)</th>
-          <th style="padding:8px;border:1px solid #ddd;text-align:center">Amount</th>
+          <th>Sl. No</th>
+          <th>Crop Name</th>
+          <th>Variety</th>
+          <th>Quantity (kg)</th>
+          <th>Price (₹/kg)</th>
+          <th>Amount (₹)</th>
         </tr>
       </thead>
       <tbody>
@@ -2188,76 +2437,71 @@ const FarmerCart = () => {
 
   <section class="section">
     <h2>5. PRICE & PAYMENT TERMS</h2>
-    <p><strong>5.1 Farmer </strong></p>
-    <p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p>
-    <p>Price: ${formatCurrency(avgPricePerKg)} per kg</p>
-    <p>Platform Fee: ${formatCurrency(totalPlatformFee)}</p>
-    <p>GST on Platform Fee: ${formatCurrency(totalGst)}</p>
-    <p><strong>Total Amount (After Deduction): ${formatCurrency(totalAmountInvoice)}</strong></p>
- 
-    <p><strong>5.2 Buyer</strong></p>
-    <p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p>
-    <p>Price: ${formatCurrency(avgPricePerKg)} per kg</p>
-    <p>Platform Fee: ${formatCurrency(buyerPlatformFee)}</p>
-    <p>GST on Platform Fee: ${formatCurrency(buyerGst)}</p>
-    <p><strong>Total Amount (After Addition): ${formatCurrency(buyerTotalAmount)}</strong></p>
     
-    <p><strong>5.3 Payment Schedule</strong></p>
-    <p>25% of the Total Crop Trade Value shall be paid by the Buyer as an advance at the time of contract confirmation through the AgriAI platform.</p>
-    <p>50% of the Total Crop Trade Value shall be paid immediately upon successful delivery of the produce.</p>
-    <p>50% of the Total Crop Trade Value shall be paid immediately upon successful delivery of the produce.</p>
-    <p>The remaining 25% shall be paid within 7 (seven) working days after quality inspection and formal acceptance of the produce.</p>
-    <p><strong>5.4 Mode of Payment</strong></p>
-    <p>Bank Transfer / UPI / Cheque</p>
-    <p>The Buyer shall issue digital or physical receipts for all payments made under this Agreement.</p>
+    <h3>5.1 Farmer's Payment Structure</h3>
+    <p><b>Total Quantity:</b> ${totalContractQty.toLocaleString('en-IN')} kg</p>
+    <p><b>Price per Unit:</b> ${formatCurrency(avgPricePerKg)} per kg</p>
+    <p><b>Subtotal:</b> ${formatCurrency(totalCropTradeValue)}</p>
+    <p><b>Platform Fee:</b> ${formatCurrency(totalPlatformFee)}</p>
+    <p><b>GST (18%):</b> ${formatCurrency(totalGst)}</p>
+    <p><b style="font-size: 16px; color: #236902;">Total Amount (After Deduction):</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(totalAmountInvoice)}</b></p>
 
+    <h3 style="margin-top: 20px;">5.2 Buyer's Payment Structure</h3>
+    <p><b>Total Quantity:</b> ${totalContractQty.toLocaleString('en-IN')} kg</p>
+    <p><b>Price per Unit:</b> ${formatCurrency(avgPricePerKg)} per kg</p>
+    <p><b>Subtotal:</b> ${formatCurrency(totalCropTradeValue)}</p>
+    <p><b>Platform Fee:</b> ${formatCurrency(buyerPlatformFee)}</p>
+    <p><b>GST (18%):</b> ${formatCurrency(buyerGst)}</p>
+    <p><b style="font-size: 16px; color: #236902;">Total Amount Payable:</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(buyerTotalAmount)}</b></p>
 
+    <h3 style="margin-top: 20px;">5.3 Payment Schedule</h3>
+    <ul>
+      <li><b>Advance (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – Due at contract confirmation</li>
+      <li><b>On Delivery (50%):</b> ${formatCurrency(totalCropTradeValue * 0.50)} – Due upon successful delivery</li>
+      <li><b>Final (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – Due within 7 working days after quality acceptance</li>
+    </ul>
 
+    <h3 style="margin-top: 20px;">5.4 Mode of Payment</h3>
+     <p>Bank Transfer / UPI / Cheque</p>
+    <p>The Buyer shall issue digital or physical receipts for all payments made under this Agreement.</p></section>
 
-
-  </section>
   <section class="section">
     <h2>6. DELIVERY, LOGISTICS & TRANSPORTATION</h2>
-
-  <p><strong>6.1 Role of AgriAI</strong></p>
-  <p>
+    <h3>6.1 Role of AgriAI</h3>
+    <p>
     AgriAI operates solely as a digital technology platform facilitating transactions between Buyers and Farmers.
     AgriAI shall not be deemed a buyer, seller, trader, commission agent, transporter, or custodian of goods.
     All obligations relating to sale and purchase remain strictly between the Parties.
   </p>
-
-  <p><strong>6.2 Delivery Facilitation</strong></p>
-  <p>
+    
+    <h3>6.2 Transportation</h3>
+    <p>
     Transportation shall be facilitated through third-party logistics service providers available on or approved by the AgriAI platform.
     The selection of logistics provider and vehicle type shall be based on crop nature, quantity, distance, and handling requirements.
   </p>
 
-  <p><strong>6.3 Delivery Charges</strong></p>
-  <p>
+    <h3>6.3 Delivery Charges</h3>
+    <p>
     Delivery charges shall be determined by the third-party logistics provider based on actual distance, vehicle type, loading requirements, and location.
     Such charges shall be paid directly by the Buyer to the logistics provider.
     AgriAI shall not be responsible for determining or negotiating delivery pricing.
   </p>
-
-  <p><strong>6.4 Transfer of Risk</strong></p>
-  <p>
+    <h3>6.4 Transfer of Risk</h3>
+    <p>
     Risk and responsibility for the produce shall remain with the logistics provider during transit.
     Risk shall transfer to the Buyer only upon successful delivery and signed Proof of Delivery (POD).
   </p>
-
-  <p><strong>6.5 Delay, Damage & Loss</strong></p>
-  <p>
-    Any delay, damage, shortage, or loss occurring during transit shall be governed by the logistics provider’s terms and conditions.
+    <h3>6.5 Delay, Damage & Loss</h3>
+    <p>
+    Any delay, damage, shortage, or loss occurring during transit shall be governed by the logistics provider's terms and conditions.
     AgriAI shall not be liable for any such claims.
   </p>
-
-  <p><strong>6.6 Proof of Delivery</strong></p>
-  <p>
+    <h3>6.6 Proof of Delivery</h3>
+    <p>
     Delivery shall be confirmed through physical receipt, digital confirmation, and/or electronic POD recorded on the AgriAI platform.
     Digital records maintained by AgriAI shall constitute valid evidence of delivery.
   </p>
   </section>
-
   <section class="section">
     <h2>7. QUALITY STANDARDS, INSPECTION & ACCEPTANCE</h2>
 
@@ -2283,7 +2527,7 @@ const FarmerCart = () => {
   </p>
 </section>
 
-  <section class="section">
+<section class="section">
     <h2>8. RISK, LIABILITY & INSURANCE</h2>
 
   <p>
@@ -2292,7 +2536,7 @@ const FarmerCart = () => {
 
   <p>
     In case of crop loss due to natural calamities or force majeure before dispatch, obligations may be reviewed mutually.
-    Crop insurance, if applicable under government schemes such as PMFBY or other approved insurers, shall remain in the Farmer’s name.
+    Crop insurance, if applicable under government schemes such as PMFBY or other approved insurers, shall remain in the Farmer's name.
   </p>
 
   <p>
@@ -2303,7 +2547,6 @@ const FarmerCart = () => {
     After delivery and deemed acceptance, all risks, ownership, and liabilities shall transfer entirely to the Buyer.
   </p>
 </section>
-
 
   <section class="section">
     <h2>9. FORCE MAJEURE</h2>
@@ -2318,7 +2561,8 @@ const FarmerCart = () => {
   </p>
 </section>
 
-  <h2>10. DISPUTE RESOLUTION & JURISDICTION</h2>
+  <section class="section">
+    <h2>10. DISPUTE RESOLUTION & JURISDICTION</h2>
 
   <p>
     Any dispute arising out of this Agreement shall first be resolved amicably through discussion via the AgriAI platform.
@@ -2353,7 +2597,7 @@ const FarmerCart = () => {
     <h2>12. LANGUAGE OF AGREEMENT</h2>
 
   <p>
-    This Agreement has been explained and translated to the Farmer in ${langName} (Language).
+    This Agreement has been explained and translated to the Farmer in <strong> ${siteLang === 'en' ? 'English' : (siteLang === 'hi' ? 'हिंदी' : (siteLang === 'kn' ? 'ಕನ್ನಡ' : 'English'))} (Language)</strong>.
     In case of any inconsistency, the English version shall prevail.
   </p>
 </section>
@@ -2366,16 +2610,22 @@ const FarmerCart = () => {
     Digital acceptance using registered credentials shall constitute legally binding consent.
   </p>
 
-  <p>Buyer / Authorized Representative</p>
-  <p>Signature: ___________________________</p>
-  <p>Date: ___________________________</p>
+  <section class="signature-section">
+    <div class="signature-line">
+      <p><b>Buyer / Company</b></p>
+      <p>Name: ${otpVerificationStatus && userRole === 'buyer' ? signedInUserName : '________________'}</p>
+      <p>Date: ${otpVerificationStatus && userRole === 'buyer' ? startDate : '________________'}</p>
+    </div>
+    <div class="signature-line">
+      <p><b>Farmer / Producer</b></p>
+      <p>Name: ${otpVerificationStatus && userRole === 'farmer' ? signedInUserName : '________________'}</p>
+      <p>Date: ${otpVerificationStatus && userRole === 'farmer' ? startDate : '________________'}</p>
+    </div>
+  </section>
 
-  <p>Farmer / Producer</p>
-  <p>Signature: ___________________________</p>
-  <p>Date: ___________________________</p>
-
-  <p>Witness :<strong>AgriAI</strong></p>
-</section>
+  <p style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #ddd; font-size: 12px; color: #000; font-weight: bold;">
+    <b>Witness:</b> AgriAI Platform | Digital Record: ${new Date().toISOString()}
+  </p>
 
 </body>
 </html>`) ;
@@ -2469,18 +2719,206 @@ const FarmerCart = () => {
       iframe.style.width = '0';
       iframe.style.height = '0';
       iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
       document.body.appendChild(iframe);
+      
       const doc = iframe.contentWindow.document;
       doc.open();
-      doc.write(contractHtml);
+      
+      // Write complete HTML with proper print styles
+      const printHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AgriAI Contract - Print</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    @page {
+      size: A4;
+      margin: 15mm;
+      orphans: 3;
+      widows: 3;
+    }
+    @media print {
+      body {
+        margin: 0;
+        padding: 15mm;
+        font-family: 'Times New Roman', Times, serif;
+    overflow-y: auto;
+      }
+      .section {
+        page-break-inside: avoid;
+        margin-bottom: 10px;
+      }
+      h2 {
+        page-break-after: avoid;
+        margin-top: 15px;
+        margin-bottom: 10px;
+      }
+      h3 {
+        page-break-after: avoid;
+        margin-top: 10px;
+        margin-bottom: 8px;
+      }
+      p, ul, li {
+        page-break-inside: avoid;
+        margin-bottom: 6px;
+      }
+      table {
+        page-break-inside: avoid;
+        margin: 10px 0;
+      }
+      tr {
+        page-break-inside: avoid;
+      }
+    }
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #1a1a1a;
+      line-height: 1.8;
+      background: #ffffff;
+      padding: 15mm;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 3px solid #236902;
+      page-break-after: avoid;
+    }
+    .header img {
+      width: 80px;
+      height: auto;
+      margin-bottom: 12px;
+    }
+    h1 {
+      text-align: center;
+      color: #236902;
+      margin: 12px 0;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    h2 {
+      color: #1a5c10;
+      margin: 15px 0 10px 0;
+      font-size: 16px;
+      font-weight: 700;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    h3 {
+      color: #236902;
+      margin: 10px 0 6px 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    p {
+      margin: 6px 0;
+      text-align: justify;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .section {
+      margin: 12px 0;
+      padding: 8px 0;
+    }
+    ul {
+      margin: 8px 0 8px 28px;
+      font-size: 13px;
+    }
+    li {
+      margin: 4px 0;
+      list-style-type: disc;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      background: #fff;
+      font-size: 12px;
+    }
+    th {
+      background: #236902;
+      color: #fff;
+      padding: 10px 6px;
+      text-align: center;
+      font-weight: 700;
+      border: 1px solid #ddd;
+    }
+    td {
+      padding: 8px 6px;
+      border: 1px solid #ddd;
+      text-align: center;
+      font-size: 12px;
+    }
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    strong {
+      font-weight: 700;
+      color: #1a5c10;
+    }
+    .party-section {
+      background: #f5f9f5;
+      padding: 10px;
+      border-left: 3px solid #236902;
+      margin: 8px 0;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+    .signature-section {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 2px solid #ddd;
+      display: flex;
+      justify-content: space-around;
+      gap: 24px;
+      page-break-inside: avoid;
+    }
+    .signature-line {
+      text-align: center;
+      width: 180px;
+      font-size: 12px;
+    }
+    .signature-line p {
+      margin: 3px 0;
+      font-size: 11px;
+    }
+    .signature-line .line {
+      border-top: 1px solid #000;
+      margin: 18px 0 3px 0;
+      min-height: 15px;
+    }
+  </style>
+</head>
+<body>
+${contractHtml}
+</body>
+</html>`;
+      
+      doc.write(printHtml);
       doc.close();
-      iframe.contentWindow.focus();
-      // give time for render
+      
+      // Wait for content to render, then print
       setTimeout(() => {
-        try { iframe.contentWindow.print(); } catch (err) { console.warn('Print failed', err); }
-        // remove iframe after a short delay
-        setTimeout(() => { try { document.body.removeChild(iframe); } catch (e) {} }, 500);
-      }, 250);
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          // Remove iframe after printing
+          setTimeout(() => {
+            try {
+              document.body.removeChild(iframe);
+            } catch (e) {}
+          }, 1000);
+        } catch (err) {
+          console.warn('Print failed', err);
+          alert('Print failed. Please try again.');
+        }
+      }, 500);
     } catch (e) {
       console.error('Print failed', e);
       alert(t('printFailed', siteLang) || 'Print failed. See console for details.');
@@ -2488,16 +2926,32 @@ const FarmerCart = () => {
   };
 
   return (
-    <div style={{ background: '#53b635', minHeight: '85vh' }}>
+    <div className="fc-root" style={{ background: 'rgba(83, 255, 3, 0.12)', backgroundAttachment: 'fixed', minHeight: '100vh', color: '#000', position: 'relative', overflow: 'hidden' }}>
+      <style>{`
+        .fc-root .navbar {
+          background: oklch(0.12 0.03 160 / 0.5) !important;
+          backdrop-filter: blur(12px) !important;
+          -webkit-backdrop-filter: blur(12px) !important;
+        }
+        .fc-root .navbar select {
+          background: oklch(0.12 0.03 160 / 0.6) !important;
+          border: 1px solid oklch(0.65 0.22 145 / 0.3) !important;
+          color: rgba(255,255,255,0.9) !important;
+        }
+        .fc-root .navbar select option {
+          background: #1a1a1a;
+          color: #ffffff;
+        }
+      `}</style>
       <Navbar />
-      <main style={{ padding: '6rem 1rem 2rem' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', background: '#fff', padding: '1.25rem', boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
+      <main style={{ padding: '6rem 1rem 2rem', position: 'relative', zIndex: 1 }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(20px) saturate(1.6)', WebkitBackdropFilter: 'blur(20px) saturate(1.6)', border: '1px solid rgba(255,255,255,0.6)', borderRadius: '24px', padding: '2.5rem', boxShadow: '0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'nowrap', position: 'relative', padding: '12px 0 18px', minHeight: 64 }}>
-            <h1 style={{ color: '#236902', margin: 0, position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>{t('cartTitle', siteLang)}</h1>
+            <h1 style={{ backgroundImage: 'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', margin: 0, position: 'absolute', left: '50%', transform: 'translateX(-50%)', fontWeight: 800, fontSize: 32 }}>{t('cartTitle', siteLang)}</h1>
             {items.length > 0 && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto', zIndex: 2 }}>
-                <button onClick={() => window.location.href = '/dashboard/buyer'} style={{ background: '#fff', border: '1px solid #dfeadf', color: '#236902', padding: '6px 10px', borderRadius: 6 }}>{t('continueShopping', siteLang)}</button>
-                <button onClick={clearCart} style={{ background: '#fff', border: '1px solid #f0dede', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>{t('clearCart', siteLang)}</button>
+                <button onClick={() => window.location.href = '/dashboard/buyer'} style={{ background: '#fff', border: '1px solid #dfeadf', color: '#236902', padding: '6px 10px', borderRadius: 6, fontWeight: 800 }}>{t('continueShopping', siteLang)}</button>
+                <button onClick={clearCart} style={{ background: '#fff', border: '1px solid #f0dede', color: '#d32f2f', padding: '6px 10px', borderRadius: 6, fontWeight: 800 }}>{t('clearCart', siteLang)}</button>
               </div>
             )}
           </div>
@@ -2515,7 +2969,7 @@ const FarmerCart = () => {
                     const { gstRate, commissionRate: _commissionRate, gstAmt, commissionAmt, lineTotal, group: _group, categoryTotal: _categoryTotal } = calculateGstAndCommission(it);
                     return (
                       <div key={it.id} style={{ display: 'flex', gap: 12, alignItems: 'center', border: '1px solid #eee', padding: 12, borderRadius: 8 }}>
-                        <div style={{ width: 120, height: 80, borderRadius: 6, overflow: 'hidden', background: '#f4f4f4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: 120, height: 100, borderRadius: 6, overflow: 'hidden', background: '#f4f4f4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {it.image_url ? (
                             <img src={it.image_url} alt={it.crop_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
@@ -2546,27 +3000,35 @@ const FarmerCart = () => {
                           </div>
                         </div>
                         <div style={{ textAlign: 'right', minWidth: 220 }}>
-                          <div style={{ fontWeight: 700 }}>{t('availableLabel', siteLang)} {Number(it.total_quantity != null ? it.total_quantity : it.quantity_kg || 0).toLocaleString('en-IN')} {t('kg', siteLang)}</div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
-                            <button onClick={() => updateQuantity(it.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>-</button>
-                            <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800 }}>{Number(it.order_quantity || 0).toLocaleString('en-IN')} kg</div>
-                            <button onClick={() => updateQuantity(it.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>+</button>
-                          </div>
-                          <div style={{ marginTop: 8, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          {editingId !== it.id && (
+                            <>
+                              <div style={{ fontWeight: 700 }}>{t('availableLabel', siteLang)} {Number(it.total_quantity != null ? it.total_quantity : it.quantity_kg || 0).toLocaleString('en-IN')} {t('kg', siteLang)}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
+                                <button onClick={() => updateQuantity(it.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>-</button>
+                                <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800 }}>{Number(it.order_quantity || 0).toLocaleString('en-IN')} kg</div>
+                                <button onClick={() => updateQuantity(it.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>+</button>
+                              </div>
+                            </>
+                          )}
+                          {editingId === it.id && (
+                            <>
+                              <div style={{ display: 'flex', flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                  <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{t('formQuantityLabel', siteLang)}</label>
+                                  <input type="number" step="0.001" value={editVal} onChange={e => setEditVal(e.target.value)} style={{ width: 100, padding: 6 }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                  <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{t('tablePricePerKg', siteLang)}</label>
+                                  <input type="number" step="0.01" value={editPrice} onChange={e => setEditPrice(e.target.value)} style={{ width: 80, padding: 6 }} />
+                                </div>
+                              </div>
+                            </>
+                          )}
+                          <div style={{ marginTop: 8, display: 'flex', gap: 8, justifyContent: editingId === it.id ? 'center' : 'flex-end' }}>
                             {editingId === it.id ? (
                               <>
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                        <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{t('formQuantityLabel', siteLang)}</label>
-                                        <input type="number" step="0.001" value={editVal} onChange={e => setEditVal(e.target.value)} style={{ width: 120, padding: 6 }} />
-                                      </div>
-                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                        <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{t('tablePricePerKg', siteLang)}</label>
-                                        <input type="number" step="0.01" value={editPrice} onChange={e => setEditPrice(e.target.value)} style={{ width: 120, padding: 6 }} />
-                                      </div>
-                                    </div>
-                                    <button onClick={() => saveEdit(it.id)} style={{ padding: '6px 8px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, marginLeft: 8 }}>{t('saveButton', siteLang)}</button>
-                                    <button onClick={cancelEdit} style={{ padding: '6px 8px', background: '#ddd', border: 'none', borderRadius: 6, marginLeft: 6 }}>{t('cancelButton', siteLang)}</button>
+                                <button onClick={() => saveEdit(it.id)} style={{ padding: '6px 8px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>{t('saveButton', siteLang)}</button>
+                                <button onClick={cancelEdit} style={{ padding: '6px 8px', background: '#ddd', border: 'none', borderRadius: 6 }}>{t('cancelButton', siteLang)}</button>
                               </>
                             ) : (
                               <>
@@ -2631,32 +3093,53 @@ const FarmerCart = () => {
         </div>
       </main>
       {showContractPreview && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ width: '94%', maxWidth: 960, maxHeight: '92%', background: '#fff', padding: 16, overflow: 'auto', borderRadius: 8 }}>
-            <div style={{ position: 'relative', marginBottom: 8, minHeight: 40 }}>
-              <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', fontWeight: 800 }}>{t('contractPreview', siteLang)}</div>
-              <div style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={downloadContract} style={{ padding: '6px 10px' }}>{t('download', siteLang) || 'Download'}</button>
-                <button onClick={printContract} style={{ padding: '6px 10px' }}>{t('print', siteLang) || 'Print'}</button>
-                <button onClick={() => setShowContractPreview(false)} style={{ padding: '6px 10px' }}>{t('close', siteLang) || 'Close'}</button>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+          <div style={{ width: '100%', maxWidth: '900px', height: '90vh', background: '#fff', display: 'flex', flexDirection: 'column', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden', margin: '0 auto' }}>
+            {/* Header */}
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px 24px', borderBottom: '2px solid #e5e5e5', background: '#f9f9f9' }}>
+              <h2 style={{ margin: 0, color: '#236902', fontSize: '18px', fontWeight: 700 }}>{t('contractPreview', siteLang) || 'Contract Preview'}</h2>
+              <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button 
+                  onClick={printContract} 
+                  onMouseEnter={(e) => { e.target.style.background = '#28a745'; e.target.style.color = '#fff'; }}
+                  onMouseLeave={(e) => { e.target.style.background = '#fff'; e.target.style.color = '#28a745'; }}
+                  style={{ padding: '5px 12px', background: '#fff', color: '#28a745', border: '2px solid #28a745', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s ease' }}>
+                  {t('print', siteLang) || 'Print'}
+                </button>
+                <button 
+                  onClick={() => setShowContractPreview(false)} 
+                  onMouseEnter={(e) => { e.target.style.background = '#dc3545'; e.target.style.color = '#fff'; }}
+                  onMouseLeave={(e) => { e.target.style.background = '#fff'; e.target.style.color = '#dc3545'; }}
+                  style={{ padding: '5px 12px', background: '#fff', color: '#dc3545', border: '2px solid #dc3545', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s ease' }}>
+                   {t('close', siteLang) || 'Close'}
+                </button>
               </div>
             </div>
-              <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: contractHtml }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button onClick={() => {
-                if (otpVerified && digitalSignature) {
-                  // already verified: proceed to send with contract payment method
-                  try { setShowContractPreview(false); } catch (e) {}
-                  handleBuyNow('contract');
-                } else {
-                  // start OTP flow
-                  initOtpVerification(() => {
-                    resetOtpModal();
+            
+            {/* Contract Content */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '0', background: '#fff' }}>
+              <div style={{ padding: '40px 48px', lineHeight: '1.8' }} dangerouslySetInnerHTML={{ __html: contractHtml }} />
+            </div>
+            
+            {/* Footer Actions */}
+            <div style={{ borderTop: '2px solid #e5e5e5', padding: '16px 24px', background: '#f9f9f9', display: 'flex', justifyContent: 'center', gap: 12 }}>
+              <button 
+                onClick={() => {
+                  if (otpVerified && digitalSignature) {
+                    try { setShowContractPreview(false); } catch (e) {}
                     handleBuyNow('contract');
-                  });
-                }
-              }} style={{ padding: '8px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6 }}>{t('confirmAndSend', siteLang) || 'Confirm & Send'}</button>
-              <button onClick={() => setShowContractPreview(false)} style={{ padding: '8px 12px', background: '#ddd', border: 'none', borderRadius: 6 }}>{t('cancelButton', siteLang)}</button>
+                  } else {
+                    initOtpVerification(() => {
+                      resetOtpModal();
+                      handleBuyNow('contract');
+                    });
+                  }
+                }}
+                onMouseEnter={(e) => { e.target.style.background = '#1a4d08'; e.target.style.transform = 'scale(1.02)'; }}
+                onMouseLeave={(e) => { e.target.style.background = '#236902'; e.target.style.transform = 'scale(1)'; }}
+                style={{ padding: '8px 20px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>
+                ✓ {t('confirmAndSend', siteLang) || 'Confirm & Send'}
+              </button>
             </div>
           </div>
         </div>
@@ -2818,6 +3301,60 @@ const FarmerCart = () => {
           </div>
         </div>
       )}
+      
+      {/* Footer */}
+      <footer className="w-full border-t" style={{background:'oklch(0.12 0.03 160 / 0.5)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'1em 0'}}>
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid md:grid-cols-4 gap-4 mb-3">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-xl mb-2">
+                <div className="w-7 h-7 rounded-lg border border-primary/40 flex items-center justify-center" style={{background:'oklch(0.65 0.22 145 / 0.2)', borderColor:'oklch(0.65 0.22 145)'}}>
+                  <Leaf className="w-3.5 h-3.5" style={{color:'oklch(0.65 0.22 145)'}} />
+                </div>
+                <span style={{color:'oklch(0.65 0.22 145)', fontFamily:"'Times New Roman', Times, serif"}}>AgriAI</span>
+              </div>
+              <p className="text-white text-sm leading-relaxed" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                {t('footerDescription', localStorage.getItem('agri_lang') || 'en')}
+              </p>
+            </div>
+
+            {[
+              { title: t('footerPlatform', localStorage.getItem('agri_lang') || 'en'), links: ['footerAbout', 'footerHowItWorks', 'footerFeatures', 'footerPricing'] },
+              { title: t('footerUsers', localStorage.getItem('agri_lang') || 'en'), links: ['footerFarmers', 'footerBuyers', 'footerAgribusiness', 'footerPartners'] },
+              { title: t('footerLegal', localStorage.getItem('agri_lang') || 'en'), links: ['footerPrivacy', 'footerTerms', { label: t('footerContact', localStorage.getItem('agri_lang') || 'en'), path: "/contact" }] },
+            ].map((col) => (
+              <div key={col.title}>
+                <h4 className="font-semibold text-white mb-2" style={{fontFamily:"'Times New Roman', Times, serif"}}>{col.title}</h4>
+                <ul className="space-y-1">
+                  {col.links.map((link) => {
+                    const label = typeof link === 'string' ? t(link, localStorage.getItem('agri_lang') || 'en') : link.label;
+                    const path = typeof link === 'string' ? "/" : link.path;
+                    return (
+                      <li key={label}>
+                        {path === "/contact" ? (
+                          <Link to="/contact" className="text-white text-sm transition-colors" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                            {label}
+                          </Link>
+                        ) : (
+                          <a href={path} className="text-white text-sm transition-colors" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                            {label}
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-3 flex justify-center items-center text-white text-sm" style={{borderTop:'1px solid oklch(0.65 0.22 145 / 0.12)', fontFamily:"'Times New Roman', Times, serif"}}>
+            <span>
+              © {new Date().getFullYear()} AgriAI. {t('footerRights', localStorage.getItem('agri_lang') || 'en')}
+            </span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
