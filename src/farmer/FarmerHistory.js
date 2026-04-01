@@ -875,9 +875,9 @@ export default function FarmerHistory() {
     
         <h3 style="margin-top: 20px;">5.3 Payment Schedule</h3>
         <ul>
-          <li><b>Advance (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – Due at contract confirmation</li>
-          <li><b>On Delivery (50%):</b> ${formatCurrency(totalCropTradeValue * 0.50)} – Due upon successful delivery</li>
-          <li><b>Final (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – Due within 7 working days after quality acceptance</li>
+          <li><b>Advance (25%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.25)} – Due at contract confirmation</li>
+          <li><b>On Delivery (50%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.50)} – Due upon successful delivery</li>
+          <li><b>Final (25%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.25)} – Due within 7 working days after quality acceptance</li>
         </ul>
     
         <h3 style="margin-top: 20px;">5.4 Mode of Payment</h3>
@@ -1336,9 +1336,9 @@ export default function FarmerHistory() {
     
         <h3 style="margin-top: 20px;">5.3 भुगतान अनुसूची</h3>
         <ul>
-          <li><b>अग्रिम (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – अनुबंध की पुष्टि पर देय</li>
-          <li><b>डिलीवरी के समय (50%):</b> ${formatCurrency(totalCropTradeValue * 0.50)} – सफल डिलीवरी पर देय</li>
-          <li><b>अंतिम (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – गुणवत्ता स्वीकृति के 7 कार्य दिवसों के भीतर देय</li>
+          <li><b>अग्रिम (25%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.25)} – अनुबंध की पुष्टि पर देय</li>
+          <li><b>डिलीवरी के समय (50%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.50)} – सफल डिलीवरी पर देय</li>
+          <li><b>अंतिम (25%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.25)} – गुणवत्ता स्वीकृति के 7 कार्य दिवसों के भीतर देय</li>
         </ul>
     
         <h3 style="margin-top: 20px;">5.4 भुगतान का तरीका</h3>
@@ -1803,9 +1803,9 @@ export default function FarmerHistory() {
     
         <h3 style="margin-top: 20px;">5.3 ಪಾವತಿ ವೇಳಾಪಟ್ಟಿ</h3>
         <ul>
-          <li><b>ಮುಂಗಡ (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – ಒಪ್ಪಂದ ದೃಢೀಕರಣದ ವೇಳೆ ಪಾವತಿಸಬೇಕು</li>
-          <li><b>ಡಿಲಿವರಿ ಸಮಯದಲ್ಲಿ (50%):</b> ${formatCurrency(totalCropTradeValue * 0.50)} – ಯಶಸ್ವಿ ಡಿಲಿವರಿಯ ನಂತರ ಪಾವತಿಸಬೇಕು</li>
-          <li><b>ಅಂತಿಮ (25%):</b> ${formatCurrency(totalCropTradeValue * 0.25)} – ಗುಣಮಟ್ಟ ಸ್ವೀಕೃತಿಯಾದ ನಂತರ 7 ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಪಾವತಿಸಬೇಕು</li>
+          <li><b>ಮುಂಗಡ (25%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.25)} – ಒಪ್ಪಂದ ದೃಢೀಕರಣದ ವೇಳೆ ಪಾವತಿಸಬೇಕು</li>
+          <li><b>ಡಿಲಿವರಿ ಸಮಯದಲ್ಲಿ (50%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.50)} – ಯಶಸ್ವಿ ಡಿಲಿವರಿಯ ನಂತರ ಪಾವತಿಸಬೇಕು</li>
+          <li><b>ಅಂತಿಮ (25%):</b> ${formatCurrency(totalAmountPayableByBuyer * 0.25)} – ಗುಣಮಟ್ಟ ಸ್ವೀಕೃತಿಯಾದ ನಂತರ 7 ಕಾರ್ಯದಿನಗಳೊಳಗೆ ಪಾವತಿಸಬೇಕು</li>
         </ul>
     
         <h3 style="margin-top: 20px;">5.4 ಪಾವತಿ ವಿಧಾನ</h3>
