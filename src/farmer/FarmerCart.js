@@ -776,6 +776,7 @@ const FarmerCart = () => {
                   } catch (e) { return null; }
                 })(),
                 delivery_cost: contractMetadata.delivery_cost,
+                sender: 'farmer',  // Farmer is sending the contract
                 // Status and Signature Method/Timestamp (set after OTP verification)
                 ...(digitalSignature ? {
                   status: 'pending',
@@ -860,6 +861,19 @@ const FarmerCart = () => {
           });
           console.error('📋 Failed saves full details:\n', failedSaves);
           try { alert(errorMsg + 'Please check console for full details.'); } catch (e) {}
+        } else {
+          // All contracts saved successfully - dispatch event for real-time notification updates
+          try { window.dispatchEvent(new Event('agriai:contracts:saved')); } catch (e) {}
+          
+          // Also dispatch event to notify MyDeals about contracts created for specific buyers
+          try {
+            const buyerIds = [...new Set(items?.map(item => item.buyer_id)?.filter(Boolean))];
+            if (buyerIds.length > 0) {
+              window.dispatchEvent(new CustomEvent('agriai:contracts:created', {
+                detail: { buyer_ids: buyerIds, items: items }
+              }));
+            }
+          } catch (e) {}
         }
       } catch (e) {
         console.warn('Error processing contracts/quantities:', e);
@@ -3138,7 +3152,7 @@ ${contractHtml}
                 onMouseEnter={(e) => { e.target.style.background = '#1a4d08'; e.target.style.transform = 'scale(1.02)'; }}
                 onMouseLeave={(e) => { e.target.style.background = '#236902'; e.target.style.transform = 'scale(1)'; }}
                 style={{ padding: '8px 20px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>
-                ✓ {t('confirmAndSend', siteLang) || 'Confirm & Send'}
+                 {t('confirmAndSend', siteLang) || 'Confirm & Send'}
               </button>
             </div>
           </div>

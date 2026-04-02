@@ -626,6 +626,24 @@ const MyDeals = () => {
 
   React.useEffect(() => { fetchListings(); }, [fetchListings]);
 
+  // Listen for contract deletion event from farmer's FarmerHistory and refresh deals
+  React.useEffect(() => {
+    const onContractDeleted = (e) => {
+      console.log('Contract deleted, refreshing deals with restored quantities:', e.detail);
+      fetchListings();
+    };
+    const onContractCreated = (e) => {
+      console.log('Contract created, refreshing deals with updated quantities:', e.detail);
+      fetchListings();
+    };
+    window.addEventListener('agriai:contract:deleted', onContractDeleted);
+    window.addEventListener('agriai:contracts:created', onContractCreated);
+    return () => { 
+      try { window.removeEventListener('agriai:contract:deleted', onContractDeleted); } catch (e) {}
+      try { window.removeEventListener('agriai:contracts:created', onContractCreated); } catch (e) {}
+    };
+  }, [fetchListings]);
+
   React.useEffect(() => {
     const onLang = (e) => { const l = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en'); setSiteLang(l); };
     window.addEventListener('agri:lang:change', onLang);

@@ -8,131 +8,111 @@ import { t } from '../i18n';
 export default function FarmerHistory() {
   const [orders, setOrders] = React.useState([]);
   const [query, setQuery] = React.useState('');
-  const [paymentFilter, setPaymentFilter] = React.useState('all');
+  const [statusFilter, setStatusFilter] = React.useState('all');
   
   const [siteLang, setSiteLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
 
   React.useEffect(() => {
-    try {
-      const raw = localStorage.getItem('agriai_history_farmer');
-      const hist = raw ? JSON.parse(raw) : [];
-      const localOrders = Array.isArray(hist) ? hist : [];
-      setOrders(localOrders);
-
-      // Attempt to fetch authoritative contract rows from backend and merge all details
-      (async () => {
+    // Load contracts from both contract_b table (accepted/rejected) and contracts table (all)
+    const loadContracts = async () => {
+      try {
+        const role = localStorage.getItem('agriai_role') || '';
+        const farmerId = localStorage.getItem('agriai_id') || '';
+        
+        // Only load if user is a farmer
+        if (role !== 'farmer' || !farmerId) {
+          setOrders([]);
+          return;
+        }
+        
+        const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
+        
+        // Transform contract data into order format
+        const transformContract = (c) => ({
+          contract_number: c.contract_number,
+          contract_datetime: c.created_at || new Date().toISOString(),
+          invoice_id: c.contract_number,
+          created_at: c.created_at || new Date().toISOString(),
+          payment_method: 'contract',
+          items: [],
+          totals: { subtotal: 0, gst: 0, platform_fee: 0, grand_total: c.amount || 0 },
+          farmer_state: c.farmer_state,
+          buyer_state: c.buyer_state,
+          buyer_name: c.buyer_name,
+          buyer_id: c.buyer_id,
+          farmer_name: c.farmer_name,
+          farmer_id: c.farmer_id,
+          total_amount: c.amount,
+          quantity_kg: c.quantity_kg,
+          price_per_kg: c.price_per_kg,
+          contract_nature: c.contract_nature,
+          contract_duration: c.contract_duration,
+          start_date: c.start_date,
+          end_date: c.end_date,
+          status: c.status,
+          crop_name: c.crop_name,
+          variety: c.variety,
+          _db_contract: c // Store full contract object
+        });
+        
+        let allContracts = [];
+        
+        // Fetch from contract_b table (status IN 'accepted', 'rejected')
         try {
-          const role = localStorage.getItem('agriai_role') || '';
-          const userId = localStorage.getItem('agriai_id') || '';
-          const userEmail = localStorage.getItem('agriai_email') || '';
-          if (role === 'farmer' && (userId || userEmail)) {
-            const q = userId ? `?farmer_id=${encodeURIComponent(userId)}` : `?farmer_email=${encodeURIComponent(userEmail)}`;
-            const apiBase = (window.__AGRIAI_API_BASE__ || '');
-            const url = apiBase ? (apiBase + '/farmer/contracts' + q) : (`/farmer/contracts${q}`);
-            const resp = await fetch(url);
-            if (resp && resp.ok) {
-              const j = await resp.json().catch(() => null);
-              if (j && j.ok && Array.isArray(j.contracts)) {
-                const contracts = j.contracts;
-                
-                // Build map indexed by contract_number for direct lookup
-                const contractByNumber = {};
-                contracts.forEach(c => {
-                  if (c.contract_number) {
-                    contractByNumber[c.contract_number] = c;
-                  }
-                });
-
-                // Merge contracts into localOrders by timestamp matching
-                const merged = localOrders.map(o => {
-                  try {
-                    const oTime = new Date(o.created_at).getTime();
-                    let matched = null;
-                    
-                    // Try direct contract_number match first
-                    if (o.contract_number && contractByNumber[o.contract_number]) {
-                      matched = contractByNumber[o.contract_number];
-                    }
-                    
-                    // If no direct match, try timestamp matching
-                    if (!matched) {
-                      for (let c of contracts) {
-                        if (!c.contract_datetime) continue;
-                        const cTime = new Date(c.contract_datetime.replace(' ', 'T') + 'Z').getTime();
-                        if (isNaN(cTime) || isNaN(oTime)) continue;
-                        if (Math.abs(cTime - oTime) <= 10000) { matched = c; break; }
-                      }
-                    }
-                    
-                    if (matched) {
-                      // Merge all contract table fields into order
-                      return { 
-                        ...o, 
-                        contract_number: matched.contract_number,
-                        contract_datetime: matched.contract_datetime,
-                        farmer_state: matched.farmer_state || o.farmer_state,
-                        buyer_state: matched.buyer_state || o.buyer_state,
-                        buyer_name: matched.buyer_name || o.buyer_name,
-                        buyer_id: matched.buyer_id || o.buyer_id,
-                        farmer_name: matched.farmer_name || o.farmer_name,
-                        farmer_id: matched.farmer_id || o.farmer_id,
-                        total_amount: matched.total_amount || o.total_amount,
-                        quantity_kg: matched.quantity_kg || matched.total_quantity || o.quantity_kg,
-                        price_per_kg: matched.price_per_kg || o.price_per_kg,
-                        contract_nature: matched.contract_nature || o.contract_nature,
-                        contract_duration: matched.contract_duration || o.contract_duration,
-                        start_date: matched.start_date || o.start_date,
-                        end_date: matched.end_date || o.end_date,
-                        _db_contract: matched // Store full contract object for later use
-                      };
-                    }
-                  } catch (e) {}
-                  return o;
-                });
-
-                // Add any contracts from DB that didn't match local orders
-                const unmatched = [];
-                for (let c of contracts) {
-                  const exists = merged.some(m => (m.contract_number && m.contract_number === c.contract_number));
-                  if (!exists) {
-                    unmatched.push({ 
-                      contract_number: c.contract_number,
-                      contract_datetime: c.contract_datetime,
-                      invoice_id: c.contract_number,
-                      created_at: c.contract_datetime || new Date().toISOString(), 
-                      payment_method: 'contract', 
-                      items: [], 
-                      totals: { subtotal: 0, gst: 0, platform_fee: 0, grand_total: c.total_amount || 0 },
-                      farmer_state: c.farmer_state,
-                      buyer_state: c.buyer_state,
-                      buyer_name: c.buyer_name,
-                      buyer_id: c.buyer_id,
-                      farmer_name: c.farmer_name,
-                      farmer_id: c.farmer_id,
-                      total_amount: c.total_amount,
-                      quantity_kg: c.quantity_kg || c.total_quantity,
-                      price_per_kg: c.price_per_kg,
-                      contract_nature: c.contract_nature,
-                      contract_duration: c.contract_duration,
-                      start_date: c.start_date,
-                      end_date: c.end_date,
-                      _db_contract: c
-                    });
-                  }
-                }
-
-                const combined = [...merged, ...unmatched].sort((a,b) => new Date(b.contract_datetime || b.created_at) - new Date(a.contract_datetime || a.created_at));
-                setOrders(combined);
-              }
+          const urlB = `${apiBase}/farmer/contracts-b?farmer_id=${encodeURIComponent(farmerId)}`;
+          const respB = await fetch(urlB);
+          if (respB && respB.ok) {
+            const jB = await respB.json().catch(() => null);
+            if (jB && jB.ok && Array.isArray(jB.contracts)) {
+              console.log(`✅ Loaded ${jB.contracts.length} contracts from contract_b`);
+              allContracts = allContracts.concat(jB.contracts.map(transformContract));
             }
           }
         } catch (e) {
-          console.warn('Failed to fetch farmer contracts:', e);
+          console.warn('Failed to load contracts from contract_b table:', e);
         }
-      })();
-    } catch (e) {
-      setOrders([]);
-    }
+        
+        // Fetch from contracts table (no filter)
+        try {
+          const urlRegular = `${apiBase}/farmer/contracts?farmer_id=${encodeURIComponent(farmerId)}`;
+          const respRegular = await fetch(urlRegular);
+          if (respRegular && respRegular.ok) {
+            const jRegular = await respRegular.json().catch(() => null);
+            if (jRegular && jRegular.ok && Array.isArray(jRegular.contracts)) {
+              console.log(`✅ Loaded ${jRegular.contracts.length} contracts from contracts table`);
+              allContracts = allContracts.concat(jRegular.contracts.map(transformContract));
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to load contracts from contracts table:', e);
+        }
+        
+        // Remove duplicates (by contract_number) and sort by date
+        const uniqueMap = new Map();
+        allContracts.forEach(c => {
+          if (!uniqueMap.has(c.contract_number)) {
+            uniqueMap.set(c.contract_number, c);
+          }
+        });
+        
+        const orders = Array.from(uniqueMap.values())
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        
+        console.log(`📊 Total unique contracts to display: ${orders.length}`);
+        setOrders(orders);
+      } catch (e) {
+        console.warn('Failed to load contracts:', e);
+        setOrders([]);
+      }
+    };
+
+    // Load contracts immediately
+    loadContracts();
+
+    // Poll every 10 seconds for contract updates
+    const pollInterval = setInterval(loadContracts, 10000);
+    
+    return () => clearInterval(pollInterval);
   }, []);
 
   React.useEffect(() => {
@@ -202,6 +182,10 @@ export default function FarmerHistory() {
     if (!window.confirm(t('confirmDelete', siteLang) || 'Delete this deal? This action cannot be undone.')) return;
     try {
       const apiBase = process.env.REACT_APP_API_BASE || (window.__AGRIAI_API_BASE__ || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000'));
+      
+      // Find the contract to get its details (crop name, quantity, etc.)
+      const contractToDelete = orders.find(o => (o.contract_number || o.invoice_id) === idKey);
+      
       // ask server to remove contract row
       try {
         const resp = await fetch(`${apiBase}/contracts/delete/${encodeURIComponent(idKey)}`, { method: 'DELETE' });
@@ -217,35 +201,150 @@ export default function FarmerHistory() {
         return;
       }
 
-      // remove from local farmer history
-      const raw = localStorage.getItem('agriai_history_farmer');
-      const hist = raw ? JSON.parse(raw) : [];
-      const filtered = (hist || []).filter(h => {
-        const key = h.contract_number || h.invoice_id;
-        return key !== idKey;
-      });
-      localStorage.setItem('agriai_history_farmer', JSON.stringify(filtered));
+      // Add the contract quantity back to the farmer's crop listing
+      if (contractToDelete && contractToDelete.quantity_kg && contractToDelete.crop_name) {
+        try {
+          const sellerId = localStorage.getItem('agriai_id') || '';
+          const sellerPhone = localStorage.getItem('agriai_phone') || '';
+          let listUrl = `${apiBase}/my-crops/list`;
+          if (sellerId) listUrl += `?seller_id=${encodeURIComponent(sellerId)}`;
+          else if (sellerPhone) listUrl += `?seller_phone=${encodeURIComponent(sellerPhone)}`;
+          
+          const listResp = await fetch(listUrl);
+          const listJson = await listResp.json().catch(() => ({}));
+          
+          if (listResp.ok && listJson.ok && Array.isArray(listJson.crops)) {
+            // Find matching crop(s) by crop_name and variety
+            const matchingCrops = listJson.crops.filter(c => 
+              c.crop_name === contractToDelete.crop_name && 
+              c.variety === contractToDelete.variety
+            );
+            
+            // Update all matching crops to add back the quantity
+            for (const crop of matchingCrops) {
+              const currentQty = crop.quantity_kg || 0;
+              const newQty = currentQty + Number(contractToDelete.quantity_kg);
+              
+              try {
+                await fetch(`${apiBase}/my-crops/${crop.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ quantity_kg: newQty })
+                });
+              } catch (e) {
+                console.warn('Failed to update crop quantity:', e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to add quantity back to crops:', e);
+        }
+      }
+
+      // Remove from local state only (no localStorage)
       setOrders(prev => (prev || []).filter(o => ((o.contract_number || o.invoice_id) !== idKey)));
 
-      // also wipe buyer history record if present
+      // Dispatch event to notify buyer deals page to refresh with restored quantities
       try {
-        const rawB = localStorage.getItem('agriai_history');
-        const histB = rawB ? JSON.parse(rawB) : [];
-        const filtB = (histB || []).filter(h => (h.contract_number || h.invoice_id) !== idKey);
-        localStorage.setItem('agriai_history', JSON.stringify(filtB));
-      } catch (e) { /* ignore */ }
-
-      // also drop any local notifications for this contract
-      try {
-        const key = 'agriai_notifications';
-        const rawN = localStorage.getItem(key);
-        const arrN = rawN ? JSON.parse(rawN) : [];
-        const filtN = arrN.filter(n => n.contract_number !== idKey);
-        localStorage.setItem(key, JSON.stringify(filtN));
-        try { window.dispatchEvent(new Event('agriai:notifications:local:update')); } catch (e) {}
+        window.dispatchEvent(new CustomEvent('agriai:contract:deleted', { 
+          detail: { 
+            contract_number: idKey, 
+            quantity_restored: contractToDelete?.quantity_kg,
+            buyer_id: contractToDelete?.buyer_id,
+            crop_name: contractToDelete?.crop_name
+          } 
+        }));
       } catch (e) {}
     } catch (e) { console.warn('delete history failed', e); }
   };
+
+  // Monitor for status changes to "rejected" and restore quantities
+  React.useEffect(() => {
+    (async () => {
+      try {
+        // Get list of already-processed rejections from sessionStorage
+        const processedKey = 'agriai_farmer_rejections_processed';
+        const processedRaw = sessionStorage.getItem(processedKey) || '[]';
+        const processed = new Set(JSON.parse(processedRaw));
+        
+        const apiBase = process.env.REACT_APP_API_BASE || (window.__AGRIAI_API_BASE__ || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000'));
+        
+        for (const order of orders) {
+          const contractNum = order.contract_number || order.invoice_id;
+          const currentStatus = (order._db_contract && order._db_contract.status) || order.status || '';
+          const isRejected = String(currentStatus).toLowerCase() === 'rejected';
+          
+          // If contract is rejected and we haven't processed it yet
+          if (isRejected && contractNum && !processed.has(contractNum)) {
+            const quantity = Number(order.quantity_kg || 0);
+            const cropName = order.crop_name || '';
+            const buyerId = order.buyer_id || '';
+            
+            if (quantity > 0 && (cropName || buyerId)) {
+              try {
+                // Try to find and update deals using crop_name and buyer_id
+                const listUrl = `${apiBase}/deals/list`;
+                const listResp = await fetch(listUrl);
+                const listJson = await listResp.json().catch(() => ({}));
+                
+                if (listResp.ok && listJson.ok && Array.isArray(listJson.deals)) {
+                  // Find deals matching the crop and buyer
+                  const matchingDeals = listJson.deals.filter(d => 
+                    d.crop_name === cropName && 
+                    d.buyer_id === buyerId
+                  );
+                  
+                  console.log(`[Rejection] Found ${matchingDeals.length} matching deals for crop "${cropName}" and buyer ${buyerId}`);
+                  
+                  // Update all matching deals to add back the quantity
+                  for (const deal of matchingDeals) {
+                    const currentQty = Number(deal.quantity_kg || 0);
+                    const newQty = currentQty + quantity;
+                    
+                    try {
+                      const updateResp = await fetch(`${apiBase}/deals/${deal.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ quantity_kg: newQty })
+                      });
+                      
+                      if (updateResp.ok) {
+                        console.log(`[Rejection] Restored ${quantity} kg to deal ${deal.id} (new qty: ${newQty})`);
+                      } else {
+                        console.warn(`[Rejection] Failed to update deal ${deal.id}:`, updateResp.status);
+                      }
+                    } catch (e) {
+                      console.warn('[Rejection] Failed to update deal quantity:', e);
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn('[Rejection] Error restoring quantities:', e);
+              }
+            }
+            
+            // Mark this contract as processed
+            processed.add(contractNum);
+            sessionStorage.setItem(processedKey, JSON.stringify(Array.from(processed)));
+            
+            // Dispatch event to notify buyer deals page
+            try {
+              window.dispatchEvent(new CustomEvent('agriai:contract:rejected', { 
+                detail: { 
+                  contract_number: contractNum,
+                  quantity_restored: quantity,
+                  buyer_id: buyerId,
+                  crop_name: cropName
+                } 
+              }));
+            } catch (e) {}
+          }
+        }
+      } catch (e) {
+        console.warn('[Rejection] Error in rejection handler:', e);
+      }
+    })();
+  }, [orders]);
 
   const translateVar = (val) => {
     try {
@@ -284,17 +383,19 @@ export default function FarmerHistory() {
           return cropMatch || varMatchRaw || varMatchTranslated;
         } catch (e) { return false; }
       });
-    return matchesQuery;
+    
+    // Filter by contract status
+    if (statusFilter === 'all') {
+      return matchesQuery;
+    } else {
+      const contractStatus = (o.status || 'pending').toLowerCase();
+      return matchesQuery && contractStatus === statusFilter.toLowerCase();
+    }
   }).sort((a, b) => {
-    // Sort by date based on paymentFilter
+    // Sort by creation date (newest first)
     const aDate = new Date(a.created_at || 0).getTime();
     const bDate = new Date(b.created_at || 0).getTime();
-    if (paymentFilter === 'latest') {
-      return bDate - aDate; // Latest first
-    } else if (paymentFilter === 'old') {
-      return aDate - bDate; // Oldest first
-    }
-    return 0; // 'all' keeps original order
+    return bDate - aDate;
   });
 
   const openInvoice = async (order) => {
@@ -1035,9 +1136,7 @@ export default function FarmerHistory() {
     `<p>Buyer / Company</p>
      <p>Name: ${buyerName}</p>
      <p>Date: ${date}</p>
-     ${dbContract.signature_method ? `<p>Signature Method: ${dbContract.signature_method}</p>` : ''}
-     ${dbContract.signature_timestamp ? `<p>Signature Time: ${dbContract.signature_timestamp}</p>` : ''}`
-    :
+      ` :
     `<p>Buyer / Company</p>
      <p>Name: ___________________________</p>
      <p>Date: ___________________________</p>`
@@ -1501,9 +1600,7 @@ export default function FarmerHistory() {
           `<p><b>खरीदार / कंपनी</b></p>
           <p>नाम: ${buyerName}</p>
           <p>तिथि:  ${date}</p>
-          ${dbContract.signature_method ? `<p>Signature Method: ${dbContract.signature_method}</p>` : ''}
-     ${dbContract.signature_timestamp ? `<p>Signature Time: ${dbContract.signature_timestamp}</p>` : ''}`
-      :
+          ` :
     `<p><b>खरीदार / कंपनी</b></p>
           <p>नाम: ___________________________</p></p>
           <p>तिथि: ___________________________</p>`
@@ -1969,9 +2066,7 @@ export default function FarmerHistory() {
             `<p><b>ಖರೀದಿದಾರ / ಕಂಪನಿ</b></p>
             <p>ಹೆಸರು: ${buyerName}</p>
             <p>ದಿನಾಂಕ: ${date}</p>
-            ${dbContract.signature_method ? `<p>Signature Method: ${dbContract.signature_method}</p>` : ''}
-     ${dbContract.signature_timestamp ? `<p>Signature Time: ${dbContract.signature_timestamp}</p>` : ''}`
-    :
+            ` :
     `<p>ಖರೀದಿದಾರ / ಕಂಪನಿ</p>
      <p>ಹೆಸರು: ___________________________</p>
      <p>ದಿನಾಂಕ: ___________________________</p>`
@@ -2036,13 +2131,14 @@ export default function FarmerHistory() {
               onBlur={(e) => { e.target.style.borderColor = '#d4edcc'; e.target.style.boxShadow = 'none'; e.target.style.transform = 'translateY(0)'; }}
             />
             <div>
-              <label style={{ marginRight: 8, fontWeight: 700, color: '#2d5c1a', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('sortLabel', siteLang) || 'Sort:'}</label>
-              <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid #d4edcc', borderRadius: 10, color: '#1a3d0a', background: 'rgba(255,255,255,0.95)', fontFamily: 'inherit', fontSize: '0.9rem', outline: 'none', transition: 'border-color 0.25s, box-shadow 0.25s, transform 0.2s' }}
+              <label style={{ marginRight: 8, fontWeight: 700, color: '#2d5c1a', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('statusLabel', siteLang) || 'Status:'}</label>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid #d4edcc', borderRadius: 10, color: '#1a3d0a', background: 'rgba(255,255,255,0.95)', fontFamily: 'inherit', fontSize: '0.9rem', outline: 'none', transition: 'border-color 0.25s, box-shadow 0.25s, transform 0.2s' }}
                 onFocus={(e) => { e.target.style.borderColor = '#53b635'; e.target.style.boxShadow = '0 0 0 3px rgba(83,182,53,0.18), 0 2px 8px rgba(35,105,2,0.1)'; e.target.style.transform = 'translateY(-2px)'; }}
                 onBlur={(e) => { e.target.style.borderColor = '#d4edcc'; e.target.style.boxShadow = 'none'; e.target.style.transform = 'translateY(0)'; }}>
                 <option value="all">{t('all', siteLang) || 'All'}</option>
-                <option value="latest">{t('latest', siteLang) || 'Latest'}</option>
-                <option value="old">{t('old', siteLang) || 'Old'}</option>
+                <option value="accepted">{t('accepted', siteLang) || 'Accepted'}</option>
+                <option value="rejected">{t('rejected', siteLang) || 'Rejected'}</option>
+                <option value="pending">{t('pending', siteLang) || 'Pending'}</option>
               </select>
             </div>
           </div>

@@ -676,10 +676,11 @@ const Cart = () => {
             contract_number: contractMetadata.contract_number, farmer_id: contractMetadata.farmer_id, farmer_name: contractMetadata.farmer_name, farmer_address: contractMetadata.farmer_address, farmer_state: contractMetadata.farmer_state, buyer_id: contractMetadata.buyer_id || crop.buyer_id, buyer_name: contractMetadata.buyer_name, buyer_address: contractMetadata.buyer_address, buyer_state: contractMetadata.buyer_state, crop_name: crop.crop_name, variety: crop.variety, quantity: crop.quantity, price_per_kg: crop.price_per_kg, amount: crop.amount, contract_nature: contractMetadata.contract_nature, contract_duration: contractMetadata.contract_duration, start_date: contractMetadata.start_date, end_date: contractMetadata.end_date, duration: contractMetadata.duration, farmer_platform_fee: contractMetadata.farmer_platform_fee, farmer_gst: contractMetadata.farmer_gst, buyer_platform_fee: contractMetadata.buyer_platform_fee, buyer_gst: contractMetadata.buyer_gst,
             buyer_total: (function() { try { const cropAmount = Number(crop.amount || 0); const subtotal = summary.subtotal || 0; const buyerPlatformTotal = buyerTotals.commission || 0; const buyerGstTotal = buyerTotals.gst || 0; const share = (subtotal > 0) ? (cropAmount / subtotal) : 0; const bf = Math.round((buyerPlatformTotal * share + Number.EPSILON) * 100) / 100; const bg = Math.round((buyerGstTotal * share + Number.EPSILON) * 100) / 100; return Math.round((cropAmount + bf + bg + Number.EPSILON) * 100) / 100; } catch (e) { return null; } })(),
             farmer_total: (function() { try { const cropAmount = Number(crop.amount || 0); const fpf = contractMetadata.farmer_platform_fee || 0; const fg = contractMetadata.farmer_gst || 0; return Math.round((cropAmount - fpf - fg + Number.EPSILON) * 100) / 100; } catch (e) { return null; } })(),
-            delivery_cost: contractMetadata.delivery_cost, status: 'pending'
+            delivery_cost: contractMetadata.delivery_cost, status: 'pending',
+            sender: 'buyer'  // Buyer is sending the contract
           };
           if (digitalSignature) { contractPayload.signature_method = digitalSignature.signature_method; contractPayload.signature_timestamp = digitalSignature.signature_timestamp; }
-          const saveRes = await fetch(`${apiBase}/contracts/save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contractPayload) });
+          const saveRes = await fetch(`${apiBase}/contracts/save-buyer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contractPayload) });
           if (saveRes && saveRes.ok) { const bodyJson = await saveRes.json().catch(() => null); if (bodyJson && bodyJson.contract_number && !savedContractNumber) { savedContractNumber = bodyJson.contract_number; } }
           else { const text = await (saveRes.text ? saveRes.text() : Promise.resolve('')).catch(() => ''); failedSaves.push({ crop: crop.crop_name, status: saveRes ? saveRes.status : 'no-response', body: text }); }
         } catch (e) { console.warn('❌ Error saving contract (fetch failed):', e); failedSaves.push({ crop: crop.crop_name, status: 'fetch-error', body: String(e) }); }
@@ -687,6 +688,7 @@ const Cart = () => {
       if (failedSaves.length) { console.warn('Some contract rows failed to save:', failedSaves); alert(`${failedSaves.length} rows failed to save. See console for details.`); }
       else {
         alert('Contract saved successfully to server.');
+        try { window.dispatchEvent(new Event('agriai:contracts:saved')); } catch (e) {}
         try {
           const buyer = { id: contractMetadata.buyer_id || localStorage.getItem('agriai_id') || null, name: contractMetadata.buyer_name || localStorage.getItem('agriai_name') || '', phone: contractMetadata.buyer_phone || localStorage.getItem('agriai_phone') || '', email: localStorage.getItem('agriai_email') || '' };
           const contractNum = savedContractNumber || contractMetadata.contract_number;

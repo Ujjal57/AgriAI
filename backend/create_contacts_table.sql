@@ -221,13 +221,19 @@ CREATE TABLE IF NOT EXISTS contracts (
   status VARCHAR(50) DEFAULT 'pending',
   signature_method VARCHAR(100) DEFAULT NULL,
   signature_timestamp DATETIME DEFAULT NULL,
+  sender VARCHAR(50) DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   INDEX idx_farmer_id (farmer_id),
   INDEX idx_buyer_id (buyer_id),
-  INDEX idx_created_at (created_at)
+  INDEX idx_created_at (created_at),
+  INDEX idx_sender (sender)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Migration: add sender column to contracts table (farmer or buyer)
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `sender` VARCHAR(50) DEFAULT NULL;
+ALTER TABLE `contracts` ADD INDEX IF NOT EXISTS `idx_sender` (`sender`);
 
 -- ========== Cart table ==========
 -- Stores cart items added by signed-in users. Each row represents a single item

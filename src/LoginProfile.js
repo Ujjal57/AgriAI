@@ -986,7 +986,7 @@ function LoginProfile() {
     // backend returns user info under j.user (or may include j.name); prefer j.user.name
     const name = j.name || (j.user && j.user.name) || '';
     // store session basic info for profile operations
-  try { localStorage.setItem('agriai_email', signinData.email); localStorage.setItem('agriai_role', role); localStorage.setItem('agriai_name', name); if (j && j.user && j.user.phone) localStorage.setItem('agriai_phone', j.user.phone); } catch (e) {}
+  try { localStorage.setItem('agriai_email', signinData.email); localStorage.setItem('agriai_role', role); localStorage.setItem('agriai_name', name); if (j && j.user && j.user.phone) localStorage.setItem('agriai_phone', j.user.phone); if (j && j.user && j.user.id) localStorage.setItem('agriai_id', String(j.user.id)); if (j && j.user && j.user.state) localStorage.setItem('agriai_state', j.user.state); if (j && j.user && j.user.region) localStorage.setItem('agriai_region', j.user.region); if (j && j.user && j.user.address) localStorage.setItem('agriai_address', j.user.address); } catch (e) {}
   // If buyer signs in, show the homepage first per UX request; otherwise go to role dashboard
   // Dispatch a custom event so Navbar updates immediately in the same tab
   try { window.dispatchEvent(new CustomEvent('agriai:login', { detail: { email: signinData.email, role, name } })); } catch (e) {}

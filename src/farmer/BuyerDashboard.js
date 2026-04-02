@@ -463,7 +463,7 @@ function BuyerSearchBox() {
           ? nonExpired.filter(ci => (ci.crop_name || '').toString().toLowerCase().includes(activeTerm))
           : nonExpired;
 
-        const filtered = nameFiltered;
+        const filtered = nameFiltered.filter(ci => Number(ci.quantity_kg || 0) > 0);
 
         if (!filtered.length)
           return <div style={{ gridColumn: '1/-1', color: '#000000ff' }}>{t('noListingsMatch', lang)}</div>;
