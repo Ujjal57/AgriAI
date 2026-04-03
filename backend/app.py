@@ -3474,20 +3474,22 @@ def farmer_contracts():
                 if farmer_id:
                     cur.execute('''
                         SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
-                               quantity_kg, amount, contract_number, created_at, crop_name, variety,
-                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status
+                               quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety, price_per_kg,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status,
+                               start_date, end_date, contract_nature, contract_duration
                         FROM contracts 
                         WHERE farmer_id=%s 
-                        ORDER BY created_at DESC
+                        ORDER BY updated_at DESC
                     ''', (int(farmer_id),))
                 else:
                     cur.execute('''
                         SELECT c.farmer_id, c.farmer_name, c.farmer_state, c.buyer_id, c.buyer_name, c.buyer_state,
-                               c.quantity_kg, c.amount, c.contract_number, c.created_at, c.crop_name, c.variety,
-                               c.farmer_platform_fee, c.farmer_gst, c.buyer_platform_fee, c.buyer_gst, c.buyer_total, c.farmer_total, c.delivery_cost, c.status
+                               c.quantity_kg, c.amount, c.contract_number, c.updated_at as created_at, c.crop_name, c.variety, c.price_per_kg,
+                               c.farmer_platform_fee, c.farmer_gst, c.buyer_platform_fee, c.buyer_gst, c.buyer_total, c.farmer_total, c.delivery_cost, c.status,
+                               c.start_date, c.end_date, c.contract_nature, c.contract_duration
                         FROM contracts c
                         WHERE c.farmer_id IN (SELECT id FROM farmer WHERE email=%s LIMIT 1)
-                        ORDER BY c.created_at DESC
+                        ORDER BY c.updated_at DESC
                     ''', (farmer_email,))
                 cols = [d[0] for d in cur.description]
                 fetched = cur.fetchall()
@@ -3498,20 +3500,22 @@ def farmer_contracts():
                 if farmer_id:
                     cur.execute('''
                         SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
-                               quantity_kg, amount, contract_number, created_at, crop_name, variety,
-                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status
+                               quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety, price_per_kg,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status,
+                               start_date, end_date, contract_nature, contract_duration
                         FROM contracts 
                         WHERE farmer_id=? 
-                        ORDER BY created_at DESC
+                        ORDER BY updated_at DESC
                     ''', (int(farmer_id),))
                 else:
                     cur.execute('''
                         SELECT c.farmer_id, c.farmer_name, c.farmer_state, c.buyer_id, c.buyer_name, c.buyer_state,
-                               c.quantity_kg, c.amount, c.contract_number, c.created_at, c.crop_name, c.variety,
-                               c.farmer_platform_fee, c.farmer_gst, c.buyer_platform_fee, c.buyer_gst, c.buyer_total, c.farmer_total, c.delivery_cost, c.status
+                               c.quantity_kg, c.amount, c.contract_number, c.updated_at as created_at, c.crop_name, c.variety, c.price_per_kg,
+                               c.farmer_platform_fee, c.farmer_gst, c.buyer_platform_fee, c.buyer_gst, c.buyer_total, c.farmer_total, c.delivery_cost, c.status,
+                               c.start_date, c.end_date, c.contract_nature, c.contract_duration
                         FROM contracts c
                         WHERE c.farmer_id IN (SELECT id FROM farmer WHERE email=? LIMIT 1)
-                        ORDER BY c.created_at DESC
+                        ORDER BY c.updated_at DESC
                     ''', (farmer_email,))
                 cols = [d[0] for d in cur.description]
                 fetched = cur.fetchall()
@@ -3566,20 +3570,20 @@ def farmer_contracts_b():
                 if farmer_id:
                     cur.execute('''
                         SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
-                               quantity_kg, amount, contract_number, created_at, crop_name, variety,
-                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status
+                               quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, sender
                         FROM contract_b 
                         WHERE farmer_id=%s AND status IN ('accepted', 'rejected')
-                        ORDER BY created_at DESC
+                        ORDER BY updated_at DESC
                     ''', (int(farmer_id),))
                 else:
                     cur.execute('''
                         SELECT cb.farmer_id, cb.farmer_name, cb.farmer_state, cb.buyer_id, cb.buyer_name, cb.buyer_state,
-                               cb.quantity_kg, cb.amount, cb.contract_number, cb.created_at, cb.crop_name, cb.variety,
-                               cb.farmer_platform_fee, cb.farmer_gst, cb.buyer_platform_fee, cb.buyer_gst, cb.buyer_total, cb.farmer_total, cb.delivery_cost, cb.status
+                               cb.quantity_kg, cb.amount, cb.contract_number, cb.updated_at as created_at, cb.crop_name, cb.variety,
+                               cb.farmer_platform_fee, cb.farmer_gst, cb.buyer_platform_fee, cb.buyer_gst, cb.buyer_total, cb.farmer_total, cb.delivery_cost, cb.status, cb.sender
                         FROM contract_b cb
                         WHERE cb.farmer_id IN (SELECT id FROM farmer WHERE email=%s LIMIT 1) AND cb.status IN ('accepted', 'rejected')
-                        ORDER BY cb.created_at DESC
+                        ORDER BY cb.updated_at DESC
                     ''', (farmer_email,))
                 cols = [d[0] for d in cur.description]
                 fetched = cur.fetchall()
@@ -3590,20 +3594,20 @@ def farmer_contracts_b():
                 if farmer_id:
                     cur.execute('''
                         SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
-                               quantity_kg, amount, contract_number, created_at, crop_name, variety,
-                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status
+                               quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, sender
                         FROM contract_b 
                         WHERE farmer_id=? AND status IN ('accepted', 'rejected')
-                        ORDER BY created_at DESC
+                        ORDER BY updated_at DESC
                     ''', (int(farmer_id),))
                 else:
                     cur.execute('''
                         SELECT cb.farmer_id, cb.farmer_name, cb.farmer_state, cb.buyer_id, cb.buyer_name, cb.buyer_state,
-                               cb.quantity_kg, cb.amount, cb.contract_number, cb.created_at, cb.crop_name, cb.variety,
-                               cb.farmer_platform_fee, cb.farmer_gst, cb.buyer_platform_fee, cb.buyer_gst, cb.buyer_total, cb.farmer_total, cb.delivery_cost, cb.status
+                               cb.quantity_kg, cb.amount, cb.contract_number, cb.updated_at as created_at, cb.crop_name, cb.variety,
+                               cb.farmer_platform_fee, cb.farmer_gst, cb.buyer_platform_fee, cb.buyer_gst, cb.buyer_total, cb.farmer_total, cb.delivery_cost, cb.status, cb.sender
                         FROM contract_b cb
                         WHERE cb.farmer_id IN (SELECT id FROM farmer WHERE email=? LIMIT 1) AND cb.status IN ('accepted', 'rejected')
-                        ORDER BY cb.created_at DESC
+                        ORDER BY cb.updated_at DESC
                     ''', (farmer_email,))
                 cols = [d[0] for d in cur.description]
                 fetched = cur.fetchall()

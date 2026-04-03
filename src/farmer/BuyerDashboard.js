@@ -104,40 +104,6 @@ function BuyerSearchBox() {
       });
   };
 
-  const handleShowAll = () => {
-    setActiveCropFilter('');
-    setResults(null);
-    setError(null);
-    setLoading(true);
-    const base = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
-    const listUrl = `${base}/deals/list`;
-    fetch(listUrl).then(r => r.json()).then(j => {
-      setLoading(false);
-      if (j && j.ok && Array.isArray(j.deals)) {
-        const mapped = j.deals.map(d => ({ 
-          id: d.id, 
-          crop_name: d.crop_name, 
-          quantity_kg: d.quantity_kg, 
-          price_per_kg: d.price_per_kg || 0, 
-          image_url: d.image_url, 
-          _farmer_name: d.buyer_name || '', 
-          _farmer_phone: d.buyer_phone || '', 
-          address: d.address || '',
-          region: d.region || '',
-          state: d.state || '',
-          category: d.category || '',
-          variety: d.variety || '',
-          created_at: d.created_at,
-          delivery_date: d.delivery_date
-        }));
-        const synthetic = [{ id: '_all_deals', name: 'Deals', phone: '', crop_samples: mapped }];
-        setResults(synthetic);
-      } else {
-        setError('Failed to fetch listings');
-      }
-    }).catch(e => { setLoading(false); setError('Fetch failed'); });
-  };
-
   React.useEffect(() => {
     (async () => {
       try {
@@ -280,28 +246,6 @@ function BuyerSearchBox() {
     {t('findBuyersTitle', lang)}
   </h3>
 
-  {/* Right-Aligned Button */}
-  <div style={{ marginLeft: 'auto' }}>
-    <button
-      onClick={handleShowAll}
-      style={{
-        background: 'linear-gradient(135deg, #236902 0%, #53b635 100%)',
-        border: 'none',
-        color: '#fff',
-        padding: '8px 14px',
-        borderRadius: 8,
-        cursor: 'pointer',
-        fontWeight: 700,
-        fontSize: '0.9rem',
-        boxShadow: '0 4px 12px rgba(35,105,2,0.2)',
-        transition: 'transform 0.2s, box-shadow 0.2s'
-      }}
-      onMouseEnter={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 16px rgba(35,105,2,0.3)'; }}
-      onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 12px rgba(35,105,2,0.2)'; }}
-      >
-      {t('showAll', lang)}
-    </button>
-  </div>
 </div>
 
         <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'nowrap', marginTop:30, overflowX:'auto', paddingBottom:8}}>
@@ -714,6 +658,19 @@ function BuyerSearchBox() {
 }
 
 export default function BuyerDashboard() {
+  const [currentLang, setCurrentLang] = React.useState(localStorage.getItem('agri_lang') || 'en');
+
+  React.useEffect(() => {
+    const onLangChange = (e) => {
+      const lang = (e && e.detail && e.detail.lang) ? e.detail.lang : (localStorage.getItem('agri_lang') || 'en');
+      setCurrentLang(lang);
+      try { window.location.reload(); } catch (e) {}
+    };
+
+    window.addEventListener('agri:lang:change', onLangChange);
+    return () => window.removeEventListener('agri:lang:change', onLangChange);
+  }, []);
+
   return (
     <div className="bd-root" style={{ background: 'rgba(83, 255, 3, 0.12)', backgroundAttachment: 'fixed', minHeight: '100vh', color: '#000', position: 'relative', overflow: 'hidden' }}>
       <style>{`
@@ -755,14 +712,14 @@ export default function BuyerDashboard() {
                 <span style={{color:'oklch(0.65 0.22 145)', fontFamily:"'Times New Roman', Times, serif"}}>AgriAI</span>
               </div>
               <p className="text-white text-sm leading-relaxed" style={{fontFamily:"'Times New Roman', Times, serif"}}>
-                {t('footerDescription', localStorage.getItem('agri_lang') || 'en')}
+                {t('footerDescription', currentLang)}
               </p>
             </div>
 
             {[
-              { title: t('footerPlatform', localStorage.getItem('agri_lang') || 'en'), links: ['footerAbout', 'footerHowItWorks', 'footerFeatures', 'footerPricing'] },
-              { title: t('footerUsers', localStorage.getItem('agri_lang') || 'en'), links: ['footerFarmers', 'footerBuyers', 'footerAgribusiness', 'footerPartners'] },
-              { title: t('footerLegal', localStorage.getItem('agri_lang') || 'en'), links: ['footerPrivacy', 'footerTerms', { label: t('footerContact', localStorage.getItem('agri_lang') || 'en'), path: "/contact" }] },
+              { title: t('footerPlatform', currentLang), links: ['footerAbout', 'footerHowItWorks', 'footerFeatures', 'footerPricing'] },
+              { title: t('footerUsers', currentLang), links: ['footerFarmers', 'footerBuyers', 'footerAgribusiness', 'footerPartners'] },
+              { title: t('footerLegal', currentLang), links: ['footerPrivacy', 'footerTerms', { label: t('footerContact', currentLang), path: "/contact" }] },
             ].map((col) => (
               <div key={col.title}>
                 <h4 className="font-semibold text-white mb-2" style={{fontFamily:"'Times New Roman', Times, serif"}}>{col.title}</h4>
@@ -791,7 +748,7 @@ export default function BuyerDashboard() {
 
           <div className="pt-3 flex justify-center items-center text-white text-sm" style={{borderTop:'1px solid oklch(0.65 0.22 145 / 0.12)', fontFamily:"'Times New Roman', Times, serif"}}>
             <span>
-              © {new Date().getFullYear()} AgriAI. {t('footerRights', localStorage.getItem('agri_lang') || 'en')}
+              © {new Date().getFullYear()} AgriAI. {t('footerRights', currentLang)}
             </span>
           </div>
         </div>

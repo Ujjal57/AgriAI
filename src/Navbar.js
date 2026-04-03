@@ -779,7 +779,7 @@ const Navbar = () => {
           <td style="padding:8px;border:1px solid #ddd;text-align:center">${idx + 1}</td>
           <td style="padding:8px;border:1px solid #ddd;text-align:center">${it.crop_name || ''}</td>
           <td style="padding:8px;border:1px solid #ddd;text-align:center">${varietyVal}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${qty.toLocaleString('en-IN')} kg</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${Math.round(qty).toLocaleString('en-IN')} kg</td>
           <td style="padding:8px;border:1px solid #ddd;text-align:center">${formatCurrency(price)}</td>
           <td style="padding:8px;border:1px solid #ddd;text-align:center">${formatCurrency(amount)}</td>
         </tr>`;
@@ -814,6 +814,40 @@ const Navbar = () => {
       color: #000;
       line-height: 1.8;
       background: #fff;
+    }
+    @page {
+      size: A4;
+      margin: 20mm;
+    }
+    @media print {
+      body {
+        margin: 0;
+        padding: 0;
+        color: #000;
+        background: #fff !important;
+        line-height: 1.4;
+        font-size: 12px;
+        max-width: 100%;
+      }
+      .section, .signature-section, .header, .footer {
+        page-break-inside: avoid;
+      }
+      h1, h2, h3 {
+        page-break-after: avoid;
+        page-break-before: avoid;
+      }
+      table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+      th, td {
+        border: 1px solid #888 !important;
+        padding: 6px 8px !important;
+        font-size: 11px !important;
+      }
+      .print-page-break {
+        page-break-after: always;
+      }
     }
     .header {
       text-align: center;
@@ -931,17 +965,6 @@ const Navbar = () => {
       margin: 24px 0 4px 0;
       min-height: 20px;
     }
-    @media print {
-      body {
-        padding: 0;
-      }
-      .section {
-        page-break-inside: avoid;
-      }
-      h2 {
-        page-break-after: avoid;
-      }
-    }
   </style>
         </head>
         <body>
@@ -955,14 +978,14 @@ const Navbar = () => {
             <p><strong>पक्ष A – खरीदार / कंपनी</strong></p>
             <p><b>नाम:</b> ${buyerName}</p>
             <p><b>खरीदार आईडी:</b> ${buyerId || '[Buyer ID]'}</p>
-            <p><b>पता:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+            <p><b>पता:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p>
           </div>
         
           <div class="party-section">
             <p><strong>पक्ष B – किसान / उत्पादक</strong></p>
             <p><b>नाम:</b> ${farmerName}</p>
             <p><b>किसान आईडी:</b> ${farmerId}</p>
-            <p><b>पता:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+            <p><b>पता:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p>
           </div>
         
           <p>
@@ -1058,7 +1081,7 @@ const Navbar = () => {
             <h2>5. मूल्य एवं भुगतान की शर्तें</h2>
             
             <h3>5.1 किसान की भुगतान संरचना</h3>
-            <p><b>कुल मात्रा:</b> ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
+            <p><b>कुल मात्रा:</b> ${Math.round(totalContractQty).toLocaleString('en-IN')} किग्रा</p>
             <p><b>प्रति इकाई मूल्य:</b> ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
             <p><b>उप-योग:</b> ${formatCurrency(totalCropTradeValue)}</p>
             <p><b>प्लेटफ़ॉर्म शुल्क:</b> ${formatCurrency(totalPlatformFee)}</p>
@@ -1066,7 +1089,7 @@ const Navbar = () => {
             <p><b style="font-size: 16px; color: #236902;">कुल राशि (कटौती के बाद):</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(totalAmountInvoice)}</b></p>
         
             <h3 style="margin-top: 20px;">5.2 खरीदार की भुगतान संरचना</h3>
-            <p><b>कुल मात्रा:</b> ${totalContractQty.toLocaleString('en-IN')} किग्रा</p>
+            <p><b>कुल मात्रा:</b> ${Math.round(totalContractQty).toLocaleString('en-IN')} किग्रा</p>
             <p><b>प्रति इकाई मूल्य:</b> ${formatCurrency(avgPricePerKg)} प्रति किग्रा</p>
             <p><b>उप-योग:</b> ${formatCurrency(totalCropTradeValue)}</p>
             <p><b>प्लेटफ़ॉर्म शुल्क:</b> ${formatCurrency(buyerPlatformFee)}</p>
@@ -1266,145 +1289,168 @@ const Navbar = () => {
           <title>AgriAI Contract</title>
           <meta name="viewport" content="width=device-width,initial-scale=1" />
           <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            body {
-              font-family: 'Times New Roman', Times, serif;
-              color: #000;
-              line-height: 1.8;
-              background: #fff;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 16px;
-              padding-bottom: 12px;
-              border-bottom: 3px solid #236902;
-            }
-            .header img {
-              width: 80px;
-              height: auto;
-              margin: 0 auto 16px auto;
-              display: block;
-            }
-            h1 {
-              text-align: center;
-              color: #236902;
-              margin: 8px 0;
-              font-size: 28px;
-              font-weight: 700;
-              letter-spacing: 0.5px;
-            }
-            h2 {
-              color: #1a5c10;
-              margin: 12px 0 8px 0;
-              font-size: 18px;
-              font-weight: 700;
-              padding-bottom: 8px;
-              border-bottom: 2px solid #e0e0e0;
-            }
-            h3 {
-              color: #236902;
-              margin: 10px 0 6px 0;
-              font-size: 15px;
-              font-weight: 700;
-            }
-            p {
-              margin: 6px 0;
-              text-align: justify;
-              font-size: 14px;
-              color: #000;
-            }
-            .section {
-              margin: 12px 0;
-              padding: 8px 0;
-            }
-            ul {
-              margin: 6px 0 6px 24px;
-              font-size: 14px;
-              list-style-type: disc;
-              color: #000;
-            }
-            li {
-              margin: 3px 0;
-              list-style-type: disc;
-              color: #000;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 12px 0;
-              background: #fff;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            }
-            th {
-              background: #236902;
-              color: #fff;
-              padding: 12px 8px;
-              text-align: center;
-              font-weight: 700;
-              font-size: 13px;
-              border: 1px solid #ddd;
-            }
-            td {
-              padding: 10px 8px;
-              border: 1px solid #ddd;
-              text-align: center;
-              font-size: 13px;
-              color: #000;
-            }
-            tr:nth-child(even) {
-              background: #f9f9f9;
-            }
-            tr:hover {
-              background: #f0f7ff;
-            }
-            strong {
-              font-weight: 700;
-              color: #000;
-            }
-            .party-section {
-              background: #f5f9f5;
-              padding: 12px;
-              border-left: 4px solid #236902;
-              margin: 8px 0;
-              border-radius: 4px;
-            }
-            .signature-section {
-              margin-top: 20px;
-              padding-top: 16px;
-              border-top: 2px solid #ddd;
-              display: flex;
-              justify-content: space-around;
-              gap: 32px;
-            }
-            .signature-line {
-              text-align: center;
-              width: 200px;
-            }
-            .signature-line p {
-              margin: 4px 0;
-              font-size: 15px;
-            }
-            .signature-line .line {
-              border-top: 1px solid #000;
-              margin: 24px 0 4px 0;
-              min-height: 20px;
-            }
-            @media print {
-              body {
-                padding: 0;
-              }
-              .section {
-                page-break-inside: avoid;
-              }
-              h2 {
-                page-break-after: avoid;
-              }
-            }
-          </style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      color: #000;
+      line-height: 1.8;
+      background: #fff;
+    }
+    @page {
+      size: A4;
+      margin: 20mm;
+    }
+    @media print {
+      body {
+        margin: 0;
+        padding: 0;
+        color: #000;
+        background: #fff !important;
+        line-height: 1.4;
+        font-size: 12px;
+        max-width: 100%;
+      }
+      .section, .signature-section, .header, .footer {
+        page-break-inside: avoid;
+      }
+      h1, h2, h3 {
+        page-break-after: avoid;
+        page-break-before: avoid;
+      }
+      table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+      th, td {
+        border: 1px solid #888 !important;
+        padding: 6px 8px !important;
+        font-size: 11px !important;
+      }
+      .print-page-break {
+        page-break-after: always;
+      }
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 3px solid #236902;
+    }
+    .header img {
+      width: 80px;
+      height: auto;
+      margin: 0 auto 16px auto;
+      display: block;
+    }
+    h1 {
+      text-align: center;
+      color: #236902;
+      margin: 8px 0;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    h2 {
+      color: #1a5c10;
+      margin: 12px 0 8px 0;
+      font-size: 18px;
+      font-weight: 700;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    h3 {
+      color: #236902;
+      margin: 10px 0 6px 0;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    p {
+      margin: 6px 0;
+      text-align: justify;
+      font-size: 14px;
+      color: #000;
+    }
+    .section {
+      margin: 12px 0;
+      padding: 8px 0;
+    }
+    ul {
+      margin: 6px 0 6px 24px;
+      font-size: 14px;
+      list-style-type: disc;
+      color: #000;
+    }
+    li {
+      margin: 3px 0;
+      list-style-type: disc;
+      color: #000;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    th {
+      background: #236902;
+      color: #fff;
+      padding: 12px 8px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 13px;
+      border: 1px solid #ddd;
+    }
+    td {
+      padding: 10px 8px;
+      border: 1px solid #ddd;
+      text-align: center;
+      font-size: 13px;
+      color: #000;
+    }
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    tr:hover {
+      background: #f0f7ff;
+    }
+    strong {
+      font-weight: 700;
+      color: #000;
+    }
+    .party-section {
+      background: #f5f9f5;
+      padding: 12px;
+      border-left: 4px solid #236902;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    .signature-section {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 2px solid #ddd;
+      display: flex;
+      justify-content: space-around;
+      gap: 32px;
+    }
+    .signature-line {
+      text-align: center;
+      width: 200px;
+    }
+    .signature-line p {
+      margin: 4px 0;
+      font-size: 15px;
+    }
+    .signature-line .line {
+      border-top: 1px solid #000;
+      margin: 24px 0 4px 0;
+      min-height: 20px;
+    }
+  </style>
         </head>
         <body>
         <div class="header">
@@ -1523,7 +1569,7 @@ const Navbar = () => {
             <h2>5. ಬೆಲೆ ಮತ್ತು ಪಾವತಿ ನಿಯಮಗಳು</h2>
             
             <h3>5.1 ರೈತನ ಪಾವತಿ ರಚನೆ</h3>
-            <p><b>ಒಟ್ಟು ಪ್ರಮಾಣ:</b> ${totalContractQty.toLocaleString('en-IN')} ಕೆಜಿ</p>
+            <p><b>ಒಟ್ಟು ಪ್ರಮಾಣ:</b> ${Math.round(totalContractQty).toLocaleString('en-IN')} ಕೆಜಿ</p>
             <p><b>ಪ್ರತಿ ಘಟಕದ ಬೆಲೆ:</b> ${formatCurrency(avgPricePerKg)} ಪ್ರತಿ ಕೆಜಿ</p>
             <p><b>ಉಪಮೊತ್ತ:</b> ${formatCurrency(totalCropTradeValue)}</p>
             <p><b>ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಶುಲ್ಕ:</b> ${formatCurrency(totalPlatformFee)}</p>
@@ -1531,7 +1577,7 @@ const Navbar = () => {
             <p><b style="font-size: 16px; color: #236902;">ಒಟ್ಟು ಮೊತ್ತ (ಕಡಿತದ ನಂತರ):</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(totalAmountInvoice)}</b></p>
         
             <h3 style="margin-top: 20px;">5.2 ಖರೀದಿದಾರರ ಪಾವತಿ ರಚನೆ</h3>
-            <p><b>ಒಟ್ಟು ಪ್ರಮಾಣ:</b> ${totalContractQty.toLocaleString('en-IN')} ಕೆಜಿ</p>
+            <p><b>ಒಟ್ಟು ಪ್ರಮಾಣ:</b> ${Math.round(totalContractQty).toLocaleString('en-IN')} ಕೆಜಿ</p>
             <p><b>ಪ್ರತಿ ಘಟಕದ ಬೆಲೆ:</b> ${formatCurrency(avgPricePerKg)} ಪ್ರತಿ ಕೆಜಿ</p>
             <p><b>ಉಪಮೊತ್ತ:</b> ${formatCurrency(totalCropTradeValue)}</p>
             <p><b>ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಶುಲ್ಕ:</b> ${formatCurrency(buyerPlatformFee)}</p>
@@ -1742,6 +1788,40 @@ const Navbar = () => {
       line-height: 1.8;
       background: #fff;
     }
+    @page {
+      size: A4;
+      margin: 20mm;
+    }
+    @media print {
+      body {
+        margin: 0;
+        padding: 0;
+        color: #000;
+        background: #fff !important;
+        line-height: 1.4;
+        font-size: 12px;
+        max-width: 100%;
+      }
+      .section, .signature-section, .header, .footer {
+        page-break-inside: avoid;
+      }
+      h1, h2, h3 {
+        page-break-after: avoid;
+        page-break-before: avoid;
+      }
+      table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+      th, td {
+        border: 1px solid #888 !important;
+        padding: 6px 8px !important;
+        font-size: 11px !important;
+      }
+      .print-page-break {
+        page-break-after: always;
+      }
+    }
     .header {
       text-align: center;
       margin-bottom: 16px;
@@ -1857,17 +1937,6 @@ const Navbar = () => {
       border-top: 1px solid #000;
       margin: 24px 0 4px 0;
       min-height: 20px;
-    }
-    @media print {
-      body {
-        padding: 0;
-      }
-      .section {
-        page-break-inside: avoid;
-      }
-      h2 {
-        page-break-after: avoid;
-      }
     }
   </style>
 </head>
@@ -1986,7 +2055,7 @@ const Navbar = () => {
     <h2>5. PRICE & PAYMENT TERMS</h2>
     
     <h3>5.1 Farmer's Payment Structure</h3>
-    <p><b>Total Quantity:</b> ${totalContractQty.toLocaleString('en-IN')} kg</p>
+    <p><b>Total Quantity:</b> ${Math.round(totalContractQty).toLocaleString('en-IN')} kg</p>
     <p><b>Price per Unit:</b> ${formatCurrency(avgPricePerKg)} per kg</p>
     <p><b>Subtotal:</b> ${formatCurrency(totalCropTradeValue)}</p>
     <p><b>Platform Fee:</b> ${formatCurrency(totalPlatformFee)}</p>
@@ -1994,7 +2063,7 @@ const Navbar = () => {
     <p><b style="font-size: 16px; color: #236902;">Total Amount (After Deduction):</b> <b style="font-size: 16px; color: #236902;">${formatCurrency(totalAmountInvoice)}</b></p>
 
     <h3 style="margin-top: 20px;">5.2 Buyer's Payment Structure</h3>
-    <p><b>Total Quantity:</b> ${totalContractQty.toLocaleString('en-IN')} kg</p>
+    <p><b>Total Quantity:</b> ${Math.round(totalContractQty).toLocaleString('en-IN')} kg</p>
     <p><b>Price per Unit:</b> ${formatCurrency(avgPricePerKg)} per kg</p>
     <p><b>Subtotal:</b> ${formatCurrency(totalCropTradeValue)}</p>
     <p><b>Platform Fee:</b> ${formatCurrency(buyerPlatformFee)}</p>
@@ -2622,7 +2691,37 @@ const Navbar = () => {
             <h2 style={{margin:0, color:'#236902', fontSize:'18px', fontWeight:700}}>{t('contractPreview', siteLang) || 'Contract Preview'}</h2>
             <div style={{position:'absolute', right:24, top:'50%', transform:'translateY(-50%)', display:'flex', gap:10, alignItems:'center'}}>
               <button 
-                onClick={() => window.print()}
+                onClick={() => {
+                  const iframe = document.createElement('iframe');
+                  iframe.style.position = 'fixed';
+                  iframe.style.right = '0';
+                  iframe.style.bottom = '0';
+                  iframe.style.width = '0';
+                  iframe.style.height = '0';
+                  iframe.style.border = '0';
+                  iframe.style.visibility = 'hidden';
+                  document.body.appendChild(iframe);
+                  
+                  const doc = iframe.contentWindow.document;
+                  doc.open();
+                  doc.write(contractHtml);
+                  doc.close();
+                  
+                  setTimeout(() => {
+                    try {
+                      iframe.contentWindow.focus();
+                      iframe.contentWindow.print();
+                      setTimeout(() => {
+                        try {
+                          document.body.removeChild(iframe);
+                        } catch (e) {}
+                      }, 1000);
+                    } catch (err) {
+                      console.warn('Print failed', err);
+                      alert('Print failed. Please try again.');
+                    }
+                  }, 500);
+                }}
                 onMouseEnter={(e) => { e.target.style.background='#28a745'; e.target.style.color='#fff'; }}
                 onMouseLeave={(e) => { e.target.style.background='#fff'; e.target.style.color='#28a745'; }}
                 style={{padding:'5px 12px', background:'#fff', color:'#28a745', border:'2px solid #28a745', borderRadius:6, fontWeight:600, cursor:'pointer', fontSize:'12px', transition:'all 0.2s ease'}}>

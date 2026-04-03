@@ -1,5 +1,6 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { Leaf } from 'lucide-react';
 import Navbar from './Navbar';
 import ImageSlideshow from './ImageSlideshow';
 import Chatbot from './Chatbot';
@@ -82,6 +83,32 @@ function BuyerSearchBox() {
     } catch (e) { return value; }
   }, [lang]);
 
+  const handleShowAll = async () => {
+    setActiveCropFilter('');
+    setResults(null);
+    setError(null);
+    setLoading(true);
+    try {
+      const base = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
+      const res = await fetch(`${base}/my-crops/list`);
+      setLoading(false);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Server returned ${res.status}: ${txt || res.statusText}`);
+      }
+      const j = await res.json().catch(() => null);
+      if (j && j.ok && Array.isArray(j.crops)) {
+        const synthetic = [{ id: '_all_crops', name: 'All listings', phone: '', crop_samples: j.crops }];
+        setResults(synthetic);
+      } else {
+        setError((j && j.error) || 'No results');
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(err.message || 'Fetch failed');
+    }
+  };
+
   const handleSearch = () => {
     setActiveCropFilter((crop || '').toString().trim());
     setResults(null);
@@ -118,7 +145,6 @@ function BuyerSearchBox() {
       });
   };
 
-  
 
   React.useEffect(() => {
     (async () => {
@@ -361,15 +387,40 @@ function BuyerSearchBox() {
   }, []);
 
   return (
-    <div style={{display:'flex', alignItems:'center', justifyContent:'center', padding:'4.5rem 0rem 2rem 0rem'}}>
-      <div style={{background:'#fff', padding:'1rem 5rem', boxShadow:'0 6px 12px rgba(0,0,0,0.06)', width:'100%', maxWidth:980, marginTop: '1.5rem'}}>
-        <h3 style={{marginTop:0, color:'#236902', textAlign:'center', fontSize:26, lineHeight:1.2, paddingBottom:8}}>{t('findFarmersTitle', lang)}</h3>
-        <div style={{display:'flex', gap:6, alignItems:'flex-start', flexWrap:'nowrap', overflowX:'auto'}}>
+    <div style={{display:'flex', alignItems:'center', justifyContent:'center', padding:'0 1rem'}}>
+      <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(20px) saturate(1.6)', WebkitBackdropFilter:'blur(20px) saturate(1.6)', border:'1px solid rgba(255,255,255,0.6)', borderRadius:'24px', padding:'2.5rem', boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', width:'100%', maxWidth:1000}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', position:'relative', width:'100%', flexWrap:'wrap'}}>
+          <h3 style={{position:'absolute', left:'50%', transform:'translateX(-50%)', margin:0, backgroundImage:'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)', WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent', fontSize:22, fontWeight:800, lineHeight:1.2, paddingBottom:5, textAlign:'center', width:'100%', pointerEvents:'none'}}>
+            {t('findBuyersTitle', lang)}
+          </h3>
+          <div style={{ marginLeft: 'auto' }}>
+            <button
+              onClick={handleShowAll}
+              style={{
+                background: 'linear-gradient(135deg, #236902 0%, #53b635 100%)',
+                border: 'none',
+                color: '#fff',
+                padding: '8px 14px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                boxShadow: '0 4px 12px rgba(35,105,2,0.2)',
+                transition: 'transform 0.2s, box-shadow 0.2s'
+              }}
+              onMouseEnter={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 16px rgba(35,105,2,0.3)'; }}
+              onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 12px rgba(35,105,2,0.2)'; }}
+            >
+              {t('showAll', lang)}
+            </button>
+          </div>
+        </div>
+        <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'nowrap', marginTop:30, overflowX:'auto', paddingBottom:8}}>
           {/* Region, State, Category, Crop, Variety Dropdowns */}
           <div style={{flex:'1 1 160px', minWidth:120}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelRegion', lang)}</label>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14, color:'#2d5c1a'}}>{t('labelRegion', lang)}</label>
             {(regionMaster && regionMaster.length ? regionMaster : regionOptions).length ? (
-              <select value={region} onChange={e => setRegion(e.target.value)} style={{width:'100%', padding:6, whiteSpace:'normal'}}>
+              <select value={region} onChange={e => setRegion(e.target.value)} style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}}>
                 <option value=''>{t('selectRegion', lang)}</option>
                     {(regionMaster && regionMaster.length ? regionMaster : regionOptions).filter(r => isOptionEnabled('region', r)).map(r => {
                       const label = (r || '').toString();
@@ -377,7 +428,7 @@ function BuyerSearchBox() {
                     })}
               </select>
             ) : (
-              <select value={region} onChange={e => setRegion(e.target.value)} style={{width:'100%', padding:6, whiteSpace:'normal'}}>
+              <select value={region} onChange={e => setRegion(e.target.value)} style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}}>
                 <option value=''>{t('selectRegion', lang)}</option>
                 <option value='North' title={'North'}>North</option>
                 <option value='South' title={'South'}>South</option>
@@ -387,9 +438,9 @@ function BuyerSearchBox() {
             )}
           </div>
           <div style={{flex:'1 1 220px', minWidth:120}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelState', lang)}</label>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14, color:'#2d5c1a'}}>{t('labelState', lang)}</label>
             {(stateMaster && stateMaster.length ? stateMaster : stateOptions).length ? (
-              <select value={state} onChange={e => setState(e.target.value)} style={{width:'100%', padding:6, whiteSpace:'normal'}}>
+              <select value={state} onChange={e => setState(e.target.value)} style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}}>
                 <option value=''>{t('selectState', lang)}</option>
                 {(stateMaster && stateMaster.length ? stateMaster : stateOptions).filter(s => isOptionEnabled('state', s)).map(s => {
                   const label = translateOption('state', s, lang);
@@ -397,22 +448,22 @@ function BuyerSearchBox() {
                 })}
               </select>
             ) : (
-              <input value={state} onChange={e => setState(e.target.value)} placeholder={t('placeholderState', lang) || t('placeholderState', 'en')} style={{width:'100%', padding:6}} />
+              <input value={state} onChange={e => setState(e.target.value)} placeholder={t('placeholderState', lang) || t('placeholderState', 'en')} style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}} />
             )}
           </div>
           <div style={{flex:'1 1 160px', minWidth:120}}>
-                      <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelAddress', lang)}</label>
-                      <input
-                        type="text"
-                        value={address}
-                        onChange={e => setAddress(e.target.value)}
-                        placeholder={t('labelAddress', lang)}
-                        style={{width:'100%', padding:6}}
-                      />
-                    </div>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14, color:'#2d5c1a'}}>{t('labelAddress', lang)}</label>
+            <input
+              type="text"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              placeholder={t('labelAddress', lang)}
+              style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}}
+            />
+          </div>
           <div style={{flex:'1 1 180px', minWidth:120, marginLeft:12}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelCategory', lang)}</label>
-            <select value={category} onChange={e => { setCategory(e.target.value); setCrop(''); setVariety(''); }} style={{width:'100%', padding:6, whiteSpace:'normal'}}>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14, color:'#2d5c1a'}}>{t('labelCategory', lang)}</label>
+            <select value={category} onChange={e => { setCategory(e.target.value); setCrop(''); setVariety(''); }} style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}}>
               <option value=''>{t('selectCategory', lang)}</option>
               {(categoryMaster && categoryMaster.length ? categoryMaster : categoryOptions).filter(s => isOptionEnabled('category', s)).map(s => {
                 const label = translateOption('category', s, lang);
@@ -421,9 +472,9 @@ function BuyerSearchBox() {
             </select>
           </div>
           <div style={{flex:'1 1 180px', minWidth:110}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelCropName', lang)}</label>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14, color:'#2d5c1a'}}>{t('labelCropName', lang)}</label>
             {(cropMaster && cropMaster.length ? cropMaster : cropOptions).length ? (
-              <select value={crop} onChange={e => { setCrop(e.target.value); setVariety(''); }} style={{width:'100%', padding:6, whiteSpace:'normal'}}>
+              <select value={crop} onChange={e => { setCrop(e.target.value); setVariety(''); }} style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}}>
                 <option value=''>{t('selectCrop', lang)}</option>
                 {(cropMaster && cropMaster.length ? cropMaster : cropOptions).filter(s => isOptionEnabled('crop', s)).map(s => {
                   const label = translateOption('crop', s, lang);
@@ -431,12 +482,12 @@ function BuyerSearchBox() {
                 })}
               </select>
             ) : (
-              <input value={crop} onChange={e => setCrop(e.target.value)} placeholder={t('placeholderCropExample', lang)} style={{width:'100%', padding:6}} />
+              <input value={crop} onChange={e => setCrop(e.target.value)} placeholder={t('placeholderCropExample', lang)} style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}} />
             )}
           </div>
           <div style={{flex:'1 1 180px', minWidth:120}}>
-            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14}}>{t('labelVariety', lang)}</label>
-            <select value={variety} onChange={e => setVariety(e.target.value)} style={{width:'100%', padding:6, whiteSpace:'normal'}}>
+            <label style={{display:'block', marginBottom:2, fontWeight:700, fontSize:14, color:'#2d5c1a'}}>{t('labelVariety', lang)}</label>
+            <select value={variety} onChange={e => setVariety(e.target.value)} style={{width:'100%', padding:'10px 14px', border:'1.5px solid #d4edcc', borderRadius:10, background:'rgba(255,255,255,0.95)', color:'#1a3d0a', fontSize:'0.9rem', fontFamily:'inherit', outline:'none', transition:'border-color 0.25s, box-shadow 0.25s'}}>
               <option value=''>{t('selectVariety', lang)}</option>
               {(varietyMaster && varietyMaster.length ? varietyMaster : varietyOptions).filter(s => isOptionEnabled('variety', s)).map(s => {
                 const label = translateOption('variety', s, lang);
@@ -702,57 +753,86 @@ export default function FarmerDashboard() {
   const isBuyer = role === 'buyer';
 
   return (
-    <div className="min-h-screen bg-green-50 text-gray-900">
+    <div className="bd-root" style={{ background: 'rgba(83, 255, 3, 0.12)', backgroundAttachment: 'fixed', minHeight: '100vh', color: '#000', position: 'relative', overflow: 'hidden' }}>
+      <style>{`
+        .bd-root {
+          background: rgba(83, 255, 3, 0.12) !important;
+        }
+        .bd-root .homepage-hero {
+          background: rgba(83, 255, 3, 0) !important;
+        }
+        .bd-root .navbar {
+          background: oklch(0.12 0.03 160 / 0.5) !important;
+          backdrop-filter: blur(12px) !important;
+          -webkit-backdrop-filter: blur(12px) !important;
+        }
+        .bd-root .navbar select {
+          background: oklch(0.12 0.03 160 / 0.6) !important;
+          border: 1px solid oklch(0.65 0.22 145 / 0.3) !important;
+          color: rgba(255,255,255,0.9) !important;
+        }
+        .bd-root .navbar select option {
+          background: #1a1a1a;
+          color: #ffffff;
+        }
+      `}</style>
       <Navbar />
-      <main className="homepage-hero">
-          {isBuyer ? (
-          <BuyerSearchBox />
-        ) : (
-          <>
-            <ImageSlideshow />
-            <section className="about-agriai">
-              <h2 className="about-title">{t('aboutTitle', lang)}</h2>
-              <p>{t('aboutText', lang)}</p>
-            </section>
-            <section className="why-choose-agriai">
-              <h2 className="why-choose-title">{t('whyTitle', lang)}</h2>
-              <div className="why-choose-cards">
-                <div className="why-card">
-                  <span className="why-icon" role="img" aria-label="contract">🤝</span>
-                  <h3>{t('card1Title', lang)}</h3>
-                  <p>{t('card1Text', lang)}</p>
-                </div>
-                <div className="why-card">
-                  <span className="why-icon" role="img" aria-label="crop">🌾</span>
-                  <h3>{t('card2Title', lang)}</h3>
-                  <p>{t('card2Text', lang)}</p>
-                </div>
-                <div className="why-card">
-                  <span className="why-icon" role="img" aria-label="price">💰</span>
-                  <h3>{t('card3Title', lang)}</h3>
-                  <p>{t('card3Text', lang)}</p>
-                </div>
-                <div className="why-card">
-                  <span className="why-icon" role="img" aria-label="chatbot">🧠</span>
-                  <h3>{t('card4Title', lang)}</h3>
-                  <p>{t('card4Text', lang)}</p>
-                </div>
-                <div className="why-card">
-                  <span className="why-icon" role="img" aria-label="government">🏛️</span>
-                  <h3>{t('card5Title', lang)}</h3>
-                  <p>{t('card5Text', lang)}</p>
-                </div>
-                <div className="why-card">
-                  <span className="why-icon" role="img" aria-label="language">🌐</span>
-                  <h3>{t('card6Title', lang)}</h3>
-                  <p>{t('card6Text', lang)}</p>
-                </div>
-              </div>
-            </section>
-          </>
-        )}
+      <main className="homepage-hero" style={{ padding: '6rem 1rem 2rem', position: 'relative', zIndex: 1 }}>
+        <BuyerSearchBox />
       </main>
       <Chatbot />
+      <footer className="w-full border-t mt-8" style={{background:'oklch(0.12 0.03 160 / 0.5)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'1em 0'}}>
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid md:grid-cols-4 gap-4 mb-3">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-xl mb-2">
+                <div className="w-7 h-7 rounded-lg border border-primary/40 flex items-center justify-center" style={{background:'oklch(0.65 0.22 145 / 0.2)', borderColor:'oklch(0.65 0.22 145)'}}>
+                  <Leaf className="w-3.5 h-3.5" style={{color:'oklch(0.65 0.22 145)'}} />
+                </div>
+                <span style={{color:'oklch(0.65 0.22 145)', fontFamily:"'Times New Roman', Times, serif"}}>AgriAI</span>
+              </div>
+              <p className="text-white text-sm leading-relaxed" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                {t('footerDescription', lang)}
+              </p>
+            </div>
+
+            {[
+              { title: t('footerPlatform', lang), links: ['footerAbout', 'footerHowItWorks', 'footerFeatures', 'footerPricing'] },
+              { title: t('footerUsers', lang), links: ['footerFarmers', 'footerBuyers', 'footerAgribusiness', 'footerPartners'] },
+              { title: t('footerLegal', lang), links: ['footerPrivacy', 'footerTerms', { label: t('footerContact', lang), path: "/contact" }] },
+            ].map((col) => (
+              <div key={col.title}>
+                <h4 className="font-semibold text-white mb-2" style={{fontFamily:"'Times New Roman', Times, serif"}}>{col.title}</h4>
+                <ul className="space-y-1">
+                  {col.links.map((link) => {
+                    const label = typeof link === 'string' ? t(link, lang) : link.label;
+                    const path = typeof link === 'string' ? "/" : link.path;
+                    return (
+                      <li key={label}>
+                        {path === "/contact" ? (
+                          <Link to="/contact" className="text-white text-sm transition-colors" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                            {label}
+                          </Link>
+                        ) : (
+                          <a href={path} className="text-white text-sm transition-colors" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                            {label}
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-3 flex justify-center items-center text-white text-sm" style={{borderTop:'1px solid oklch(0.65 0.22 145 / 0.12)', fontFamily:"'Times New Roman', Times, serif"}}>
+            <span>
+              © {new Date().getFullYear()} AgriAI. {t('footerRights', lang)}
+            </span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

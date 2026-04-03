@@ -30,9 +30,9 @@ export default function FarmerHistory() {
         // Transform contract data into order format
         const transformContract = (c) => ({
           contract_number: c.contract_number,
-          contract_datetime: c.created_at || new Date().toISOString(),
+          contract_datetime: c.created_at,
           invoice_id: c.contract_number,
-          created_at: c.created_at || new Date().toISOString(),
+          created_at: c.created_at,
           payment_method: 'contract',
           items: [],
           totals: { subtotal: 0, gst: 0, platform_fee: 0, grand_total: c.amount || 0 },
@@ -64,7 +64,7 @@ export default function FarmerHistory() {
           if (respB && respB.ok) {
             const jB = await respB.json().catch(() => null);
             if (jB && jB.ok && Array.isArray(jB.contracts)) {
-              console.log(`✅ Loaded ${jB.contracts.length} contracts from contract_b`);
+              console.log(`✅ Loaded ${jB.contracts.length} contracts from contract_b:`, jB.contracts.map(c => c.contract_number));
               allContracts = allContracts.concat(jB.contracts.map(transformContract));
             }
           }
@@ -79,7 +79,7 @@ export default function FarmerHistory() {
           if (respRegular && respRegular.ok) {
             const jRegular = await respRegular.json().catch(() => null);
             if (jRegular && jRegular.ok && Array.isArray(jRegular.contracts)) {
-              console.log(`✅ Loaded ${jRegular.contracts.length} contracts from contracts table`);
+              console.log(`✅ Loaded ${jRegular.contracts.length} contracts from contracts table:`, jRegular.contracts.map(c => c.contract_number));
               allContracts = allContracts.concat(jRegular.contracts.map(transformContract));
             }
           }
@@ -88,17 +88,39 @@ export default function FarmerHistory() {
         }
         
         // Remove duplicates (by contract_number) and sort by date
+        // Prioritize contract_b data over contracts table data for created_at
         const uniqueMap = new Map();
         allContracts.forEach(c => {
-          if (!uniqueMap.has(c.contract_number)) {
-            uniqueMap.set(c.contract_number, c);
+          const contractNum = c.contract_number;
+          if (!uniqueMap.has(contractNum)) {
+            uniqueMap.set(contractNum, c);
+          } else {
+            // If contract already exists, merge data prioritizing contract_b fields
+            const existing = uniqueMap.get(contractNum);
+            // If current contract is from contract_b (has sender field), use its created_at
+            // Otherwise keep the existing one (which might be from contract_b)
+            if (c._db_contract && c._db_contract.sender) {
+              uniqueMap.set(contractNum, {
+                ...existing,
+                created_at: c.created_at,
+                contract_datetime: c.contract_datetime,
+                _db_contract: c._db_contract
+              });
+            }
           }
         });
         
+        const getOrderDate = (item) => {
+          const candidate = item.created_at || item.contract_datetime || (item._db_contract && (item._db_contract.updated_at || item._db_contract.created_at));
+          if (!candidate) return 0;
+          const dt = new Date(candidate);
+          return isNaN(dt) ? 0 : dt.getTime();
+        };
+
         const orders = Array.from(uniqueMap.values())
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        
-        console.log(`📊 Total unique contracts to display: ${orders.length}`);
+          .sort((a, b) => getOrderDate(b) - getOrderDate(a));
+
+        console.log(`📊 Total unique contracts to display: ${orders.length}`, orders.map(o => o.contract_number));
         setOrders(orders);
       } catch (e) {
         console.warn('Failed to load contracts:', e);
@@ -124,26 +146,76 @@ export default function FarmerHistory() {
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
   const formatDateTime = (iso) => {
     try {
-      const d = new Date(iso);
-      if (isNaN(d)) return String(iso);
-      return d.toLocaleDateString();
-    } catch (e) { return String(iso); }
+      if (!iso && iso !== 0) return '';
+      const raw = String(iso).trim();
+      if (!raw) return '';
+
+      // 1) If already dd/mm/yyyy return as-is
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+        return raw;
+      }
+
+      // 2) Try explicit y-m-d or y/m/d
+      const ymd = raw.match(/^(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})/);
+      if (ymd) {
+        return `${ymd[3].padStart(2, '0')}/${ymd[2].padStart(2, '0')}/${ymd[1].padStart(4, '0')}`;
+      }
+
+      // 3) parse standard Date, including RFC 2822 and ISO
+      let normalized = raw;
+      if (/\s\d{2}:\d{2}:\d{2}/.test(normalized) && !/T/.test(normalized)) {
+        normalized = normalized.replace(' ', 'T');
+      }
+      if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+        normalized += 'Z';
+      }
+      const dt = new Date(normalized);
+      if (!isNaN(dt.getTime())) {
+        const dd = String(dt.getUTCDate()).padStart(2, '0');
+        const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+        const yyyy = dt.getUTCFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      }
+
+      // 4) fallback to first date-appearing in string like '02 Apr 2026'
+      const fallback = raw.match(/(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/);
+      if (fallback) {
+        const months = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+        const m = months[fallback[2].slice(0, 3)];
+        if (m) {
+          return `${String(fallback[1]).padStart(2, '0')}/${m}/${fallback[3]}`;
+        }
+      }
+
+      return raw;
+    } catch (e) {
+      return String(iso);
+    }
   };
 
-  // Ensure orders have authoritative contract rows attached when possible.
-  // This fetches missing contract rows by `contract_number` from the backend
-  // and merges them into `orders` so fields like `farmer_total` are available
-  // for display just like `contract_number` is.
+  const getOrderDate = (item) => {
+    if (!item) return 0;
+    const dateStr = item.created_at || item.contract_datetime || (item._db_contract && (item._db_contract.updated_at || item._db_contract.created_at));
+    const dt = new Date(dateStr);
+    return isNaN(dt.getTime()) ? 0 : dt.getTime();
+  };
+
+  // Ensure all contracts have authoritative data from contract_b table
+  // This fetches contract_b data by `contract_number` from the backend
+  // and updates created_at and other fields with contract_b data when available
   React.useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         if (!Array.isArray(orders) || orders.length === 0) return;
-        const missing = orders.filter(o => o && o.contract_number && !o._db_contract);
-        if (!missing.length) return;
+        const contractsWithNumbers = orders.filter(o => o && o.contract_number);
+        if (!contractsWithNumbers.length) return;
+        // Only resolve contract_b details for entries that aren't already enriched
+        const contractsToFetch = contractsWithNumbers.filter(o => !o._db_contract);
+        if (!contractsToFetch.length) return;
         const apiBase = process.env.REACT_APP_API_BASE || (window.__AGRIAI_API_BASE__ || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000'));
         const fetchedMap = {};
-        await Promise.all(missing.map(async (o) => {
+        await Promise.all(contractsToFetch.map(async (o) => {
           try {
             const resp = await fetch(`${apiBase}/contracts/get/${encodeURIComponent(o.contract_number)}`);
             if (!resp) return;
@@ -155,12 +227,24 @@ export default function FarmerHistory() {
         }));
         if (!mounted) return;
         if (Object.keys(fetchedMap).length) {
-          setOrders(prev => (Array.isArray(prev) ? prev.map(p => {
-            if (p && p.contract_number && fetchedMap[p.contract_number]) {
-              return { ...p, _db_contract: fetchedMap[p.contract_number] };
-            }
-            return p;
-          }) : prev));
+          setOrders(prev => {
+            if (!Array.isArray(prev)) return prev;
+            const updated = prev.map(p => {
+              if (p && p.contract_number && fetchedMap[p.contract_number]) {
+                const contractBData = fetchedMap[p.contract_number];
+                return { 
+                  ...p,
+                  _db_contract: contractBData,
+                  created_at: contractBData.updated_at || contractBData.created_at || p.created_at,
+                  contract_datetime: contractBData.updated_at || contractBData.created_at || p.contract_datetime
+                };
+              }
+              return p;
+            });
+            // Keep latest first by date after updating
+            updated.sort((a, b) => getOrderDate(b) - getOrderDate(a));
+            return updated;
+          });
         }
       } catch (e) { /* ignore */ }
     })();
@@ -398,7 +482,7 @@ export default function FarmerHistory() {
     return bDate - aDate;
   });
 
-  const openInvoice = async (order) => {
+  const openInvoice = async (order, shouldPrint = false) => {
     // determine contract number early so we can fetch authoritative row
     // use `let` so we can overwrite later with dbContract value if present
     let contractNum = order.contract_number || order.invoice_id || '';
@@ -424,8 +508,11 @@ export default function FarmerHistory() {
                     || order.contract_pdf_url || order.contract_html_url || order.contract_pdf || null;
     if (pdfUrl) {
       const full = pdfUrl.startsWith('http') ? pdfUrl : (window.location.origin + pdfUrl);
-      window.open(full, '_blank');
-      return;
+      const w = window.open(full, '_blank');
+      if (shouldPrint && w) {
+        setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 1200);
+      }
+      return w;
     }
 
     // Use database contract details if available, otherwise fall back to order data
@@ -603,6 +690,7 @@ export default function FarmerHistory() {
       farmerId = fetched.farmer_id || fetched.farmerId || farmerId;
       farmerState = fetched.farmer_state || fetched.farmerState || farmerState;
       farmerRegion = fetched.farmer_region || fetched.farmerRegion || farmerRegion;
+      buyerRegion = buyerRegion || farmerRegion;
     }
 
     // Prefer stored contract_meta or authoritative DB values; fall back to order items
@@ -720,6 +808,40 @@ export default function FarmerHistory() {
           padding: 20px 20px;
           max-width: 1000px;
           margin: 0 auto;
+        }
+        @page {
+          size: A4;
+          margin: 20mm;
+        }
+        @media print {
+          body {
+            margin: 0;
+            padding: 0;
+            color: #000;
+            background: #fff !important;
+            line-height: 1.4;
+            font-size: 12px;
+            max-width: 100%;
+          }
+          .section, .signature-section, .header, .footer {
+            page-break-inside: avoid;
+          }
+          h1, h2, h3 {
+            page-break-after: avoid;
+            page-break-before: avoid;
+          }
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          th, td {
+            border: 1px solid #888 !important;
+            padding: 6px 8px !important;
+            font-size: 11px !important;
+          }
+          .print-page-break {
+            page-break-after: always;
+          }
         }
         .header {
           text-align: center;
@@ -857,14 +979,14 @@ export default function FarmerHistory() {
         <p><strong>Party A – Buyer / Company</strong></p>
         <p><b>Name:</b> ${buyerName}</p>
         <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
-        <p><b>Address:</b> ${buyerAddress || '[Buyer Address]'}${buyerState ? ', ' + buyerState : ''}${buyerRegion ? ', ' + buyerRegion : ''}</p>
+        <p><b>Address:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p>
       </div>
     
       <div class="party-section">
         <p><strong>Party B – Farmer / Producer</strong></p>
         <p><b>Name:</b> ${farmerName}</p>
         <p><b>Farmer ID:</b> ${farmerId}</p>
-        <p><b>Address:</b> ${farmerAddress || ''}${farmerState ? (farmerAddress ? ', ' + farmerState : '' + farmerState) : ''}${farmerRegion ? (farmerState || farmerAddress ? ', ' + farmerRegion : '' + farmerRegion) : ''}</p>
+        <p><b>Address:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p>
       </div>
     
       <p>
@@ -892,11 +1014,11 @@ export default function FarmerHistory() {
         <h2>2. CONTRACT TYPE & DURATION</h2>
         <p><b>Contract Nature:</b> ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p>
         <p><b>Contract Duration:</b> ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p>
-        <p><b>Start Date:</b> ${startDate}</p>
-        <p><b>End Date:</b> ${endDate}</p>
+        <p><b>Start Date:</b> ${formatDateTime(startDate)}</p>
+        <p><b>End Date:</b> ${formatDateTime(endDate)}</p>
         <p><b>Duration:</b> ${days} Days</p>
         <p>
-          Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract. Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract.
+          ${contractNature === 'pre-harvest' ? 'Under this Pre-Harvest Production Contract, the Farmer agrees to cultivate and supply the produce as per the agreed specifications. Cultivation obligations apply under this contract.' : 'Under this Post-Harvest Procurement Contract, the produce has already been cultivated or harvested prior to execution of this Agreement. No cultivation obligation arises under this contract.'}
         </p>
         <h3>2.1 Contract Acceptance & Negotiation Window</h3>
         <p>
@@ -1137,7 +1259,7 @@ export default function FarmerHistory() {
      <p>Name: ${buyerName}</p>
      <p>Date: ${date}</p>
       ` :
-    `<p>Buyer / Company</p>
+    `<p><b>Buyer / Company</b></p>
      <p>Name: ___________________________</p>
      <p>Date: ___________________________</p>`
   }
@@ -1180,6 +1302,40 @@ export default function FarmerHistory() {
           padding: 20px 20px;
           max-width: 1000px;
           margin: 0 auto;
+        }
+        @page {
+          size: A4;
+          margin: 20mm;
+        }
+        @media print {
+          body {
+            margin: 0;
+            padding: 0;
+            color: #000;
+            background: #fff !important;
+            line-height: 1.4;
+            font-size: 12px;
+            max-width: 100%;
+          }
+          .section, .signature-section, .header, .footer {
+            page-break-inside: avoid;
+          }
+          h1, h2, h3 {
+            page-break-after: avoid;
+            page-break-before: avoid;
+          }
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          th, td {
+            border: 1px solid #888 !important;
+            padding: 6px 8px !important;
+            font-size: 11px !important;
+          }
+          .print-page-break {
+            page-break-after: always;
+          }
         }
         .header {
           text-align: center;
@@ -1317,14 +1473,14 @@ export default function FarmerHistory() {
         <p><strong>पक्ष A – खरीदार / कंपनी</strong></p>
         <p><b>नाम:</b> ${buyerName}</p>
         <p><b>खरीदार आईडी:</b> ${buyerId || '[Buyer ID]'}</p>
-        <p><b>पता:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+        <p><b>पता:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p>
       </div>
     
       <div class="party-section">
         <p><strong>पक्ष B – किसान / उत्पादक</strong></p>
         <p><b>नाम:</b> ${farmerName}</p>
         <p><b>किसान आईडी:</b> ${farmerId}</p>
-        <p><b>पता:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+        <p><b>पता:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p>
       </div>
     
       <p>
@@ -1353,11 +1509,11 @@ export default function FarmerHistory() {
         <h2>2. अनुबंध का प्रकार एवं अवधि</h2>
         <p><b>अनुबंध का स्वरूप:</b> ${contractNature === 'pre-harvest' ? 'पूर्व-फसल उत्पादन अनुबंध' : 'फसल कटाई के बाद क्रय अनुबंध'}</p>
         <p><b>अनुबंध अवधि:</b> ${contractDuration === 'one-time' ? 'एक बार' : (contractDuration === 'seasonal' ? 'मौसमी' : 'वार्षिक')}</p>
-        <p><b>प्रारंभ तिथि:</b> ${startDate}</p>
-        <p><b>समाप्ति तिथि:</b> ${endDate}</p>
+        <p><b>प्रारंभ तिथि:</b> ${formatDateTime(startDate)}</p>
+        <p><b>समाप्ति तिथि:</b> ${formatDateTime(endDate)}</p>
         <p><b>अवधि:</b> ${days} दिन</p>
         <p>
-          इस फसल कटाई के बाद क्रय अनुबंध के अंतर्गत, उत्पाद पहले ही इस समझौते के निष्पादन से पूर्व उगाया या काटा जा चुका है। इस अनुबंध के तहत कोई भी खेती संबंधी दायित्व उत्पन्न नहीं होता।
+          ${contractNature === 'pre-harvest' ? 'इस पूर्व-फसल उत्पादन अनुबंध के अंतर्गत, किसान सहमत शर्तों के अनुसार उत्पाद को उगाने और आपूर्ति करने के लिए सहमत है। इस अनुबंध के तहत खेती संबंधी दायित्व लागू होते हैं।' : 'इस फसल कटाई के बाद क्रय अनुबंध के अंतर्गत, उत्पाद पहले ही इस समझौते के निष्पादन से पूर्व उगाया या काटा जा चुका है। इस अनुबंध के तहत कोई भी खेती संबंधी दायित्व उत्पन्न नहीं होता।'}
         </p>
     
         <h3>2.1 अनुबंध स्वीकृति एवं वार्ता अवधि</h3>
@@ -1643,6 +1799,40 @@ export default function FarmerHistory() {
           max-width: 1000px;
           margin: 0 auto;
         }
+        @page {
+          size: A4;
+          margin: 20mm;
+        }
+        @media print {
+          body {
+            margin: 0;
+            padding: 0;
+            color: #000;
+            background: #fff !important;
+            line-height: 1.4;
+            font-size: 12px;
+            max-width: 100%;
+          }
+          .section, .signature-section, .header, .footer {
+            page-break-inside: avoid;
+          }
+          h1, h2, h3 {
+            page-break-after: avoid;
+            page-break-before: avoid;
+          }
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          th, td {
+            border: 1px solid #888 !important;
+            padding: 6px 8px !important;
+            font-size: 11px !important;
+          }
+          .print-page-break {
+            page-break-after: always;
+          }
+        }
         .header {
           text-align: center;
           margin-bottom: 16px;
@@ -1779,14 +1969,14 @@ export default function FarmerHistory() {
         <p><strong>ಪಕ್ಷ A – ಖರೀದಿದಾರ / ಕಂಪನಿ</strong></p>
         <p><b>ಹೆಸರು:</b> ${buyerName}</p>
         <p><b>ಖರೀದಿದಾರ ಐಡಿ:</b> ${buyerId || '[Buyer ID]'}</p>
-        <p><b>ವಿಳಾಸ:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+        <p><b>ವಿಳಾಸ:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p>
       </div>
     
       <div class="party-section">
         <p><strong>ಪಕ್ಷ B – ರೈತ / ಉತ್ಪಾದಕ</strong></p>
         <p><b>ಹೆಸರು:</b> ${farmerName}</p>
         <p><b>ರೈತ ಐಡಿ:</b> ${farmerId}</p>
-        <p><b>ವಿಳಾಸ:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+        <p><b>ವಿಳಾಸ:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p>
       </div>
     
       <p>
@@ -1814,12 +2004,11 @@ export default function FarmerHistory() {
         <h2>2. ಒಪ್ಪಂದದ ಪ್ರಕಾರ ಮತ್ತು ಅವಧಿ</h2>
         <p><b>ಒಪ್ಪಂದದ ಸ್ವರೂಪ:</b> ${contractNature === 'pre-harvest' ? 'ಕೊಯ್ಲಿಗೆ ಮುನ್ನ ಉತ್ಪಾದನಾ ಒಪ್ಪಂದ' : 'ಕೊಯ್ಲಿನ ನಂತರ ಖರೀದಿ ಒಪ್ಪಂದ'}</p>
         <p><b>ಒಪ್ಪಂದದ ಅವಧಿ:</b> ${contractDuration === 'one-time' ? 'ಒಮ್ಮೆ ಮಾತ್ರ' : (contractDuration === 'seasonal' ? 'ಮೌಸಮಿ' : 'ವಾರ್ಷಿಕ')}</p>
-        <p><b>ಪ್ರಾರಂಭ ದಿನಾಂಕ:</b> ${startDate}</p>
-        <p><b>ಅಂತ್ಯ ದಿನಾಂಕ:</b> ${endDate}</p>
+        <p><b>ಪ್ರಾರಂಭ ದಿನಾಂಕ:</b> ${formatDateTime(startDate)}</p>
+        <p><b>ಅಂತ್ಯ ದಿನಾಂಕ:</b> ${formatDateTime(endDate)}</p>
         <p><b>ಅವಧಿ:</b> ${days} ದಿನಗಳು</p>
         <p>
-          ಈ ಕೊಯ್ಲಿನ ನಂತರದ ಖರೀದಿ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ, ಉತ್ಪನ್ನವು ಈಗಾಗಲೇ ಈ ಒಪ್ಪಂದ ಜಾರಿಗೆ ಬರುವ ಮೊದಲು ಬೆಳೆಸಲ್ಪಟ್ಟಿದೆ ಅಥವಾ ಕೊಯ್ಯಲ್ಪಟ್ಟಿದೆ.
-          ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಯಾವುದೇ ಬೆಳೆ ಉತ್ಪಾದನಾ ಬಾಧ್ಯತೆ ಇರುವುದಿಲ್ಲ.
+          ${contractNature === 'pre-harvest' ? 'ಈ ಕೊಯ್ಲಿಗೆ ಮುನ್ನ ಉತ್ಪಾದನಾ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ, ರೈತರು ಒಪ್ಪಂದಿತ ನಿಬಂಧನೆಗಳ ಪ್ರಕಾರ ಉತ್ಪನ್ನವನ್ನು ಬೆಳೆಸಲು ಮತ್ತು ಪೂರೈಸಲು ಒಪ್ಪುತ್ತಾರೆ. ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಬೆಳೆ ಉತ್ಪಾದನಾ ಬಾಧ್ಯತೆಗಳು ಅನ್ವಯಿಸುತ್ತವೆ.' : 'ಈ ಕೊಯ್ಲಿನ ನಂತರದ ಖರೀದಿ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ, ಉತ್ಪನ್ನವು ಈಗಾಗಲೇ ಈ ಒಪ್ಪಂದ ಜಾರಿಗೆ ಬರುವ ಮೊದಲು ಬೆಳೆಸಲ್ಪಟ್ಟಿದೆ ಅಥವಾ ಕೊಯ್ಯಲ್ಪಟ್ಟಿದೆ. ಈ ಒಪ್ಪಂದದ ಅಡಿಯಲ್ಲಿ ಯಾವುದೇ ಬೆಳೆ ಉತ್ಪಾದನಾ ಬಾಧ್ಯತೆ ಇರುವುದಿಲ್ಲ.'}
         </p>
     
         <h3>2.1 ಒಪ್ಪಂದದ ಅಂಗೀಕಾರ ಮತ್ತು ಮಾತುಕತೆ ಅವಧಿ</h3>
@@ -2094,9 +2283,54 @@ export default function FarmerHistory() {
     const statusLabel = t('statusLabel', selectedLang) || 'Status';
     finalHtml = finalHtml.replace('</h1>', `</h1>\n<p><strong>${numLabel}:</strong> ${contractNum}</p>\n<p><strong>${statusLabel}:</strong> ${dbContract.status || ''}</p>`);
 
+    if (shouldPrint) {
+      // For printing, create an invisible iframe and print directly without opening a new window
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
+      
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(finalHtml);
+      doc.close();
+      
+      // Wait for content to render, then print
+      setTimeout(() => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          // Remove iframe after printing
+          setTimeout(() => {
+            try {
+              document.body.removeChild(iframe);
+            } catch (e) {}
+          }, 1000);
+        } catch (err) {
+          console.warn('Print failed', err);
+          alert('Print failed. Please try again.');
+        }
+      }, 500);
+      return;
+    }
+
     const w = window.open('', '_blank');
     try { w.document.write(finalHtml); w.document.close(); } catch (e) { window.open('data:text/html;charset=utf-8,' + encodeURIComponent(finalHtml), '_blank'); }
+    return w;
     };
+
+  const printContract = async (order) => {
+    try {
+      await openInvoice(order, true);
+    } catch (e) {
+      console.warn('printContract failed', e);
+    }
+  };
 
   return (
     <div className="fh-root" style={{ background: 'rgba(83, 255, 3, 0.12)', backgroundAttachment: 'fixed', minHeight: '100vh', color: '#fff', position: 'relative', overflow: 'hidden' }}>
@@ -2163,7 +2397,21 @@ export default function FarmerHistory() {
                     <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(234,246,234,0.8), rgba(212,240,212,0.8))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flexDirection: 'column', alignItems: 'flex-start' }}>
                         <div style={{ fontWeight: 800, color: '#236902' }}>{(t('contractLabel', siteLang) || 'Contract') + ': '}{idKey}</div>
-                        <div style={{ color: '#2d5c1a', marginTop: 4, fontSize: '0.9rem' }}>{formatDateTime(o.contract_datetime || o.created_at)}</div>
+                        <div style={{ color: '#2d5c1a', marginTop: 4, fontSize: '0.9rem' }}>
+                          {(() => {
+                            // Get sender from contract_b data (preferred) or fallback to contract data
+                            const sender = (o._db_contract && o._db_contract.sender) || o.sender || 'farmer';
+                            const senderLabel = sender === 'farmer' ? (t('sentByFarmer', siteLang) || 'Sent by Farmer') : (t('sentByBuyer', siteLang) || 'Sent by Buyer');
+                            return senderLabel;
+                          })()}
+                        </div>
+                        <div style={{ color: '#2d5c1a', marginTop: 4, fontSize: '0.9rem' }}>
+                          {(() => {
+                            // Prioritize created_at from contract_b (_db_contract) over contracts table
+                            const createdDate = (o._db_contract && o._db_contract.created_at) || o.created_at || o.contract_datetime;
+                            return formatDateTime(createdDate);
+                          })()}
+                        </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <div style={{ fontWeight: 800, color: '#236902', whiteSpace: 'nowrap', marginRight: 10 }}>{formatCurrency(farmerAmount)}</div>
@@ -2189,6 +2437,12 @@ export default function FarmerHistory() {
                             <button disabled style={{ background: bg, color, border, padding: '8px 14px', borderRadius: 10, cursor: 'default', fontWeight: 600, fontSize: '0.85rem' }}>{(t(s, siteLang) || (st && String(st).toUpperCase()) || 'STATUS')}</button>
                           );
                         })()}
+                        <button onClick={() => printContract(o)} style={{ background: '#ffffff', color: '#236902', border: '1px solid #236902', padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', boxShadow: '0 2px 8px rgba(35,105,2,0.15)', transition: 'transform 0.18s, box-shadow 0.18s, filter 0.18s' }} title={t('print', siteLang) || 'Print'}
+                          onMouseEnter={(e) => { e.target.style.transform = 'translateY(-2px) scale(1.02)'; e.target.style.boxShadow = '0 6px 20px rgba(35,105,2,0.25)'; e.target.style.filter = 'brightness(1.05)'; }}
+                          onMouseLeave={(e) => { e.target.style.transform = 'translateY(0) scale(1)'; e.target.style.boxShadow = '0 2px 8px rgba(35,105,2,0.15)'; e.target.style.filter = 'brightness(1)'; }}
+                        >
+                          🖨️
+                        </button>
                         {( ((o._db_contract && String(o._db_contract.status).toLowerCase() === 'pending')
                              || String(o.status || '').toLowerCase() === 'pending') && (
                           <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'rgba(198,40,40,0.1)', color: '#c62828', border: '1px solid rgba(198,40,40,0.3)', padding: '8px 12px', borderRadius: 10, marginLeft: 6, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, transition: 'all 0.2s' }}>{'🗑️'}</button>

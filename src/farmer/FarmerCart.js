@@ -1436,14 +1436,14 @@ const FarmerCart = () => {
     <p><strong>पक्ष A – खरीदार / कंपनी</strong></p>
     <p><b>नाम:</b> ${buyerName}</p>
     <p><b>खरीदार आईडी:</b> ${buyerId || '[Buyer ID]'}</p>
-    <p><b>पता:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+    <p><b>पता:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p>
   </div>
 
   <div class="party-section">
     <p><strong>पक्ष B – किसान / उत्पादक</strong></p>
     <p><b>नाम:</b> ${farmerName}</p>
     <p><b>किसान आईडी:</b> ${farmerId}</p>
-    <p><b>पता:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+    <p><b>पता:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p>
   </div>
 
   <p>
@@ -1891,14 +1891,14 @@ const FarmerCart = () => {
     <p><strong>ಪಕ್ಷ A – ಖರೀದಿದಾರ / ಕಂಪನಿ</strong></p>
     <p><b>ಹೆಸರು:</b> ${buyerName}</p>
     <p><b>ಖರೀದಿದಾರ ಐಡಿ:</b> ${buyerId || '[Buyer ID]'}</p>
-    <p><b>ವಿಳಾಸ:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+    <p><b>ವಿಳಾಸ:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p>
   </div>
 
   <div class="party-section">
     <p><strong>ಪಕ್ಷ B – ರೈತ / ಉತ್ಪಾದಕ</strong></p>
     <p><b>ಹೆಸರು:</b> ${farmerName}</p>
     <p><b>ರೈತ ಐಡಿ:</b> ${farmerId}</p>
-    <p><b>ವಿಳಾಸ:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+    <p><b>ವಿಳಾಸ:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p>
   </div>
 
   <p>
@@ -2349,14 +2349,14 @@ const FarmerCart = () => {
     <p><strong>Party A – Buyer / Company</strong></p>
     <p><b>Name:</b> ${buyerName}</p>
     <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
-    <p><b>Address:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+    <p><b>Address:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p>
   </div>
 
   <div class="party-section">
     <p><strong>Party B – Farmer / Producer</strong></p>
     <p><b>Name:</b> ${farmerName}</p>
     <p><b>Farmer ID:</b> ${farmerId}</p>
-    <p><b>Address:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+    <p><b>Address:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p>
   </div>
 
   <p>
@@ -2753,49 +2753,140 @@ const FarmerCart = () => {
     }
     @page {
       size: A4;
-      margin: 15mm;
-      orphans: 3;
-      widows: 3;
+      margin: 20mm 15mm 20mm 15mm;
+      orphans: 4;
+      widows: 4;
     }
     @media print {
       body {
         margin: 0;
-        padding: 15mm;
+        padding: 0;
         font-family: 'Times New Roman', Times, serif;
-    overflow-y: auto;
+        font-size: 12px;
+        line-height: 1.4;
+        color: #000;
+        background: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
       .section {
         page-break-inside: avoid;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
+      }
+      h1 {
+        page-break-after: avoid;
+        font-size: 18px;
+        margin: 10px 0 15px 0;
       }
       h2 {
         page-break-after: avoid;
-        margin-top: 15px;
-        margin-bottom: 10px;
+        font-size: 14px;
+        margin: 15px 0 8px 0;
+        border-bottom: 1px solid #000;
+        padding-bottom: 3px;
       }
       h3 {
         page-break-after: avoid;
-        margin-top: 10px;
-        margin-bottom: 8px;
+        font-size: 13px;
+        margin: 12px 0 6px 0;
       }
-      p, ul, li {
+      p {
         page-break-inside: avoid;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
+        text-align: justify;
+        orphans: 3;
+        widows: 3;
+      }
+      ul, ol {
+        page-break-inside: avoid;
+        margin: 8px 0 8px 20px;
+      }
+      li {
+        page-break-inside: avoid;
+        margin-bottom: 4px;
       }
       table {
         page-break-inside: avoid;
+        width: 100%;
+        border-collapse: collapse;
         margin: 10px 0;
+        font-size: 11px;
       }
-      tr {
+      th, td {
+        border: 1px solid #000;
+        padding: 6px 4px;
+        text-align: center;
+        vertical-align: top;
+      }
+      th {
+        background: #f0f0f0 !important;
+        font-weight: bold;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      tr:nth-child(even) {
+        background: #f9f9f9 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #000;
+        page-break-after: avoid;
+      }
+      .header img {
+        width: 60px;
+        height: auto;
+        margin-bottom: 8px;
+      }
+      .party-section {
+        background: #f8f8f8 !important;
+        padding: 8px;
+        border-left: 3px solid #000;
+        margin: 10px 0;
+        border-radius: 2px;
+        page-break-inside: avoid;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .signature-section {
+        margin-top: 25px;
+        padding-top: 15px;
+        border-top: 1px solid #000;
+        display: flex;
+        justify-content: space-around;
+        gap: 30px;
+        page-break-inside: avoid;
+      }
+      .signature-line {
+        text-align: center;
+        width: 150px;
+        font-size: 11px;
+      }
+      .signature-line p {
+        margin: 2px 0;
+        font-size: 10px;
+      }
+      .signature-line .line {
+        border-top: 1px solid #000;
+        margin: 15px 0 2px 0;
+        min-height: 12px;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+      .no-break {
         page-break-inside: avoid;
       }
     }
     body {
       font-family: 'Times New Roman', Times, serif;
       color: #1a1a1a;
-      line-height: 1.8;
+      line-height: 1.6;
       background: #ffffff;
-      padding: 15mm;
+      font-size: 14px;
     }
     .header {
       text-align: center;

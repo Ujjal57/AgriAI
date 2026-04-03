@@ -8,3 +8,9 @@
 2026-04-02T09:03:31.894028 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 100}]}
 2026-04-02T16:35:32.611124 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 50}]}
 2026-04-02T16:35:32.612122 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 50}]}
+2026-04-02T16:49:11.292236 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 200}]}
+2026-04-02T16:49:11.294239 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 200}]}
+2026-04-03T05:27:03.189319 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 150}]}
+2026-04-03T05:27:03.192313 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 150}]}
+2026-04-03T05:38:41.511267 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 1000}]}
+2026-04-03T05:38:41.512269 127.0.0.1 {'buyer': {'name': 'Ujjal  Dey', 'phone': '0123456789', 'email': 'ukumardey77@gmail.com'}, 'items': [{'id': 2, 'crop_name': 'Apple', 'order_quantity': 1000}]}
