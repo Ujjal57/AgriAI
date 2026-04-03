@@ -7050,11 +7050,11 @@ def farmers_search():
                 farmer = {'id': r[0], 'name': r[1], 'phone': r[2], 'email': r[3], 'region': (r[4] or ''), 'state': (r[5] or ''), 'address': (r[6] if len(r) > 6 else None)}
                 try:
                     cur2 = get_cursor('mysql', conn)
-                    cur2.execute('SELECT id,seller_id,seller_name,seller_phone,crop_name,quantity_kg,price_per_kg FROM crops WHERE (seller_id=%s OR RIGHT(REPLACE(seller_phone, "+", ""),10) = RIGHT(%s,10)) ORDER BY created_at DESC LIMIT 3', (farmer['id'], farmer['phone']))
+                    cur2.execute('SELECT id,seller_id,seller_name,seller_phone,crop_name,quantity_kg,price_per_kg,expiry_date,category,variety,image_path FROM crops WHERE (seller_id=%s OR RIGHT(REPLACE(seller_phone, "+", ""),10) = RIGHT(%s,10)) ORDER BY created_at DESC LIMIT 3', (farmer['id'], farmer['phone']))
                     crops_rows = cur2.fetchall()
                     farmer['crop_samples'] = []
                     for cr in crops_rows:
-                        farmer['crop_samples'].append({'id': cr[0], 'seller_id': cr[1], 'seller_name': cr[2], 'seller_phone': cr[3], 'crop_name': cr[4], 'quantity_kg': float(cr[5]) if cr[5] is not None else None, 'price_per_kg': float(cr[6]) if cr[6] is not None else None})
+                        farmer['crop_samples'].append({'id': cr[0], 'seller_id': cr[1], 'seller_name': cr[2], 'seller_phone': cr[3], 'crop_name': cr[4], 'quantity_kg': float(cr[5]) if cr[5] is not None else None, 'price_per_kg': float(cr[6]) if cr[6] is not None else None, 'expiry_date': cr[7], 'category': cr[8], 'variety': cr[9], 'image_path': cr[10]})
                     try:
                         cur2.close()
                     except Exception:
@@ -7103,9 +7103,9 @@ def farmers_search():
         rows = sqlite_cur.fetchall()
         for r in rows:
             farmer = {'id': r[0], 'name': r[1], 'phone': r[2], 'email': r[3], 'region': (r[4] or ''), 'state': (r[5] or ''), 'address': (r[6] if len(r) > 6 else None)}
-            sqlite_cur.execute('SELECT id,seller_id,seller_name,seller_phone,crop_name,quantity_kg,price_per_kg FROM crops WHERE seller_id=? OR seller_phone=? ORDER BY created_at DESC LIMIT 3', (farmer['id'], farmer['phone']))
+            sqlite_cur.execute('SELECT id,seller_id,seller_name,seller_phone,crop_name,quantity_kg,price_per_kg,expiry_date,category,variety,image_path FROM crops WHERE seller_id=? OR seller_phone=? ORDER BY created_at DESC LIMIT 3', (farmer['id'], farmer['phone']))
             crops_rows = sqlite_cur.fetchall()
-            farmer['crop_samples'] = [{'id': cr[0], 'seller_id': cr[1], 'seller_name': cr[2], 'seller_phone': cr[3], 'crop_name': cr[4], 'quantity_kg': float(cr[5]) if cr[5] is not None else None, 'price_per_kg': float(cr[6]) if cr[6] is not None else None} for cr in crops_rows]
+            farmer['crop_samples'] = [{'id': cr[0], 'seller_id': cr[1], 'seller_name': cr[2], 'seller_phone': cr[3], 'crop_name': cr[4], 'quantity_kg': float(cr[5]) if cr[5] is not None else None, 'price_per_kg': float(cr[6]) if cr[6] is not None else None, 'expiry_date': cr[7], 'category': cr[8], 'variety': cr[9], 'image_path': cr[10]} for cr in crops_rows]
             results.append(farmer)
         sqlite_cur.close(); sqlite_conn.close()
         return jsonify({'ok': True, 'farmers': results}), 200
@@ -7508,14 +7508,14 @@ def crops_names():
             if kind == 'mysql':
                 today_iso = datetime.date.today().isoformat()
                 sql = ("SELECT DISTINCT crop_name FROM crops WHERE crop_name IS NOT NULL AND crop_name <> '' "
-                       "AND (expiry_date IS NULL OR expiry_date >= %s) ORDER BY crop_name")
+                       "AND (expiry_date IS NULL OR expiry_date >= %s) AND (quantity_kg IS NULL OR quantity_kg > 0) ORDER BY crop_name")
                 cur.execute(sql, (today_iso,))
                 rows = cur.fetchall()
                 names = [r[0] for r in rows if r and r[0]]
             else:
                 # SQLite: use date('now') for current date comparison
                 sql = ("SELECT DISTINCT crop_name FROM crops WHERE crop_name IS NOT NULL AND crop_name <> '' "
-                       "AND (expiry_date IS NULL OR expiry_date >= date('now')) ORDER BY crop_name")
+                       "AND (expiry_date IS NULL OR expiry_date >= date('now')) AND (quantity_kg IS NULL OR quantity_kg > 0) ORDER BY crop_name")
                 cur.execute(sql)
                 rows = cur.fetchall()
                 names = [r[0] for r in rows if r and r[0]]

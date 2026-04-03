@@ -27,6 +27,7 @@ function BuyerSearchBox() {
   const [varietyOptions, setVarietyOptions] = React.useState([]);
   const [variety, setVariety] = React.useState('');
   const [cropsSource, setCropsSource] = React.useState([]);
+  const [farmersSource, setFarmersSource] = React.useState([]);
   const [minPrice] = React.useState('');
   const [maxPrice] = React.useState('');
   const [results, setResults] = React.useState(null);
@@ -90,16 +91,16 @@ function BuyerSearchBox() {
     setLoading(true);
     try {
       const base = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
-      const res = await fetch(`${base}/my-crops/list`);
+      const res = await fetch(`${base}/farmers/search`);
       setLoading(false);
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
         throw new Error(`Server returned ${res.status}: ${txt || res.statusText}`);
       }
       const j = await res.json().catch(() => null);
-      if (j && j.ok && Array.isArray(j.crops)) {
-        const synthetic = [{ id: '_all_crops', name: 'All listings', phone: '', crop_samples: j.crops }];
-        setResults(synthetic);
+      if (j && j.ok && Array.isArray(j.farmers)) {
+        setResults(j.farmers);
+        setFarmersSource(j.farmers);
       } else {
         setError((j && j.error) || 'No results');
       }
@@ -119,11 +120,8 @@ function BuyerSearchBox() {
     const q = new URLSearchParams();
     if (region) q.append('region', region);
     if (state) q.append('state', state);
-    if (address) q.append('address', address);
-    if (category) q.append('category', category);
-    if (crop) q.append('crop_name', crop);
-    if (variety) q.append('variety', variety);
-    const listUrl = `${base}/my-crops/list` + (q.toString() ? ('?' + q.toString()) : '');
+    if (crop) q.append('crop', crop);
+    const listUrl = `${base}/farmers/search` + (q.toString() ? ('?' + q.toString()) : '');
     fetch(listUrl)
       .then(async res => {
         setLoading(false);
@@ -132,9 +130,19 @@ function BuyerSearchBox() {
           throw new Error(`Server returned ${res.status}: ${txt || res.statusText}`);
         }
         const j = await res.json().catch(() => null);
-        if (j && j.ok && Array.isArray(j.crops)) {
-          const synthetic = [{ id: '_all_crops', name: 'All listings', phone: '', crop_samples: j.crops }];
-          setResults(synthetic);
+        if (j && j.ok && Array.isArray(j.farmers)) {
+          let farmers = j.farmers;
+          // client-side category/variety/address filter since API doesn’t support all
+          farmers = farmers.filter(f => {
+            try {
+              if (address && !( (f.address||'').toString().toLowerCase().includes(address.toString().trim().toLowerCase()) )) return false;
+              if (category && !(f.crop_samples || []).some(c => (c.category||'').toString().trim().toLowerCase() === category.toString().trim().toLowerCase())) return false;
+              if (variety && !(f.crop_samples || []).some(c => (c.variety||'').toString().trim().toLowerCase() === variety.toString().trim().toLowerCase())) return false;
+              return true;
+            } catch (e) { return true; }
+          });
+          setResults(farmers);
+          setFarmersSource(farmers);
         } else {
           setError((j && j.error) || 'No results');
         }
@@ -150,11 +158,13 @@ function BuyerSearchBox() {
     (async () => {
       try {
         const base = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
-        const res = await fetch(`${base}/my-crops/list`);
+        const res = await fetch(`${base}/farmers/search`);
         if (!res || !res.ok) return;
         const j = await res.json().catch(() => null);
-        if (!j || !j.ok || !Array.isArray(j.crops)) return;
-        setCropsSource(j.crops || []);
+        if (!j || !j.ok || !Array.isArray(j.farmers)) return;
+        const farmers = j.farmers || [];
+        // setResults(farmers); // Removed to not display cards initially
+        setFarmersSource(farmers);
       } catch (e) {}
     })();
   }, []);
@@ -168,20 +178,38 @@ function BuyerSearchBox() {
       const c = new Map();
       const cr = new Map();
       const v = new Map();
-      (cropsSource || []).forEach(d => {
+      const source = (farmersSource && farmersSource.length ? farmersSource : cropsSource) || [];
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      source.forEach(d => {
         try {
+          const samples = Array.isArray(d.crop_samples) ? d.crop_samples : [];
+          const hasAvailableCrop = samples.some(cropItem => {
+            const qty = cropItem.quantity_kg;
+            const qtyNum = qty !== null && qty !== undefined ? parseFloat(qty) : 1; // assume available if not set
+            const expiry = cropItem.expiry_date;
+            return qtyNum > 0 && (!expiry || expiry >= today);
+          });
+          if (!hasAvailableCrop) return; // skip this farmer if no available crops
+
           const rRaw = (d.region || '').toString().trim();
           const sRaw = (d.state || '').toString().trim();
           const aRaw = (d.address || d.seller_address || d._farmer_address || '').toString().trim();
-          const catRaw = (d.category || '').toString().trim();
-          const cnameRaw = (d.crop_name || '').toString().trim();
-          const varRaw = (d.variety || '').toString().trim();
           if (rRaw) r.set(rRaw.toLowerCase(), rRaw);
           if (sRaw) s.set(sRaw.toLowerCase(), sRaw);
           if (aRaw) a.set(aRaw.toLowerCase(), aRaw);
-          if (catRaw) c.set(catRaw.toLowerCase(), catRaw);
-          if (cnameRaw) cr.set(cnameRaw.toLowerCase(), cnameRaw);
-          if (varRaw) v.set(varRaw.toLowerCase(), varRaw);
+          samples.forEach(cropItem => {
+            const qty = cropItem.quantity_kg;
+            const qtyNum = qty !== null && qty !== undefined ? parseFloat(qty) : 1;
+            const expiry = cropItem.expiry_date;
+            if (qtyNum <= 0 || (expiry && expiry < today)) return; // skip unavailable crops
+
+            const catRaw = (cropItem.category || '').toString().trim();
+            const cnameRaw = (cropItem.crop_name || cropItem.name || '').toString().trim();
+            const varRaw = (cropItem.variety || '').toString().trim();
+            if (catRaw) c.set(catRaw.toLowerCase(), catRaw);
+            if (cnameRaw) cr.set(cnameRaw.toLowerCase(), cnameRaw);
+            if (varRaw) v.set(varRaw.toLowerCase(), varRaw);
+          });
         } catch (e) {}
       });
       setRegionMaster(Array.from(r.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
@@ -191,28 +219,38 @@ function BuyerSearchBox() {
       setCropMaster(Array.from(cr.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
       setVarietyMaster(Array.from(v.values()).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'})));
     } catch (e) {}
-  }, [cropsSource]);
+  }, [cropsSource, farmersSource]);
 
   React.useEffect(() => {
     try {
       const catMap = new Map();
       const cropMap = new Map();
       const varietyMap = new Map();
-      (cropsSource || []).forEach(d => {
+      const source = (farmersSource && farmersSource.length ? farmersSource : cropsSource) || [];
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      source.forEach(d => {
         try {
-          const catRaw = (d.category || '').toString().trim();
-          const cnameRaw = (d.crop_name || '').toString().trim();
-          const varnameRaw = (d.variety || '').toString().trim();
+          const samples = Array.isArray(d.crop_samples) ? d.crop_samples : [];
+          samples.forEach(cropItem => {
+            const qty = cropItem.quantity_kg;
+            const qtyNum = qty !== null && qty !== undefined ? parseFloat(qty) : 1;
+            const expiry = cropItem.expiry_date;
+            if (qtyNum <= 0 || (expiry && expiry < today)) return; // skip unavailable crops
 
-          const catKey = catRaw.toLowerCase();
-          const cnameKey = cnameRaw.toLowerCase();
-          const varKey = varnameRaw.toLowerCase();
+            const catRaw = (cropItem.category || '').toString().trim();
+            const cnameRaw = (cropItem.crop_name || cropItem.name || '').toString().trim();
+            const varnameRaw = (cropItem.variety || '').toString().trim();
 
-          if (catRaw && !catMap.has(catKey)) catMap.set(catKey, catRaw);
-          const categoryMatch = !category || (catRaw && catRaw.toLowerCase() === category.toString().trim().toLowerCase());
-          if (cnameRaw && !cropMap.has(cnameKey) && categoryMatch) cropMap.set(cnameKey, cnameRaw);
-          const cropMatch = !crop || (cnameRaw && cnameRaw.toLowerCase() === (crop || '').toString().trim().toLowerCase());
-          if (varnameRaw && !varietyMap.has(varKey) && cropMatch && categoryMatch) varietyMap.set(varKey, varnameRaw);
+            const catKey = catRaw.toLowerCase();
+            const cnameKey = cnameRaw.toLowerCase();
+            const varKey = varnameRaw.toLowerCase();
+
+            if (catRaw && !catMap.has(catKey)) catMap.set(catKey, catRaw);
+            const categoryMatch = !category || (catRaw && catRaw.toLowerCase() === category.toString().trim().toLowerCase());
+            if (cnameRaw && !cropMap.has(cnameKey) && categoryMatch) cropMap.set(cnameKey, cnameRaw);
+            const cropMatch = !crop || (cnameRaw && cnameRaw.toLowerCase() === (crop || '').toString().trim().toLowerCase());
+            if (varnameRaw && !varietyMap.has(varKey) && cropMatch && categoryMatch) varietyMap.set(varKey, varnameRaw);
+          });
         } catch (e) {}
       });
 
@@ -224,7 +262,7 @@ function BuyerSearchBox() {
       setCropOptions(cropArrLocal);
       setVarietyOptions(varietyArrLocal);
     } catch (e) {}
-  }, [cropsSource, category, crop]);
+  }, [cropsSource, farmersSource, category, crop]);
 
   // Link filters: recompute available options for each filter based on current selections.
   React.useEffect(() => {
@@ -253,23 +291,44 @@ function BuyerSearchBox() {
         } catch (e) { return true; }
       };
 
-      (cropsSource || []).forEach(d => {
+      const source = (farmersSource && farmersSource.length ? farmersSource : cropsSource) || [];
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      source.forEach(d => {
         try {
+          const samples = Array.isArray(d.crop_samples) ? d.crop_samples : [];
+          const hasAvailableCrop = samples.some(cropItem => {
+            const qty = cropItem.quantity_kg;
+            const qtyNum = qty !== null && qty !== undefined ? parseFloat(qty) : 1;
+            const expiry = cropItem.expiry_date;
+            return qtyNum > 0 && (!expiry || expiry >= today);
+          });
+          if (!hasAvailableCrop) return; // skip farmers without available crops
+
           const rRaw = (d.region || '').toString().trim();
           const sRaw = (d.state || '').toString().trim();
           const aRaw = (d.address || d.seller_address || d._farmer_address || '').toString().trim();
-          const catRaw = (d.category || '').toString().trim();
-          const cnameRaw = (d.crop_name || '').toString().trim();
-          const varRaw = (d.variety || '').toString().trim();
 
           if (matches(d)) {
             if (rRaw) seenRegion.set(rRaw.toLowerCase(), rRaw);
             if (sRaw) seenState.set(sRaw.toLowerCase(), sRaw);
             if (aRaw) seenAddress.set(aRaw.toLowerCase(), aRaw);
-            if (catRaw) seenCat.set(catRaw.toLowerCase(), catRaw);
-            if (cnameRaw) seenCrop.set(cnameRaw.toLowerCase(), cnameRaw);
-            if (varRaw) seenVar.set(varRaw.toLowerCase(), varRaw);
           }
+
+          samples.forEach(cropItem => {
+            const qty = cropItem.quantity_kg;
+            const qtyNum = qty !== null && qty !== undefined ? parseFloat(qty) : 1;
+            const expiry = cropItem.expiry_date;
+            if (qtyNum <= 0 || (expiry && expiry < today)) return; // skip unavailable crops
+
+            const catRaw = (cropItem.category || '').toString().trim();
+            const cnameRaw = (cropItem.crop_name || cropItem.name || '').toString().trim();
+            const varRaw = (cropItem.variety || '').toString().trim();
+            if (matches({ ...d, category: catRaw, crop_name: cnameRaw, variety: varRaw })) {
+              if (catRaw) seenCat.set(catRaw.toLowerCase(), catRaw);
+              if (cnameRaw) seenCrop.set(cnameRaw.toLowerCase(), cnameRaw);
+              if (varRaw) seenVar.set(varRaw.toLowerCase(), varRaw);
+            }
+          });
         } catch (e) {}
       });
 
@@ -315,32 +374,45 @@ function BuyerSearchBox() {
     try {
       const opt = (optionValue || '').toString().trim().toLowerCase();
       if (!opt) return true;
-      const any = (cropsSource || []).some(d => {
+      const source = (farmersSource && farmersSource.length ? farmersSource : cropsSource) || [];
+      const any = source.some(d => {
         try {
           const r = (d.region || '').toString().trim().toLowerCase();
           const s = (d.state || '').toString().trim().toLowerCase();
           const a = (d.address || d.seller_address || d._farmer_address || '').toString().trim().toLowerCase();
-          const cat = (d.category || '').toString().trim().toLowerCase();
-          const cname = (d.crop_name || '').toString().trim().toLowerCase();
-          const varname = (d.variety || '').toString().trim().toLowerCase();
-          if (field !== 'region' && region && region.toString().trim().toLowerCase() !== r) return false;
-          if (field !== 'state' && state && state.toString().trim().toLowerCase() !== s) return false;
-          if (field !== 'address' && address && address.toString().trim().toLowerCase() !== a) return false;
-          if (field !== 'category' && category && category.toString().trim().toLowerCase() !== cat) return false;
-          if (field !== 'crop' && crop && crop.toString().trim().toLowerCase() !== cname) return false;
-          if (field !== 'variety' && variety && variety.toString().trim().toLowerCase() !== varname) return false;
-          if (field === 'region') return r === opt;
-          if (field === 'state') return s === opt;
-          if (field === 'address') return a === opt;
-          if (field === 'category') return cat === opt;
-          if (field === 'crop') return cname === opt;
-          if (field === 'variety') return varname === opt;
-          return true;
+          const samples = Array.isArray(d.crop_samples) ? d.crop_samples : [];
+          if (field === 'region') {
+            if (region && region.toString().trim().toLowerCase() !== r) return false;
+            return r === opt;
+          }
+          if (field === 'state') {
+            if (state && state.toString().trim().toLowerCase() !== s) return false;
+            return s === opt;
+          }
+          if (field === 'address') {
+            if (address && address.toString().trim().toLowerCase() !== a) return false;
+            return a === opt;
+          }
+          let cat = '';
+          let cname = '';
+          let varname = '';
+          for (const cropItem of samples) {
+            cat = (cropItem.category || '').toString().trim().toLowerCase();
+            cname = (cropItem.crop_name || cropItem.name || '').toString().trim().toLowerCase();
+            varname = (cropItem.variety || '').toString().trim().toLowerCase();
+            if (field !== 'category' && category && category.toString().trim().toLowerCase() !== cat) continue;
+            if (field !== 'crop' && crop && crop.toString().trim().toLowerCase() !== cname) continue;
+            if (field !== 'variety' && variety && variety.toString().trim().toLowerCase() !== varname) continue;
+            if (field === 'category' && cat === opt) return true;
+            if (field === 'crop' && cname === opt) return true;
+            if (field === 'variety' && varname === opt) return true;
+          }
+          return false;
         } catch (e) { return true; }
       });
       return !!any;
     } catch (e) { return true; }
-  }, [cropsSource, region, state, address, category, crop, variety]);
+  }, [cropsSource, farmersSource, region, state, address, category, crop, variety]);
 
   // auto-clear selections that become invalid (not present in enabled options)
   React.useEffect(() => {
@@ -388,32 +460,11 @@ function BuyerSearchBox() {
 
   return (
     <div style={{display:'flex', alignItems:'center', justifyContent:'center', padding:'0 1rem'}}>
-      <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(20px) saturate(1.6)', WebkitBackdropFilter:'blur(20px) saturate(1.6)', border:'1px solid rgba(255,255,255,0.6)', borderRadius:'24px', padding:'2.5rem', boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', width:'100%', maxWidth:1000}}>
-        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', position:'relative', width:'100%', flexWrap:'wrap'}}>
+      <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(20px) saturate(1.6)', WebkitBackdropFilter:'blur(20px) saturate(1.6)', border:'1px solid rgba(255,255,255,0.6)', borderRadius:'24px', padding:'2.5rem', boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)', width:'100%', maxWidth:1400}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'center', position:'relative', width:'100%', flexWrap:'wrap'}}>
           <h3 style={{position:'absolute', left:'50%', transform:'translateX(-50%)', margin:0, backgroundImage:'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)', WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent', fontSize:22, fontWeight:800, lineHeight:1.2, paddingBottom:5, textAlign:'center', width:'100%', pointerEvents:'none'}}>
-            {t('findBuyersTitle', lang)}
+            {t('findFarmersTitle', lang) || 'Find Farmers'}
           </h3>
-          <div style={{ marginLeft: 'auto' }}>
-            <button
-              onClick={handleShowAll}
-              style={{
-                background: 'linear-gradient(135deg, #236902 0%, #53b635 100%)',
-                border: 'none',
-                color: '#fff',
-                padding: '8px 14px',
-                borderRadius: 8,
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '0.9rem',
-                boxShadow: '0 4px 12px rgba(35,105,2,0.2)',
-                transition: 'transform 0.2s, box-shadow 0.2s'
-              }}
-              onMouseEnter={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 16px rgba(35,105,2,0.3)'; }}
-              onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 12px rgba(35,105,2,0.2)'; }}
-            >
-              {t('showAll', lang)}
-            </button>
-          </div>
         </div>
         <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'nowrap', marginTop:30, overflowX:'auto', paddingBottom:8}}>
           {/* Region, State, Category, Crop, Variety Dropdowns */}
@@ -627,9 +678,9 @@ function BuyerSearchBox() {
                         transition:'transform 0.3s ease',
                       }}
                     >
-                      {c.image_url ? (
+                      {c.image_path ? (
                         <img 
-                          src={c.image_url} 
+                          src={`${process.env.REACT_APP_API_BASE || 'http://localhost:5000'}/images/${c.image_path}`} 
                           alt={c.crop_name} 
                           style={{
                             width:'100%',
@@ -744,7 +795,10 @@ function BuyerSearchBox() {
 export default function FarmerDashboard() {
   const [lang, setLang] = React.useState((typeof window !== 'undefined' && localStorage.getItem('agri_lang')) || 'en');
   React.useEffect(() => {
-    const onLang = () => setLang((localStorage.getItem('agri_lang') || 'en'));
+    const onLang = () => {
+      setLang((localStorage.getItem('agri_lang') || 'en'));
+      window.location.reload(); // Refresh the page automatically on language change
+    };
     try { window.addEventListener && window.addEventListener('agri:lang:change', onLang); } catch(e){}
     return () => { try { window.removeEventListener && window.removeEventListener('agri:lang:change', onLang); } catch(e){} };
   }, []);
