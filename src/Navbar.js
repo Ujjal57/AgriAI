@@ -11,6 +11,8 @@ const Navbar = () => {
   const [isLoggedIn, setIsLoggedIn] = React.useState(!!localStorage.getItem('agriai_email'));
   const [userName, setUserName] = React.useState(localStorage.getItem('agriai_name') || '');
   const [userRole, setUserRole] = React.useState(localStorage.getItem('agriai_role') || '');
+  const [userId, setUserId] = React.useState(localStorage.getItem('agriai_id') || '');
+  const [userEmail, setUserEmail] = React.useState(localStorage.getItem('agriai_email') || '');
   const location = useLocation();
   // common API base URL used by various helpers
   const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
@@ -80,6 +82,9 @@ const Navbar = () => {
     const onStorage = () => {
       setIsLoggedIn(!!localStorage.getItem('agriai_email'));
       setUserName(localStorage.getItem('agriai_name') || '');
+      setUserRole(localStorage.getItem('agriai_role') || '');
+      setUserId(localStorage.getItem('agriai_id') || '');
+      setUserEmail(localStorage.getItem('agriai_email') || '');
       setFarmerId(localStorage.getItem('agriai_id') || '');
       try {
         const role = localStorage.getItem('agriai_role');
@@ -151,21 +156,43 @@ const Navbar = () => {
 
   // Fetch notifications count/list for farmer
   React.useEffect(() => {
-    if (userRole !== 'farmer') {
-      // For buyers, count unread local notifications
-      try {
-        const localKey = 'agriai_notifications';
-        const rawLocal = localStorage.getItem(localKey);
-        const localArr = rawLocal ? JSON.parse(rawLocal) : [];
-        const relevant = Array.isArray(localArr) ? localArr.filter(n => {
-          if (n && n.buyer_id) return String(n.buyer_id) === String(farmerId); // farmerId is actually userId
-          return !n.buyer_id;
-        }) : [];
-        setNotifCount(relevant.filter(x => !(x && Number(x.is_read))).length);
-      } catch (e) { setNotifCount(0); }
-      return;
-    }
-    const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
+    if (userRole === 'buyer') {
+      // For buyers, fetch from API
+      const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
+      let timer;
+      const load = async () => {
+        if (!userId) {
+          setNotifCount(0);
+          return;
+        }
+        try {
+          const qp = userId ? `buyer_id=${encodeURIComponent(userId)}` : '';
+          const url = `${apiBase}/notifications/list?${qp}`;
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const j = await res.json();
+          if (j && j.ok && Array.isArray(j.notifications)) {
+            // Count only unread contracts from backend (read column in contracts)
+            // For buyers, exclude contracts with status 'accepted'
+            const unreadCount = j.notifications.filter(n => {
+              if (!(n && Number(n.is_read))) {
+                if (userRole === 'buyer' && n.status && (n.status).toLowerCase() === 'accepted') {
+                  return false;
+                }
+                return true;
+              }
+              return false;
+            }).length;
+            setNotifCount(unreadCount);
+          }
+        } catch (e) {}
+      };
+      load();
+      const pollInterval = userRole === 'buyer' ? 5000 : 3000;
+      timer = setInterval(load, pollInterval);
+      return () => { try { clearInterval(timer); } catch (e) {} };
+    } else if (userRole === 'farmer') {
+      const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
     let timer;
     const load = async () => {
       try {
@@ -194,8 +221,10 @@ const Navbar = () => {
     const pollInterval = userRole === 'farmer' ? 3000 : 5000;
     timer = setInterval(load, pollInterval);
     return () => { try { clearInterval(timer); } catch (e) {} };
-  }, [userRole, farmerId, notifOpen]);
-
+    } else {
+      setNotifCount(0);
+    }
+  }, [userRole, farmerId, userId]);
   // When the notifications pane is open, keep the full list fresh:
   React.useEffect(() => {
     const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
@@ -205,12 +234,29 @@ const Navbar = () => {
       let notifs = [];
       try {
         if (userRole === 'farmer') {
+          if (!farmerId && !localStorage.getItem('agriai_phone')) {
+            notifs = [];
+            return;
+          }
           const qp = farmerId ? `farmer_id=${encodeURIComponent(farmerId)}` : (localStorage.getItem('agriai_phone') ? `farmer_phone=${encodeURIComponent(localStorage.getItem('agriai_phone'))}` : '');
           const res = await fetch(`${apiBase}/notifications/list?${qp}`);
           if (!res.ok) return;
           const j = await res.json();
           if (j && j.ok && Array.isArray(j.notifications)) {
             // Show ONLY backend contract_b data - NO localStorage caching
+            notifs = j.notifications;
+          }
+        } else if (userRole === 'buyer') {
+          if (!userId) {
+            notifs = [];
+            return;
+          }
+          const qp = userId ? `buyer_id=${encodeURIComponent(userId)}` : '';
+          const res = await fetch(`${apiBase}/notifications/list?${qp}`);
+          if (!res.ok) return;
+          const j = await res.json();
+          if (j && j.ok && Array.isArray(j.notifications)) {
+            // Show ONLY backend contracts data - NO localStorage caching
             notifs = j.notifications;
           }
         } else {
@@ -222,8 +268,8 @@ const Navbar = () => {
         try { 
           const filteredNotifs = Array.isArray(notifs) 
             ? notifs.filter(x => {
-                // For farmers, exclude notifications with status 'accepted'
-                if (userRole === 'farmer' && x.status && (x.status).toLowerCase() === 'accepted') {
+                // For farmers and buyers, exclude notifications with status 'accepted'
+                if ((userRole === 'farmer' || userRole === 'buyer') && x.status && (x.status).toLowerCase() === 'accepted') {
                   return false;
                 }
                 return !(x && Number(x.is_read));
@@ -493,7 +539,7 @@ const Navbar = () => {
               ? { ...notif, status: status }
               : notif
           );
-          // Notifications are NOT stored in localStorage - they come from contract_b API only
+          console.log('✅ Updated local notifList after contract status change:', updated);
           return updated;
         });
 
@@ -504,6 +550,10 @@ const Navbar = () => {
         setDigitalSignature(null);
         setContractBuyerNameOverride('');
         setContractSignatureDate('');
+        
+        // Show success message to user
+        alert(`Contract ${status === 'accepted' ? 'accepted' : 'rejected'} successfully!`);
+    
     
       } else {
         const status = res ? res.status : 'no response';
@@ -523,117 +573,31 @@ const Navbar = () => {
       setOtpVerified(false);
     }
   };
-  // handle buyer/farmer actions on viewed contract (accept, negotiate, reject)
+  // handle buyer/farmer actions on viewed contract (accept, negotiate, reject) - UNIFIED LOGIC FOR BOTH ROLES
   const handleContractAction = async (action) => {
     if (!currentContractNotification) return;
     console.log('handleContractAction', action, 'otpVerified=', otpVerified, 'currentContract=', currentContractNotification, 'userRole=', userRole);
     
-    // BUYER ACCEPT LOGIC
-    if (action === 'accept' && userRole === 'buyer') {
-      // if OTP is already verified, finalize acceptance directly
-      if (otpVerified && pendingAction === 'accept') {
-        console.log('OTP already verified—finalizing acceptance');
-        await finalizeContract('accepted');
-        setPendingAction('');
-        return;
-      }
-
-      // start OTP flow for acceptance
-      console.log('Starting OTP flow for contract acceptance');
-      setPendingAction('accept');
-      setOtpEmail(localStorage.getItem('agriai_email') || '');
-      setOtpValue('');
-      setOtpError('');
-      setOtpSent(false);
-      setOtpVerified(false);
-      setDigitalSignature(null);
-      setOtpModalOpen(true);
-      sendAcceptanceOtp();
-      return;
-    }
-
-    // FARMER ACCEPT LOGIC
-    if (action === 'accept' && userRole === 'farmer') {
-      // if OTP is already verified, finalize acceptance directly
-      if (otpVerified && pendingAction === 'accept') {
-        console.log('OTP already verified—finalizing farmer acceptance');
-        await finalizeContract('accepted');
-        setPendingAction('');
-        return;
-      }
-
-      // start OTP flow for farmer acceptance
-      console.log('Starting OTP flow for farmer contract acceptance');
-      setPendingAction('accept');
-      setOtpEmail(localStorage.getItem('agriai_email') || '');
-      setOtpValue('');
-      setOtpError('');
-      setOtpSent(false);
-      setOtpVerified(false);
-      setDigitalSignature(null);
-      setOtpModalOpen(true);
-      sendAcceptanceOtp();
-      return;
-    }
-
-    // BUYER REJECT LOGIC
-    if (action === 'reject' && userRole === 'buyer') {
-      // if OTP verified for rejection, finalize rejection
-      if (otpVerified && pendingAction === 'reject') {
-        console.log('OTP already verified—finalizing rejection');
-        await finalizeContract('rejected');
-        setPendingAction('');
-        return;
-      }
-
-      // start OTP flow for rejection
-      console.log('Starting OTP flow for contract rejection');
-      setPendingAction('reject');
-      setOtpEmail(localStorage.getItem('agriai_email') || '');
-      setOtpValue('');
-      setOtpError('');
-      setOtpSent(false);
-      setOtpVerified(false);
-      setDigitalSignature(null);
-      setOtpModalOpen(true);
-      sendAcceptanceOtp();
-      return;
-    }
-
-    // FARMER REJECT LOGIC
-    if (action === 'reject' && userRole === 'farmer') {
-      // if OTP verified for rejection, finalize rejection
-      if (otpVerified && pendingAction === 'reject') {
-        console.log('OTP already verified—finalizing farmer rejection');
-        await finalizeContract('rejected');
-        setPendingAction('');
-        return;
-      }
-
-      // start OTP flow for farmer rejection
-      console.log('Starting OTP flow for farmer contract rejection');
-      setPendingAction('reject');
-      setOtpEmail(localStorage.getItem('agriai_email') || '');
-      setOtpValue('');
-      setOtpError('');
-      setOtpSent(false);
-      setOtpVerified(false);
-      setDigitalSignature(null);
-      setOtpModalOpen(true);
-      sendAcceptanceOtp();
-      return;
-    }
-    
+    // Handle negotiate action - same for both buyer and farmer
     if (action === 'negotiate') {
       console.log('Contract negotiation:', currentContractNotification);
       setShowContractModal(false);
       return;
     }
     
-    if (action === 'reject' && userRole === 'buyer') {
-      // start OTP flow for rejection
-      console.log('Starting OTP flow for contract rejection');
-      setPendingAction('reject');
+    // UNIFIED ACCEPT/REJECT LOGIC - works identically for both buyer and farmer
+    if (action === 'accept' || action === 'reject') {
+      // If OTP is already verified for this action, finalize directly
+      if (otpVerified && pendingAction === action) {
+        console.log(`OTP already verified—finalizing ${action}`);
+        await finalizeContract(action === 'reject' ? 'rejected' : 'accepted');
+        setPendingAction('');
+        return;
+      }
+
+      // Start OTP flow for acceptance or rejection
+      console.log(`Starting OTP flow for contract ${action}`);
+      setPendingAction(action);
       setOtpEmail(localStorage.getItem('agriai_email') || '');
       setOtpValue('');
       setOtpError('');
@@ -642,13 +606,6 @@ const Navbar = () => {
       setDigitalSignature(null);
       setOtpModalOpen(true);
       sendAcceptanceOtp();
-      return;
-    }
-    
-    if (action === 'reject') {
-      console.log('Contract rejection:', currentContractNotification);
-      setShowContractModal(false);
-      return;
     }
   };
 
@@ -978,19 +935,17 @@ const Navbar = () => {
             <p><strong>पक्ष A – खरीदार / कंपनी</strong></p>
             <p><b>नाम:</b> ${buyerName}</p>
             <p><b>खरीदार आईडी:</b> ${buyerId || '[Buyer ID]'}</p>
-            <p><b>पता:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p>
+            <p><b>पता:</b> ${buyerState || '[Buyer State]'}</p>
           </div>
-        
+
           <div class="party-section">
             <p><strong>पक्ष B – किसान / उत्पादक</strong></p>
             <p><b>नाम:</b> ${farmerName}</p>
             <p><b>किसान आईडी:</b> ${farmerId}</p>
-            <p><b>पता:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p>
+            <p><b>पता:</b> ${farmerState || '[Farmer State]'}</p>
           </div>
-        
           <p>
-             पक्ष A और पक्ष B को सामूहिक रूप से “पक्षकार” कहा जाएगा।
-             AgriAI केवल एक डिजिटल सुविधा मंच के रूप में कार्य करता है और किसी भी पक्ष का खरीदार, विक्रेता, परिवहनकर्ता, बीमाकर्ता या प्रतिनिधि नहीं है।
+             पक्ष A और पक्ष B को सामूहिक रूप से "पक्ष" कहा जाता है। AgriAI केवल एक डिजिटल सहायता प्लेटफ़ॉर्म के रूप में कार्य करता है और किसी भी पक्ष का खरीदार, विक्रेता, परिवहनकर्ता, बीमाकर्ता या एजेंट नहीं है।
           </p>
         </section>
         
@@ -1260,13 +1215,13 @@ const Navbar = () => {
           <section class="signature-section">
             <div class="signature-line">
               <p><b>खरीदार / कंपनी</b></p>
-              <p>नाम: ${buyerName || '________________'}</p>
-              <p>तिथि: ${startDate || '________________'}</p>
+              <p>नाम: ${userRole === 'buyer' && otpVerified ? (buyerName || '________________') : (userRole === 'farmer' && !otpVerified ? (buyerName || '________________') : '________________')}</p>
+              <p>तिथि: ${userRole === 'buyer' && otpVerified ? (contractSignatureDate || startDate || '________________') : (userRole === 'farmer' && !otpVerified ? (startDate || '________________') : '________________')}</p>
             </div>
             <div class="signature-line">
               <p><b>किसान / उत्पादक</b></p>
-              <p>नाम: ${farmerNameVerified && currentContractNotification && currentContractNotification.status === 'accepted' ? farmerNameVerified : '________________'}</p>
-              <p>तिथि: ${farmerDateVerified && currentContractNotification && currentContractNotification.status === 'accepted' ? farmerDateVerified : '________________'}</p>
+              <p>नाम: ${userRole === 'farmer' && otpVerified ? (farmerNameVerified || farmerName || '________________') : (userRole === 'buyer' && !otpVerified ? (farmerName || '________________') : '________________')}</p>
+              <p>तिथि: ${userRole === 'farmer' && otpVerified ? (farmerDateVerified || startDate || '________________') : (userRole === 'buyer' && !otpVerified ? (startDate || '________________') : '________________')}</p>
             </div>
           </section>
         
@@ -1463,18 +1418,17 @@ const Navbar = () => {
             <p><strong>ಪಕ್ಷ A – ಖರೀದಿದಾರ / ಕಂಪನಿ</strong></p>
             <p><b>ಹೆಸರು:</b> ${buyerName}</p>
             <p><b>ಖರೀದಿದಾರ ಐಡಿ:</b> ${buyerId || '[Buyer ID]'}</p>
-            <p><b>ವಿಳಾಸ:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+            <p><b>ವಿಳಾಸ:</b> ${buyerState || '[Buyer State]'}</p>
           </div>
-        
+
           <div class="party-section">
             <p><strong>ಪಕ್ಷ B – ರೈತ / ಉತ್ಪಾದಕ</strong></p>
             <p><b>ಹೆಸರು:</b> ${farmerName}</p>
             <p><b>ರೈತ ಐಡಿ:</b> ${farmerId}</p>
-            <p><b>ವಿಳಾಸ:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+            <p><b>ವಿಳಾಸ:</b> ${farmerState || '[Farmer State]'}</p>
           </div>
-        
+
           <p>
-             ಪಕ್ಷ A ಮತ್ತು ಪಕ್ಷ B ಅವರನ್ನು ಒಟ್ಟಾಗಿ “ಪಕ್ಷಗಳು” ಎಂದು ಕರೆಯಲಾಗುತ್ತದೆ।
              AgriAI ಕೇವಲ ಡಿಜಿಟಲ್ ಸೌಲಭ್ಯ ವೇದಿಕೆಯಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ ಮತ್ತು ಯಾವುದೇ ಪಕ್ಷದ ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ಸಾರಿಗೆದಾರ, ವಿಮೆದಾರ ಅಥವಾ ಪ್ರತಿನಿಧಿಯಲ್ಲ.
           </p>
         </section>
@@ -1749,13 +1703,13 @@ const Navbar = () => {
             <section class="signature-section">
               <div class="signature-line">
                 <p><b>ಖರೀದಿದಾರ / ಕಂಪನಿ</b></p>
-                <p>ಹೆಸರು: ${buyerName || '________________'}</p>
-                <p>ದಿನಾಂಕ: ${startDate || '________________'}</p>
+                <p>ಹೆಸರು: ${userRole === 'buyer' && otpVerified ? (buyerName || '________________') : (userRole === 'farmer' && !otpVerified ? (buyerName || '________________') : '________________')}</p>
+                <p>ದಿನಾಂಕ: ${userRole === 'buyer' && otpVerified ? (contractSignatureDate || startDate || '________________') : (userRole === 'farmer' && !otpVerified ? (startDate || '________________') : '________________')}</p>
               </div>
               <div class="signature-line">
                 <p><b>ರೈತ / ಉತ್ಪಾದಕ</b></p>
-                <p>ಹೆಸರು: ${farmerNameVerified && currentContractNotification && currentContractNotification.status === 'accepted' ? farmerNameVerified : '________________'}</p>
-                <p>ದಿನಾಂಕ: ${farmerDateVerified && currentContractNotification && currentContractNotification.status === 'accepted' ? farmerDateVerified : '________________'}</p>
+                <p>ಹೆಸರು: ${userRole === 'farmer' && otpVerified ? (farmerNameVerified || farmerName || '________________') : (userRole === 'buyer' && !otpVerified ? (farmerName || '________________') : '________________')}</p>
+                <p>ದಿನಾಂಕ: ${userRole === 'farmer' && otpVerified ? (farmerDateVerified || startDate || '________________') : (userRole === 'buyer' && !otpVerified ? (startDate || '________________') : '________________')}</p>
               </div>
             </section>
         
@@ -1951,14 +1905,14 @@ const Navbar = () => {
     <p><strong>Party A – Buyer / Company</strong></p>
     <p><b>Name:</b> ${buyerName}</p>
     <p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p>
-    <p><b>Address:</b> ${buyerAddress || '[Buyer Address]'}, ${buyerState || '[Buyer State]'}</p>
+    <p><b>Address:</b> ${buyerState || '[Buyer State]'}</p>
   </div>
 
   <div class="party-section">
     <p><strong>Party B – Farmer / Producer</strong></p>
     <p><b>Name:</b> ${farmerName}</p>
     <p><b>Farmer ID:</b> ${farmerId}</p>
-    <p><b>Address:</b> ${farmerAddress ? farmerAddress : ''}${farmerState ? (farmerAddress ? ', ' + farmerState : farmerState) : ''}</p>
+    <p><b>Address:</b> ${farmerState || '[Farmer State]'}</p>
   </div>
 
   <p>
@@ -2229,13 +2183,13 @@ const Navbar = () => {
   <section class="signature-section">
     <div class="signature-line">
       <p><b>Buyer / Company</b></p>
-      <p>Name: ${buyerName || '________________'}</p>
-      <p>Date: ${startDate || '________________'}</p>
+      <p>Name: ${userRole === 'buyer' && otpVerified ? (buyerName || '________________') : (userRole === 'farmer' && !otpVerified ? (buyerName || '________________') : '________________')}</p>
+      <p>Date: ${userRole === 'buyer' && otpVerified ? (contractSignatureDate || startDate || '________________') : (userRole === 'farmer' && !otpVerified ? (startDate || '________________') : '________________')}</p>
     </div>
     <div class="signature-line">
       <p><b>Farmer / Producer</b></p>
-      <p>Name: ${farmerNameVerified && currentContractNotification && currentContractNotification.status === 'accepted' ? farmerNameVerified : '________________'}</p>
-      <p>Date: ${farmerDateVerified && currentContractNotification && currentContractNotification.status === 'accepted' ? farmerDateVerified : '________________'}</p>
+      <p>Name: ${userRole === 'farmer' && otpVerified ? (farmerNameVerified || farmerName || '________________') : (userRole === 'buyer' && !otpVerified ? (farmerName || '________________') : '________________')}</p>
+      <p>Date: ${userRole === 'farmer' && otpVerified ? (farmerDateVerified || startDate || '________________') : (userRole === 'buyer' && !otpVerified ? (startDate || '________________') : '________________')}</p>
     </div>
   </section>
 
@@ -2397,8 +2351,12 @@ const Navbar = () => {
         {/* Language selector */}
         <div style={{display:'inline-flex', alignItems:'center', marginRight:-30}}>
           <select value={siteLang} onChange={e => {
-            const l = e.target.value; setSiteLang(l); try { localStorage.setItem('agri_lang', l); } catch (e) {}
+            const l = e.target.value;
+            setSiteLang(l);
+            try { localStorage.setItem('agri_lang', l); } catch (e) {}
             try { window.dispatchEvent(new CustomEvent('agri:lang:change', { detail: { lang: l } })); } catch (e) {}
+            // Reload the current page so buyer pages like History.js update immediately
+            setTimeout(() => window.location.reload(), 100);
           }} aria-label="Site language" style={{padding:'3px 1px', border:'3px solid #130e0e', background:'#52ca43fb',color:'#ffffff'}}>
             <option value="en">English</option>
             <option value="hi">हिन्दी </option>
@@ -2413,47 +2371,45 @@ const Navbar = () => {
             className="navbar-message-btn"
             aria-label="Open notifications"
             onClick={async () => {
-              // Toggle notifications panel for both farmers and buyers.
+              // Toggle notifications panel for both farmers and buyers - using identical logic
               setNotifOpen(o => !o);
               if (!notifOpen) {
-                if (userRole === 'farmer') {
-                  try {
-                    const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
-                    const qp = farmerId ? `farmer_id=${encodeURIComponent(farmerId)}` : (localStorage.getItem('agriai_phone') ? `farmer_phone=${encodeURIComponent(localStorage.getItem('agriai_phone'))}` : '');
-                    const res = await fetch(`${apiBase}/notifications/list?${qp}`);
-                    const j = await res.json();
-                    if (j && j.ok && Array.isArray(j.notifications)) {
-                      // Show ONLY API data from contract_b - NO localStorage merging
-                      setNotifList(j.notifications);
-                      const unread = Array.isArray(j.notifications) ? j.notifications.filter(x => !(x && Number(x.is_read))).length : 0;
-                      setNotifCount(unread);
-                    } else {
-                      setNotifList([]);
-                      setNotifCount(0);
-                    }
-                  } catch (e) {
+                try {
+                  const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
+                  
+                  // Build query parameters based on user role
+                  let qp = '';
+                  if (userRole === 'farmer') {
+                    qp = farmerId ? `farmer_id=${encodeURIComponent(farmerId)}` : (localStorage.getItem('agriai_phone') ? `farmer_phone=${encodeURIComponent(localStorage.getItem('agriai_phone'))}` : '');
+                  } else if (userRole === 'buyer') {
+                    qp = userId ? `buyer_id=${encodeURIComponent(userId)}` : '';
+                  } else {
+                    setNotifList([]);
+                    setNotifCount(0);
+                    return;
+                  }
+                  
+                  if (!qp) {
+                    setNotifList([]);
+                    setNotifCount(0);
+                    return;
+                  }
+                  
+                  // Fetch notifications using role-appropriate parameters
+                  const res = await fetch(`${apiBase}/notifications/list?${qp}`);
+                  const j = await res.json();
+                  if (j && j.ok && Array.isArray(j.notifications)) {
+                    // Show ONLY API data - NO localStorage merging for both buyer and farmer
+                    setNotifList(j.notifications);
+                    const unread = Array.isArray(j.notifications) ? j.notifications.filter(x => !(x && Number(x.is_read))).length : 0;
+                    setNotifCount(unread);
+                  } else {
                     setNotifList([]);
                     setNotifCount(0);
                   }
-                } else {
-                  // For non-farmer users (buyers), use API only
-                  try {
-                    const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
-                    const buyerId = localStorage.getItem('agriai_id');
-                    const res = await fetch(`${apiBase}/notifications/list?buyer_id=${encodeURIComponent(buyerId || '')}`);
-                    const j = await res.json();
-                    if (j && j.ok && Array.isArray(j.notifications)) {
-                      setNotifList(j.notifications);
-                      const unread = Array.isArray(j.notifications) ? j.notifications.filter(x => !(x && Number(x.is_read))).length : 0;
-                      setNotifCount(unread);
-                    } else {
-                      setNotifList([]);
-                      setNotifCount(0);
-                    }
-                  } catch (e) {
-                    setNotifList([]);
-                    setNotifCount(0);
-                  }
+                } catch (e) {
+                  setNotifList([]);
+                  setNotifCount(0);
                 }
               }
             }}
@@ -2479,14 +2435,22 @@ const Navbar = () => {
                   <div style={{display:'flex', gap:8}}>
                     <button onClick={async ()=>{
                       try {
-                        // Collect unread ids from current list
+                        // Collect unread ids and prepare user info
                         const unreadIds = (Array.isArray(notifList) ? notifList.filter(x => !(x && Number(x.is_read))) : []).map(x => x && x.id).filter(Boolean);
-                        // If we have server-side ids, call backend to mark them read
+                        // Send user role and ID along with ids to mark
                         const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
                         if (unreadIds.length) {
                           try {
+                            const payload = { ids: unreadIds };
+                            // Add user identifier based on role
+                            if (userRole === 'buyer') {
+                              payload.buyer_id = userId;
+                            } else if (userRole === 'farmer') {
+                              payload.farmer_id = farmerId;
+                            }
+                            payload.user_role = userRole;
                             await fetch(`${apiBase}/notifications/mark-read`, {
-                              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: unreadIds })
+                              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
                             });
                           } catch (e) {
                             // ignore network errors; will still update UI locally
@@ -2507,8 +2471,8 @@ const Navbar = () => {
                     </div>
                   )}
                   {Array.isArray(notifList) && notifList.filter(n => {
-                    // For farmers, exclude notifications with status 'accepted'
-                    if (userRole === 'farmer' && n.status && (n.status).toLowerCase() === 'accepted') {
+                    // Exclude notifications with status 'accepted' for both farmers and buyers
+                    if (n.status && (n.status).toLowerCase() === 'accepted') {
                       return false;
                     }
                     return true;
@@ -2516,13 +2480,18 @@ const Navbar = () => {
                     // Extract items early so it's available everywhere in this closure
                     const items = Array.isArray(n.items) ? n.items : (n.items ? [n.items] : []);
                     
-                    // FARMER NOTIFICATIONS: Use farmer_total directly from contract_b
+                    // UNIFIED: Calculate display amount for both farmer and buyer using role-appropriate total
                     let displayAmount = 0;
-                    if (userRole === 'farmer' && n.farmer_total) {
+                    
+                    // Use the role-appropriate total from the contract if available
+                    if (userRole === 'farmer' && n.farmer_total != null) {
                       // For farmers: use farmer_total from contract_b (source of truth)
                       displayAmount = Number(n.farmer_total || 0);
+                    } else if (userRole === 'buyer' && n.buyer_total != null) {
+                      // For buyers: use buyer_total from contracts (source of truth)
+                      displayAmount = Number(n.buyer_total || 0);
                     } else {
-                      // For buyers OR if no farmer_total: compute from items or use totals
+                      // Fallback: compute from items or use totals (works for both)
                       const computedSubtotal = items.reduce((s,it) => s + ((Number(it.price_per_kg||it._price_per_kg||0)) * Number(it.order_quantity||it.quantity_kg||0 || 0)), 0);
                       // compute platform fee and gst same as invoice view: platformFee = total * rate; gst = platformFee * 0.18
                       let platformSum = 0; let gstSum = 0;
@@ -2541,7 +2510,7 @@ const Navbar = () => {
                       const computedGrandTotal = computedSubtotal - platformSum - gstSum;
                       // compute base grand total from items
                       let grandTotal = computedGrandTotal;
-                      // prefer explicit buyer totals provided via notification payload or contract_meta
+                      // prefer explicit totals provided via notification payload or contract_meta
                       if (n.buyer_fee_total != null && n.total_amount_payable != null) {
                         grandTotal = Number(n.total_amount_payable);
                       } else if (n.contract_meta && n.contract_meta.totalAmountPayableByBuyer != null) {
@@ -2560,7 +2529,7 @@ const Navbar = () => {
                     const label = n.contract_number ? (t('contractLabel', siteLang) || 'Contract') : (t('invoiceLabel', siteLang) || 'Invoice');
                     const createdAtRaw = n.created_at || n.createdAt || Date.now();
                     const createdDateObj = new Date(createdAtRaw);
-                    const createdDate = isNaN(createdDateObj) ? String(createdAtRaw) : createdDateObj.toLocaleDateString();
+                    const createdDate = isNaN(createdDateObj) ? String(createdAtRaw) : `${String(createdDateObj.getDate()).padStart(2, '0')}/${String(createdDateObj.getMonth() + 1).padStart(2, '0')}/${createdDateObj.getFullYear()}`;
                     return (
                       <div key={n.id || invoiceId} style={{border: n.is_read ? '1px solid #ddd' : '2px solid #236902', borderRadius:8, overflow:'hidden', margin:'8px 6px', background: n.is_read ? '#fff' : '#d4f1ca', boxShadow: n.is_read ? 'none' : '0 4px 12px rgba(35, 105, 2, 0.25)'}}>
                         <div style={{padding:'12px 14px', background: n.is_read ? '#f7faf7' : '#c8e8bb', display:'flex', flexDirection:'column', gap:8}}>

@@ -1,5 +1,6 @@
 import { Float, Html, OrbitControls, Stars } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
+import * as THREE from "three";
 import { Link } from "react-router-dom";
 import {
   ArrowRight, BarChart2, Bell,  FileText,
@@ -59,6 +60,81 @@ function NetworkSphere() {
         <pointsMaterial size={0.04} color="#44ffaa" transparent opacity={0.85} sizeAttenuation />
       </points>
       <Stars radius={40} depth={20} count={600} factor={3} fade speed={1} />
+    </group>
+  );
+}
+
+function IndiaMap3D() {
+  const groupRef = useRef();
+  const [geoData, setGeoData] = useState(null);
+
+  // Load GeoJSON
+  useEffect(() => {
+    fetch("/data/india.json")
+      .then((res) => res.json())
+      .then((data) => setGeoData(data))
+      .catch((err) => {
+        console.error("Failed to load India GeoJSON:", err);
+      });
+  }, []);
+
+  // Animate rotation
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = state.clock.elapsedTime * 0.15;
+      groupRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.2) * 0.1;
+    }
+  });
+
+  const project = ([lng, lat]) => {
+    const x = (lng - 78) * 0.055;
+    const y = (lat - 22) * 0.055;
+    return [x, y, 0];
+  };
+
+  const getPolygons = (coords) => {
+    if (!Array.isArray(coords) || coords.length === 0) return [];
+    if (Array.isArray(coords[0][0][0])) {
+      // MultiPolygon
+      return coords.flat();
+    }
+    return coords;
+  };
+
+  return (
+    <group ref={groupRef}>
+      <ambientLight intensity={0.65} color="#b2ffcc" />
+      <directionalLight position={[3, 5, 5]} intensity={1.1} color="#a2ffcc" />
+      <pointLight position={[-5, 2, 5]} intensity={0.6} color="#88ff99" />
+
+      {geoData && Array.isArray(geoData.features) && geoData.features.map((feature, featureIndex) => {
+        const polygons = getPolygons(feature.geometry.coordinates);
+        return polygons.map((polygon, polyIndex) => {
+          if (!polygon || polygon.length < 3) return null;
+
+          const shape = new THREE.Shape();
+          polygon.forEach((point, index) => {
+            const [x, y] = project(point);
+            if (index === 0) shape.moveTo(x, y);
+            else shape.lineTo(x, y);
+          });
+          shape.closePath();
+
+          const geometry = new THREE.ShapeGeometry(shape);
+          return (
+            <mesh key={`${featureIndex}-${polyIndex}`} geometry={geometry}>
+              <meshStandardMaterial
+                color="#00cc66"
+                emissive="#00ff88"
+                emissiveIntensity={0.35}
+                side={THREE.DoubleSide}
+                transparent
+                opacity={0.85}
+              />
+            </mesh>
+          );
+        });
+      })}
     </group>
   );
 }
@@ -264,8 +340,8 @@ export default function App() {
             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1, delay: 0.3, ease: "easeOut" }} className="h-[500px] rounded-2xl overflow-hidden">
               <Suspense fallback={<div className="h-full flex items-center justify-center glass-card rounded-2xl"><div className="text-neon animate-spin w-8 h-8 border-2 border-current border-t-transparent rounded-full" /></div>}>
                 <Canvas camera={{ position: [0, 0, 6], fov: 50 }}>
-                  <NetworkSphere />
-                  <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.8} />
+                  <IndiaMap3D />
+                  <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
                 </Canvas>
               </Suspense>
             </motion.div>

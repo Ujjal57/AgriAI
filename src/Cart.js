@@ -1,77 +1,45 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import Navbar from './Navbar';
 import logo from './assets/logo192.png';
 import { t } from './i18n';
+import { Leaf } from 'lucide-react';
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
   * { box-sizing: border-box; }
 
-  .cart-root {
+  .fc-root {
     min-height: 100vh;
-    font-family: 'Inter', sans-serif;
-    background: linear-gradient(135deg, #0a2e0a 0%, #1a5c10 30%, #2d8a1f 60%, #53b635 100%);
+    font-family: 'Times New Roman', serif;
+    background: rgba(83, 255, 3, 0.12);
     background-attachment: fixed;
     position: relative;
-    overflow-x: hidden;
-  }
-  .cart-root::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at 20% 20%, rgba(83,182,53,0.18) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 80%, rgba(35,105,2,0.22) 0%, transparent 50%),
-      radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.03) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: 0;
+    overflow: visible;
+    color: #000;
   }
 
-  .cart-orb {
-    position: fixed;
-    border-radius: 50%;
-    filter: blur(60px);
-    opacity: 0.18;
-    pointer-events: none;
-    z-index: 0;
-    animation: cartFloatOrb 12s ease-in-out infinite;
+  .fc-root .navbar {
+    background: oklch(0.12 0.03 160 / 0.5) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
   }
-  .cart-orb-1 { width:400px;height:400px;background:#53b635;top:-100px;left:-100px;animation-delay:0s; }
-  .cart-orb-2 { width:300px;height:300px;background:#236902;bottom:10%;right:-80px;animation-delay:4s; }
-  .cart-orb-3 { width:250px;height:250px;background:#8fdb5e;top:40%;left:60%;animation-delay:8s; }
-  @keyframes cartFloatOrb {
-    0%,100%{transform:translate(0,0) scale(1);}
-    33%{transform:translate(30px,-20px) scale(1.05);}
-    66%{transform:translate(-20px,30px) scale(0.95);}
+  .fc-root .navbar select {
+    background: oklch(0.12 0.03 160 / 0.6) !important;
+    border: 1px solid oklch(0.65 0.22 145 / 0.3) !important;
+    color: rgba(255,255,255,0.9) !important;
   }
-
-  .cart-leaf {
-    position: fixed;
-    width: 10px; height: 10px;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 0;
-    animation: cartLeafFall linear infinite;
-  }
-  .cart-leaf::before { content:'🌿'; font-size:16px; }
-  .cart-leaf-1{left:5%;animation-duration:14s;animation-delay:0s;}
-  .cart-leaf-2{left:20%;animation-duration:18s;animation-delay:3s;}
-  .cart-leaf-3{left:40%;animation-duration:12s;animation-delay:6s;}
-  .cart-leaf-4{left:65%;animation-duration:16s;animation-delay:1s;}
-  .cart-leaf-5{left:85%;animation-duration:20s;animation-delay:9s;}
-  @keyframes cartLeafFall {
-    0%{transform:translateY(-40px) rotate(0deg);opacity:0;}
-    10%{opacity:0.6;}
-    90%{opacity:0.3;}
-    100%{transform:translateY(110vh) rotate(720deg);opacity:0;}
+  .fc-root .navbar select option {
+    background: #1a1a1a;
+    color: #ffffff;
   }
 
   .cart-main {
     position: relative;
     z-index: 1;
-    padding: 5rem 1.5rem 3rem;
-    max-width: 1280px;
+    padding: 6rem 1rem 2rem;
+    max-width: 1100px;
     margin: 0 auto;
     animation: cartFadeUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
   }
@@ -160,7 +128,7 @@ const styles = `
   /* Two column layout */
   .cart-layout {
     display: flex;
-    gap: 20px;
+    gap: 18px;
     align-items: flex-start;
     flex-wrap: wrap;
   }
@@ -169,30 +137,30 @@ const styles = `
     min-width: 320px;
     display: grid;
     grid-template-columns: 1fr;
-    gap: 14px;
+    gap: 12px;
   }
 
   /* Item card */
   .cart-item-card {
     display: flex;
-    gap: 14px;
+    gap: 12px;
     align-items: center;
     background: #fff;
-    border: 1px solid rgba(83,182,53,0.15);
-    border-radius: 16px;
-    padding: 14px;
-    box-shadow: 0 4px 16px rgba(35,105,2,0.07);
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
     transition: transform 0.35s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.35s;
   }
   .cart-item-card:hover {
-    transform: translateY(-4px) scale(1.01);
-    box-shadow: 0 12px 32px rgba(35,105,2,0.14);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.08);
   }
   .cart-item-img-wrap {
-    width: 120px; height: 90px;
-    border-radius: 10px;
+    width: 120px; height: 100px;
+    border-radius: 6px;
     overflow: hidden;
-    background: linear-gradient(135deg, #e8f5e2, #f0faf0);
+    background: #f4f4f4;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -319,10 +287,10 @@ const styles = `
     align-self: flex-start;
   }
   .cart-summary-box {
-    background: linear-gradient(135deg, rgba(234,246,234,0.7) 0%, rgba(255,255,255,0.5) 100%);
-    border: 1px solid rgba(83,182,53,0.2);
-    border-radius: 16px;
-    padding: 1.25rem;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 12px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
   }
   .cart-summary-title {
@@ -344,7 +312,7 @@ const styles = `
   .cart-summary-rows { display:grid; gap:6px; }
   .cart-summary-row {
     background: #fff;
-    border: 1px solid rgba(83,182,53,0.1);
+    border: 1px solid #eee;
     border-radius: 10px;
     padding: 7px 10px;
     font-size: 0.85rem;
@@ -547,6 +515,8 @@ const Cart = () => {
   const [digitalSignature, setDigitalSignature] = React.useState('');
   const [currentBuyerName, setCurrentBuyerName] = React.useState('');
   const [pendingContractAction, setPendingContractAction] = React.useState(null);
+  const [showDeliveryDateModal, setShowDeliveryDateModal] = React.useState(false);
+  const [selectedDeliveryDate, setSelectedDeliveryDate] = React.useState('');
 
   const openOtpForContract = () => {
     setOtpEmail(localStorage.getItem('agriai_email') || '');
@@ -616,21 +586,10 @@ const Cart = () => {
     if (!otpCode || otpCode.length < 4) { setOtpError('Please enter a valid OTP'); return; }
     const result = await verifyOtp(otpEmail, otpCode);
     if (result && typeof result === 'object') {
-      const name = currentBuyerName || localStorage.getItem('agriai_name') || '';
-      const ts = result.signature_timestamp || new Date().toISOString();
-      const formatted = new Date(ts).toLocaleDateString('en-GB');
-      let updated = contractHtml || '';
-      updated = updated.replace(/(<p>Buyer \/ Authorized Representative<\/p>[\s\S]*?<p>Signature:)\s*[^<]*/m, `$1 <strong>${name}</strong>`);
-      updated = updated.replace(/(<p>Buyer \/ Authorized Representative<\/p>[\s\S]*?<p>Date:)\s*[^<]*/m, `$1 <strong>${formatted}</strong>`);
-      updated = updated.replace(/(<p>खरीदार \/ अधिकृत प्रतिनिधि<\/p>[\s\S]*?<p>हस्ताक्षर:)\s*[^<]*/m, `$1 <strong>${name}</strong>`);
-      updated = updated.replace(/(<p>खरीदार \/ अधिकृत प्रतिनिधि<\/p>[\s\S]*?<p>तिथि:)\s*[^<]*/m, `$1 <strong>${formatted}</strong>`);
-      updated = updated.replace(/(<p>ಖರೀದಿದಾರ \/ ಅಧಿಕೃತ ಪ್ರತಿನಿಧಿ<\/p>[\s\S]*?<p>ಸಹಿ:)\s*[^<]*/m, `$1 <strong>${name}</strong>`);
-      updated = updated.replace(/(<p>ಖರೀದಿದಾರ \/ ಅಧಿಕೃತ ಪ್ರತಿನಿಧಿ<\/p>[\s\S]*?<p>ದಿನಾಂಕ:)\s*[^<]*/m, `$1 <strong>${formatted}</strong>`);
-      setContractHtml(updated);
       setDigitalSignature(result);
       setOtpVerified(true);
       setShowOtpModal(false);
-      setShowContractPreview(true);
+      await generateContractAndShowPreview(true);
     }
   };
 
@@ -702,6 +661,7 @@ const Cart = () => {
           } catch (e) {}
         } catch (e) { console.warn('Failed to send contract notification', e); }
         clearCart(); setShowContractPreview(false); setContractMetadata(null);
+        try { await proceedWithContract(); } catch (e) { console.warn('Proceed with contract failed:', e); }
       }
     } catch (e) { console.warn('Error uploading contracts:', e); alert('Contract upload failed. See console.'); }
     finally { try { setPendingContractAction(null); } catch (e) {} setUploadingContracts(false); setOtpVerified(false); setDigitalSignature(''); }
@@ -721,7 +681,9 @@ const Cart = () => {
             if (res && res.ok) {
               const j = await res.json().catch(() => null);
               if (j && j.ok && Array.isArray(j.cart)) {
+                console.log('📦 Raw cart data from backend:', j.cart);
                 const mapped = j.cart.map(r => ({ id: r.crop_id || r.id, cart_id: r.id, crop_name: r.crop_name || '', quantity_kg: Number(r.total_quantity != null ? r.total_quantity : r.quantity_kg || 0), price_per_kg: r.price_per_kg != null ? Number(r.price_per_kg) : 0, image_url: r.image_path || r.image_url || '', order_quantity: Number(r.quantity_kg || 0), variety: r.variety || '', user_type: r.user_type || userRole, user_id: r.user_id || null, user_phone: r.user_phone || null }));
+                console.log('🖼️ Mapped cart items with images:', mapped.map(m => ({ crop_name: m.crop_name, image_url: m.image_url })));
                 setItems(mapped); try { localStorage.setItem(cartKey, JSON.stringify(mapped)); } catch (e) {} return;
               }
             }
@@ -730,6 +692,7 @@ const Cart = () => {
         try {
           const raw = localStorage.getItem(cartKey); const arr = raw ? JSON.parse(raw) : [];
           const normalized = (Array.isArray(arr) ? arr : []).map(it => { try { const avail = Number(it.quantity_kg || 0) || 0; const order = (it.order_quantity !== undefined && it.order_quantity !== null) ? Number(it.order_quantity) : 0; return { ...it, quantity_kg: avail, order_quantity: order }; } catch (e) { return it; } });
+          console.log('💾 Loaded cart from localStorage:', normalized);
           setItems(normalized);
         } catch (e) { setItems([]); }
       } catch (e) { setItems([]); }
@@ -810,6 +773,24 @@ const Cart = () => {
     return { gstRate, commissionRate, gstAmt, commissionAmt, gstOnPlatformFee, lineTotal: total };
   };
 
+  const getGroupFromItem = (it) => {
+    const fields = [it && it.category, it && it.cat, it && it._category, it && it.category_name, it && it.categoryName, it && it.tags, it && it.tag].filter(Boolean).join(' ');
+    const catRaw = (fields || (it && it.crop_name) || '').toString().trim().toLowerCase();
+    const name = (it && it.crop_name || '').toString().toLowerCase();
+    const exact = (it && (it.category || it.cat) || '').toString().trim().toLowerCase();
+    if (exact === 'food crops' || exact === 'food crop' || exact === 'food' || exact === 'crops') return 'crop';
+    if (exact === 'fruits and vegetables' || exact === 'fruits & vegetables' || exact === 'fruits' || exact === 'fruits and veg') return 'fruitveg';
+    if (exact === 'masalas' || exact === 'masala' || exact === 'spices' || exact === 'spice') return 'masala';
+    const masalaKeywords = ['masala','masalas','spice','spices','मसाला','ಮಸಾಲೆ'];
+    const fruitKeywords = ['fruit','fruits','फल','ಹಣ್ಣು'];
+    const vegKeywords = ['vegetable','vegetables','veg','veggie','veget','सब्जी','ತರಕಾರಿ'];
+    const hasAny = (str, arr) => arr.some(k => str.includes(k));
+    if (hasAny(catRaw, masalaKeywords) || hasAny(name, masalaKeywords)) return 'masala';
+    if (hasAny(catRaw, fruitKeywords) || hasAny(name, fruitKeywords) || hasAny(catRaw, vegKeywords) || hasAny(name, vegKeywords)) return 'fruitveg';
+    if (hasAny(catRaw, ['crop','crops','food'])) return 'crop';
+    return 'crop';
+  };
+
   const totals = items.reduce((acc, it) => { const { gstAmt, commissionAmt, lineTotal } = calculateGstAndCommission(it); acc.subtotal += lineTotal; acc.gst += gstAmt; acc.commission += commissionAmt; return acc; }, { subtotal: 0, gst: 0, commission: 0 });
   const grandTotal = totals.subtotal + totals.gst + totals.commission;
   const totalAvailableQty = items.reduce((s, it) => s + (Number(it.quantity_kg || 0) || 0), 0);
@@ -839,6 +820,7 @@ const Cart = () => {
       resetOtpModal();
       const lang = localStorage.getItem('agri_lang') || 'en';
       const tLang = (key) => t(key, lang);
+      
       const startDateObj = new Date();
       const startDate = startDateObj.toLocaleDateString('en-GB');
       const pickEndDate = () => new Promise(resolve => { const overlay = document.createElement('div'); overlay.style = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:10001;'; const box = document.createElement('div'); box.style = 'background:#fff;padding:18px;border-radius:6px;text-align:center;'; const label = document.createElement('p'); label.textContent = tLang('enterDeliveryDate'); label.style = 'margin:0 0 8px 0;font-size:16px;font-weight:bold;'; box.appendChild(label); const inp = document.createElement('input'); inp.type = 'date'; inp.style = 'font-size:16px;padding:6px;'; inp.placeholder = tLang('dateFormatHint') || 'dd-mm-yyyy'; box.appendChild(inp); const hint = document.createElement('p'); box.appendChild(hint); const btn = document.createElement('button'); btn.textContent = tLang('ok') || 'OK'; btn.style = 'margin-left:8px;padding:6px 12px;'; btn.onclick = () => { const val = inp.value; document.body.removeChild(overlay); resolve(val); }; const cancel = document.createElement('button'); cancel.textContent = tLang('cancel') || tLang('cancelButton') || 'Cancel'; cancel.style = 'margin-left:4px;padding:6px 12px;'; cancel.onclick = () => { document.body.removeChild(overlay); resolve(null); }; box.appendChild(btn); box.appendChild(cancel); overlay.appendChild(box); document.body.appendChild(overlay); });
@@ -856,16 +838,17 @@ const Cart = () => {
       let buyerName = localStorage.getItem('agriai_name') || '[Buyer Name]'; let buyerId = localStorage.getItem('agriai_id') || ''; let buyerPhone = localStorage.getItem('agriai_phone') || ''; let buyerState = localStorage.getItem('agriai_state') || ''; let buyerRegion = localStorage.getItem('agriai_region') || ''; let buyerAddress = '';
       if (buyerId || buyerPhone) { try { let qs = ''; if (buyerId) qs += `id=${encodeURIComponent(buyerId)}`; if (buyerPhone) { if (qs) qs += '&'; qs += `phone=${encodeURIComponent(buyerPhone)}`; } const resB = await fetch(`${apiBase}/buyer/get?${qs}`); if (resB && resB.ok) { const jb = await resB.json().catch(() => null); if (jb && jb.ok && jb.buyer) { buyerId = jb.buyer.id ? String(jb.buyer.id) : buyerId; if (jb.buyer.name) buyerName = jb.buyer.name; buyerState = jb.buyer.state || buyerState; buyerRegion = jb.buyer.region || buyerRegion; buyerAddress = jb.buyer.address || buyerAddress; } } } catch (e) { console.warn('buyer/get failed', e); } }
       setCurrentBuyerName(buyerName);
+      const signed = otpVerified;
+      const signatureName = signed ? (currentBuyerName || buyerName) : '________________';
+      const signatureDate = signed ? new Date().toLocaleDateString('en-GB') : '________________';
       const round2 = (v) => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
       let totalPlatformFee = 0; let totalGst = 0;
       items.forEach(it => { const { gstAmt, commissionAmt } = calculateGstAndCommission(it); totalPlatformFee += commissionAmt; totalGst += gstAmt; });
       totalPlatformFee = round2(totalPlatformFee); totalGst = round2(totalGst);
       const totalAmountInvoice = round2(totalCropTradeValue - totalPlatformFee - totalGst);
-      const getGroupFromItem = (it) => { const fields = [it && it.category, it && it.cat, it && it._category, it && it.category_name, it && it.categoryName, it && it.tags, it && it.tag].filter(Boolean).join(' '); const catRaw = (fields || (it && it.crop_name) || '').toString().trim().toLowerCase(); const name = (it && it.crop_name || '').toString().toLowerCase(); const exact = (it && (it.category || it.cat) || '').toString().trim().toLowerCase(); if (exact === 'food crops' || exact === 'food crop' || exact === 'food' || exact === 'crops') return 'crop'; if (exact === 'fruits and vegetables' || exact === 'fruits & vegetables' || exact === 'fruits' || exact === 'fruits and veg') return 'fruitveg'; if (exact === 'masalas' || exact === 'masala' || exact === 'spices' || exact === 'spice') return 'masala'; const masalaKeywords = ['masala','masalas','spice','spices','मसाला','ಮಸಾಲೆ']; const fruitKeywords = ['fruit','fruits','फल','ಹಣ್ಣು']; const vegKeywords = ['vegetable','vegetables','veg','veggie','veget','सब्जी','ತರಕಾರಿ']; const hasAny = (str, arr) => arr.some(k => str.includes(k)); if (hasAny(catRaw, masalaKeywords) || hasAny(name, masalaKeywords)) return 'masala'; if (hasAny(catRaw, fruitKeywords) || hasAny(name, fruitKeywords) || hasAny(catRaw, vegKeywords) || hasAny(name, vegKeywords)) return 'fruitveg'; if (hasAny(catRaw, ['crop','crops','food'])) return 'crop'; return 'crop'; };
-      let buyerPlatformFee = 0; let buyerGst = 0;
-      items.forEach(it => { const qty = Number(it.order_quantity || 0) || 0; const price = Number(it.price_per_kg || 0) || 0; const lineTotal = round2(qty * price); const categoryTotals = items.reduce((acc, itm) => { try { const q = Number(itm.order_quantity || 0) || 0; const p = Number(itm.price_per_kg || 0) || 0; const line = round2(q * p); const g = getGroupFromItem(itm); acc[g] = (acc[g] || 0) + line; } catch (e) {} return acc; }, { crop:0, fruitveg:0, masala:0 }); const group = getGroupFromItem(it); const categoryTotal = round2(categoryTotals[group] || 0); let buyerCommissionRate = 0; if (group === 'crop') { if (categoryTotal < 200001) buyerCommissionRate = 2.0; else if (categoryTotal < 600001) buyerCommissionRate = 2.5; else if (categoryTotal < 1000001) buyerCommissionRate = 3.0; else buyerCommissionRate = 3.4; } else if (group === 'fruitveg') { if (categoryTotal < 200001) buyerCommissionRate = 2.5; else if (categoryTotal < 600001) buyerCommissionRate = 3.0; else if (categoryTotal < 1000001) buyerCommissionRate = 3.4; else buyerCommissionRate = 4.0; } else if (group === 'masala') { if (categoryTotal < 200001) buyerCommissionRate = 3.0; else if (categoryTotal < 600001) buyerCommissionRate = 3.4; else if (categoryTotal < 1000001) buyerCommissionRate = 4.0; else buyerCommissionRate = 4.4; } let buyerCommissionAmt = round2((lineTotal * (buyerCommissionRate / 100)) || 0); if (!Number.isFinite(buyerCommissionAmt) || buyerCommissionAmt < 0) buyerCommissionAmt = 0; if (buyerCommissionAmt > 100000) buyerCommissionAmt = 100000; const buyerGstAmt = round2((buyerCommissionAmt * 18) / 100); buyerPlatformFee += buyerCommissionAmt; buyerGst += buyerGstAmt; });
-      buyerPlatformFee = round2(buyerPlatformFee); buyerGst = round2(buyerGst);
-      const buyerTotalAmount = round2(totalCropTradeValue + buyerPlatformFee + buyerGst);
+      const buyerPlatformFee = totals.commission;
+      const buyerGst = totals.gst;
+      const buyerTotalAmount = grandTotal;
       const qtyKg = Math.round(totalContractQty || 0); const qtyRateMap = [{ min:0,max:40,rates:[12,18,22] },{ min:41,max:400,rates:[18,22,28] },{ min:401,max:1500,rates:[22,28,35] },{ min:1501,max:5000,rates:[28,35,45] },{ min:5001,max:10000,rates:[35,45,60] }]; let matching = qtyRateMap.find(r => qtyKg >= r.min && qtyKg <= r.max); if (!matching) matching = qtyRateMap[qtyRateMap.length - 1];
       const formatRates = (arr) => { const parts = (arr || []).map(v => `₹${v} / km`); if (parts.length === 0) return '₹-- / km'; if (parts.length === 1) return parts[0]; if (parts.length === 2) return `${parts[0]} or ${parts[1]}`; return `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}`; };
       const deliveryRateDisplay = `${formatRates(matching.rates)}`;
@@ -877,11 +860,11 @@ const Cart = () => {
       // Contract HTML templates (hindi / kannada / english) — unchanged
       let html = '';
       if (lang === 'hi') {
-        html = `<!doctype html><html><head><meta charset="utf-8"/><title>AgriAI Contract</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:'Times New Roman',Times,serif;color:#111;padding:24px;line-height:1.6;}h1{text-align:center;color:#236902;margin:0;}h2{margin-top:18px;}.section{margin-top:16px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#f7f7f7;text-align:left;}pre{white-space:pre-wrap;font-family:'Times New Roman',Times,serif;}</style></head><body><div style="text-align:center;margin-bottom:20px;"><img src="${logoSrc}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px"/><h1>एग्री एआई<br/>संविदा कृषि अनुबंध</h1></div><section class="section"><h2>पक्षकार</h2><p><strong>पक्ष A – खरीदार / कंपनी</strong></p><p><b>नाम:</b> ${buyerName}</p><p><b>खरीदार आईडी: </b> ${buyerId || '[Buyer ID]'}</p><p><b>पता:</b> ${buyerAddress || '[Buyer Address]'}${buyerState ? ', ' + buyerState : ''}</p><p><strong>पक्ष B – किसान / उत्पादक</strong></p><p><b>नाम: </b> ${farmerName}</p><p><b>किसान आईडी:</b> ${farmerId}</p><p><b>पता:</b> ${farmerAddress || ''}${farmerState ? (farmerAddress ? ', ' + farmerState : '' + farmerState) : ''}</p><p>पक्ष A और पक्ष B को सामूहिक रूप से "पक्षकार" कहा जाएगा। एग्री एआई केवल एक डिजिटल सुविधा मंच के रूप में कार्य करता है।</p></section><section class="section"><h2>4. वस्तु विवरण</h2><table style="border-collapse:collapse;width:100%;margin-top:12px;"><thead><tr><th style="padding:8px;border:1px solid #ddd;text-align:center">क्रम सं.</th><th style="padding:8px;border:1px solid #ddd;text-align:center">फसल का नाम</th><th style="padding:8px;border:1px solid #ddd;text-align:center">किस्म</th><th style="padding:8px;border:1px solid #ddd;text-align:center">मात्रा</th><th style="padding:8px;border:1px solid #ddd;text-align:center">मूल्य (₹/किग्रा)</th><th style="padding:8px;border:1px solid #ddd;text-align:center">कुल राशि</th></tr></thead><tbody>${rowsHtml}</tbody></table></section><section class="section"><h2>5. मूल्य एवं भुगतान शर्तें</h2><p><strong>5.1 किसान</strong></p><p>कुल मात्रा: ${totalContractQty.toLocaleString('en-IN')} किग्रा</p><p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(totalPlatformFee)}</p><p>जीएसटी: ${formatCurrency(totalGst)}</p><p><strong>कुल देय राशि: ${formatCurrency(totalAmountInvoice)}</strong></p><p><strong>5.2 खरीदार</strong></p><p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(buyerPlatformFee)}</p><p>जीएसटी: ${formatCurrency(buyerGst)}</p><p><strong>कुल देय राशि: ${formatCurrency(buyerTotalAmount)}</strong></p></section><section class="section"><h2>13. निष्पादन एवं डिजिटल स्वीकृति</h2><p>खरीदार / अधिकृत प्रतिनिधि</p><p>हस्ताक्षर: ___________________________</p><p>तिथि: ___________________________</p><p>किसान / उत्पादक</p><p>हस्ताक्षर: ___________________________</p><p>तिथि: ___________________________</p><p>गवाह : <strong>एग्री एआई</strong></p></section></body></html>`;
+        html = `<!doctype html><html><head><meta charset="utf-8"/><title>AgriAI Contract</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:'Times New Roman',Times,serif;color:#111;padding:24px;line-height:1.6;}h1{text-align:center;color:#236902;margin:0;}h2{margin-top:18px;}.section{margin-top:16px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#f7f7f7;text-align:left;}pre{white-space:pre-wrap;font-family:'Times New Roman',Times,serif;}</style></head><body><div style="text-align:center;margin-bottom:20px;"><img src="${logoSrc}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px"/><h1>एग्री एआई<br/>संविदा कृषि अनुबंध</h1></div><section class="section"><h2>पक्षकार</h2><p><strong>पक्ष A – खरीदार / कंपनी</strong></p><p><b>नाम:</b> ${buyerName}</p><p><b>खरीदार आईडी: </b> ${buyerId || '[Buyer ID]'}</p><p><b>पता:</b> ${buyerAddress || '[Buyer Address]'}${buyerState ? ', ' + buyerState : ''}</p><p><strong>पक्ष B – किसान / उत्पादक</strong></p><p><b>नाम: </b> ${farmerName}</p><p><b>किसान आईडी:</b> ${farmerId}</p><p><b>पता:</b> ${farmerAddress || ''}${farmerState ? (farmerAddress ? ', ' + farmerState : '' + farmerState) : ''}</p><p>पक्ष A और पक्ष B को सामूहिक रूप से "पक्षकार" कहा जाएगा। एग्री एआई केवल एक डिजिटल सुविधा मंच के रूप में कार्य करता है।</p></section><section class="section"><h2>2. अनुबंध प्रकार और अवधि</h2><p><strong>अनुबंध प्रकृति:</strong> ${contractNature === 'pre-harvest' ? 'फसल उत्पादन अनुबंध' : 'कटाई के बाद की खरीद अनुबंध'}</p><p><strong>अनुबंध अवधि:</strong> ${contractDuration === 'one-time' ? 'एक बार' : (contractDuration === 'seasonal' ? 'मौसमी' : 'वार्षिक')}</p><p><strong>प्रारंभ तिथि:</strong> ${startDate}</p><p><strong>समाप्ति तिथि:</strong> ${endDate}</p><p><strong>अवधि:</strong> ${days} दिन</p></section><section class="section"><h2>4. वस्तु विवरण</h2><table style="border-collapse:collapse;width:100%;margin-top:12px;"><thead><tr><th style="padding:8px;border:1px solid #ddd;text-align:center">क्रम सं.</th><th style="padding:8px;border:1px solid #ddd;text-align:center">फसल का नाम</th><th style="padding:8px;border:1px solid #ddd;text-align:center">किस्म</th><th style="padding:8px;border:1px solid #ddd;text-align:center">मात्रा</th><th style="padding:8px;border:1px solid #ddd;text-align:center">मूल्य (₹/किग्रा)</th><th style="padding:8px;border:1px solid #ddd;text-align:center">कुल राशि</th></tr></thead><tbody>${rowsHtml}</tbody></table></section><section class="section"><h2>5. मूल्य एवं भुगतान शर्तें</h2><p><strong>5.1 किसान</strong></p><p>कुल मात्रा: ${totalContractQty.toLocaleString('en-IN')} किग्रा</p><p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(totalPlatformFee)}</p><p>जीएसटी: ${formatCurrency(totalGst)}</p><p><strong>कुल देय राशि: ${formatCurrency(totalAmountInvoice)}</strong></p><p><strong>5.2 खरीदार</strong></p><p>प्लेटफ़ॉर्म शुल्क: ${formatCurrency(buyerPlatformFee)}</p><p>जीएसटी: ${formatCurrency(buyerGst)}</p><p><strong>कुल देय राशि: ${formatCurrency(buyerTotalAmount)}</strong></p></section><section class="section"><h2>13. निष्पादन एवं डिजिटल स्वीकृति</h2><p>यह समझौता एग्री एआई प्लेटफॉर्म के माध्यम से इलेक्ट्रॉनिक रूप से निष्पादित किया जा सकता है। पंजीकृत क्रेडेंशियल्स का उपयोग करके डिजिटल स्वीकृति कानूनी रूप से बाध्यकारी सहमति का गठन करेगी।</p><p>खरीदार / कंपनी</p><p>नाम: ${signatureName}</p><p>तिथि: ${signatureDate}</p><p>किसान / उत्पादक</p><p>नाम:________________________________</p><p>तिथि:________________________________</p><p>गवाह : <strong>एग्री एआई</strong></p></section></body></html>`;
       } else if (lang === 'kn') {
-        html = `<!doctype html><html><head><meta charset="utf-8"/><title>AgriAI Contract</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:'Times New Roman',Times,serif;color:#111;padding:24px;line-height:1.6;}h1{text-align:center;color:#236902;margin:0;}h2{margin-top:18px;}.section{margin-top:16px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#f7f7f7;text-align:left;}</style></head><body><div style="text-align:center;margin-bottom:20px;"><img src="${logoSrc}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px"/><h1>ಅಗ್ರಿ AI<br/>ಒಪ್ಪಂದ ಕೃಷಿ ಒಪ್ಪಂದ</h1></div><section class="section"><h2>ಪಕ್ಷಗಳು</h2><p><strong>ಪಕ್ಷ A – ಖರೀದಿದಾರ</strong></p><p><b>ಹೆಸರು:</b> ${buyerName}</p><p><b>ಖರೀದಿದಾರ ಐಡಿ:</b> ${buyerId || '[Buyer ID]'}</p><p><strong>ಪಕ್ಷ B – ರೈತ</strong></p><p><b>ಹೆಸರು:</b> ${farmerName}</p><p><b>ರೈತ ಐಡಿ:</b> ${farmerId}</p></section><section class="section"><h2>4. ವಸ್ತು ವಿವರಗಳು</h2><table style="border-collapse:collapse;width:100%;margin-top:12px;"><thead><tr><th style="padding:8px;border:1px solid #ddd;text-align:center">ಕ್ರಮ ಸಂಖ್ಯೆ</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ಬೆಳೆ ಹೆಸರು</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ವೈವಿಧ್ಯ</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ಪ್ರಮಾಣ</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ಬೆಲೆ (₹/ಕೆಜಿ)</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ಮೊತ್ತ</th></tr></thead><tbody>${rowsHtml}</tbody></table></section><section class="section"><h2>13. ಜಾರಿಗೆ ತರುವುದು</h2><p>ಖರೀದಿದಾರ / ಅಧಿಕೃತ ಪ್ರತಿನಿಧಿ</p><p>ಸಹಿ: ___________________________</p><p>ದಿನಾಂಕ: ___________________________</p><p>ರೈತ / ಉತ್ಪಾದಕ</p><p>ಸಹಿ: ___________________________</p><p>ದಿನಾಂಕ: ___________________________</p><p>ಸಾಕ್ಷಿ : <strong>AgriAI</strong></p></section></body></html>`;
+        html = `<!doctype html><html><head><meta charset="utf-8"/><title>AgriAI Contract</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:'Times New Roman',Times,serif;color:#111;padding:24px;line-height:1.6;}h1{text-align:center;color:#236902;margin:0;}h2{margin-top:18px;}.section{margin-top:16px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#f7f7f7;text-align:left;}</style></head><body><div style="text-align:center;margin-bottom:20px;"><img src="${logoSrc}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px"/><h1>ಅಗ್ರಿ AI<br/>ಒಪ್ಪಂದ ಕೃಷಿ ಒಪ್ಪಂದ</h1></div><section class="section"><h2>ಪಕ್ಷಗಳು</h2><p><strong>ಪಕ್ಷ A – ಖರೀದಿದಾರ / ಕಂಪನಿ</strong></p><p><b>ಹೆಸರು:</b> ${buyerName}</p><p><b>ಖರೀದಿದಾರ ಐಡಿ:</b> ${buyerId || '[Buyer ID]'}</p><p><strong>ಪಕ್ಷ B – ರೈತ / ಉತ್ಪಾದಕ</strong></p><p><b>ಹೆಸರು:</b> ${farmerName}</p><p><b>ರೈತ ಐಡಿ:</b> ${farmerId}</p></section><section class="section"><h2>2. ಒಪ್ಪಂದ ಪ್ರಕಾರ ಮತ್ತು ಅವಧಿ</h2><p><strong>ಒಪ್ಪಂದ ಪ್ರಕೃತಿ:</strong> ${contractNature === 'pre-harvest' ? 'ಫಸಲ್ ಉತ್ಪಾದನೆ ಒಪ್ಪಂದ' : 'ಕತ್ತರಣೆಯ ನಂತರದ ಖರೀದಿ ಒಪ್ಪಂದ'}</p><p><strong>ಒಪ್ಪಂದ ಅವಧಿ:</strong> ${contractDuration === 'one-time' ? 'ಒಮ್ಮೆ' : (contractDuration === 'seasonal' ? 'ಹಂಗಾಮಿ' : 'ವಾರ್ಷಿಕ')}</p><p><strong>ಪ್ರಾರಂಭ ದಿನಾಂಕ:</strong> ${startDate}</p><p><strong>ಅಂತಿಮ ದಿನಾಂಕ:</strong> ${endDate}</p><p><strong>ಅವಧಿ:</strong> ${days} ದಿನ</p></section><section class="section"><h2>4. ವಸ್ತು ವಿವರಗಳು</h2><table style="border-collapse:collapse;width:100%;margin-top:12px;"><thead><tr><th style="padding:8px;border:1px solid #ddd;text-align:center">ಕ್ರಮ ಸಂಖ್ಯೆ</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ಬೆಳೆ ಹೆಸರು</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ವೈವಿಧ್ಯ</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ಪ್ರಮಾಣ</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ಬೆಲೆ (₹/ಕೆಜಿ)</th><th style="padding:8px;border:1px solid #ddd;text-align:center">ಮೊತ್ತ</th></tr></thead><tbody>${rowsHtml}</tbody></table></section><section class="section"><h2>13. ಜಾರಿ ಮತ್ತು ಡಿಜಿಟಲ್ ಒಪ್ಪುವಿಕೆ</h2><p>ಈ ಒಪ್ಪಂದವನ್ನು ಅಗ್ರಿ ಎಐ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಮೂಲಕ ಇಲೆಕ್ಟ್ರಾನಿಕ್ ರೂಪದಲ್ಲಿ ಕಾರ್ಯಗತಗೊಳಿಸಬಹುದು. ನೋಂದಾಯಿತ ರುಜುವಾತುಗಳನ್ನು ಬಳಸಿಕೊಂಡು ಡಿಜಿಟಲ್ ಒಪ್ಪಿಗೆಯು ಕಾನೂನುಬದ್ಧವಾದ ಬದ್ಧತೆಯನ್ನು ರಚಿಸುತ್ತದೆ.</p><p>ಖರೀದಿದಾರ / ಕಂಪನಿ</p><p>ಹೆಸರು: ${signatureName}</p><p>ದಿನಾಂಕ: ${signatureDate}</p><p>ರೈತ / ಉತ್ಪಾದಕ</p><p>ಹೆಸರು: ________________</p><p>ದಿನಾಂಕ: ________________</p><p>ಸಾಕ್ಷಿ : <strong>AgriAI</strong></p></section></body></html>`;
       } else {
-        html = `<!doctype html><html><head><meta charset="utf-8"/><title>AgriAI Contract</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:'Times New Roman',Times,serif;color:#111;padding:24px;line-height:1.6;}h1{text-align:center;color:#236902;margin:0;}h2{margin-top:18px;}.section{margin-top:16px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#f7f7f7;text-align:left;}</style></head><body><div style="text-align:center;margin-bottom:20px;"><img src="${logoSrc}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px"/><h1>Agri AI<br/>CONTRACT FARMING AGREEMENT</h1></div><section class="section"><h2>PARTIES</h2><p><strong>Party A – Buyer / Company</strong></p><p><b>Name:</b> ${buyerName}</p><p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p><p><b>Address:</b> ${buyerAddress || buyerState || '[Buyer Address/State]'}${(buyerAddress && buyerState) ? ', ' + buyerState : ''}</p><p><strong>Party B – Farmer / Producer</strong></p><p><b>Name:</b> ${farmerName}</p><p><b>Farmer ID:</b> ${farmerId}</p><p><b>Address:</b> ${farmerAddress || '[Farmer Address]'}${farmerState ? ', ' + farmerState : ''}</p><p>Party A and Party B are collectively referred to as "the Parties." AgriAI acts solely as a digital facilitation platform.</p></section><section class="section"><h2>2. CONTRACT TYPE & DURATION</h2><p>Contract Nature: ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p><p>Contract Duration: ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p><p>Start Date: ${startDate}</p><p>End Date: ${endDate}</p><p>Duration: ${days} Days</p></section><section class="section"><h2>4. COMMODITY DETAILS</h2><table style="border-collapse:collapse;width:100%;margin-top:12px;"><thead><tr><th style="padding:8px;border:1px solid #ddd;text-align:center">Sl. No</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Crop Name</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Variety</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Quantity</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Price (₹/kg)</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table></section><section class="section"><h2>5. PRICE & PAYMENT TERMS</h2><p><strong>5.1 Farmer</strong></p><p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p><p>Price: ${formatCurrency(avgPricePerKg)} per kg</p><p>Platform Fee: ${formatCurrency(totalPlatformFee)}</p><p>GST on Platform Fee: ${formatCurrency(totalGst)}</p><p><strong>Total Amount (After Deduction): ${formatCurrency(totalAmountInvoice)}</strong></p><p><strong>5.2 Buyer</strong></p><p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p><p>Price: ${formatCurrency(avgPricePerKg)} per kg</p><p>Platform Fee: ${formatCurrency(buyerPlatformFee)}</p><p>GST on Platform Fee: ${formatCurrency(buyerGst)}</p><p><strong>Total Amount (After Addition): ${formatCurrency(buyerTotalAmount)}</strong></p><p><strong>5.3 Payment Schedule</strong></p><p>25% advance at contract confirmation. 50% upon successful delivery. Remaining 25% within 7 working days after quality inspection.</p><p><strong>5.4 Mode of Payment:</strong> Bank Transfer / UPI / Cheque</p></section><section class="section"><h2>13. EXECUTION & DIGITAL ACCEPTANCE</h2><p>Buyer / Authorized Representative</p><p>Signature: ___________________________</p><p>Date: ___________________________</p><p>Farmer / Producer</p><p>Signature: ___________________________</p><p>Date: ___________________________</p><p>Witness: <strong>AgriAI</strong></p></section></body></html>`;
+        html = `<!doctype html><html><head><meta charset="utf-8"/><title>AgriAI Contract</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:'Times New Roman',Times,serif;color:#111;padding:24px;line-height:1.6;}h1{text-align:center;color:#236902;margin:0;}h2{margin-top:18px;}.section{margin-top:16px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ddd;padding:8px;}th{background:#f7f7f7;text-align:left;}</style></head><body><div style="text-align:center;margin-bottom:20px;"><img src="${logoSrc}" alt="AgriAI" style="width:120px;height:auto;margin-bottom:8px"/><h1>Agri AI<br/>CONTRACT FARMING AGREEMENT</h1></div><section class="section"><h2>PARTIES</h2><p><strong>Party A – Buyer / Company</strong></p><p><b>Name:</b> ${buyerName}</p><p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p><p><b>Address:</b> ${buyerAddress || buyerState || '[Buyer Address/State]'}${(buyerAddress && buyerState) ? ', ' + buyerState : ''}</p><p><strong>Party B – Farmer / Producer</strong></p><p><b>Name:</b> ${farmerName}</p><p><b>Farmer ID:</b> ${farmerId}</p><p><b>Address:</b> ${farmerAddress || '[Farmer Address]'}${farmerState ? ', ' + farmerState : ''}</p><p>Party A and Party B are collectively referred to as "the Parties." AgriAI acts solely as a digital facilitation platform.</p></section><section class="section"><h2>2. CONTRACT TYPE & DURATION</h2><p>Contract Nature: ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p><p>Contract Duration: ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p><p>Start Date: ${startDate}</p><p>End Date: ${endDate}</p><p>Duration: ${days} Days</p></section><section class="section"><h2>4. COMMODITY DETAILS</h2><table style="border-collapse:collapse;width:100%;margin-top:12px;"><thead><tr><th style="padding:8px;border:1px solid #ddd;text-align:center">Sl. No</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Crop Name</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Variety</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Quantity</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Price (₹/kg)</th><th style="padding:8px;border:1px solid #ddd;text-align:center">Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table></section><section class="section"><h2>5. PRICE & PAYMENT TERMS</h2><p><strong>5.1 Farmer</strong></p><p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p><p>Price: ${formatCurrency(avgPricePerKg)} per kg</p><p>Platform Fee: ${formatCurrency(totalPlatformFee)}</p><p>GST on Platform Fee: ${formatCurrency(totalGst)}</p><p><strong>Total Amount (After Deduction): ${formatCurrency(totalAmountInvoice)}</strong></p><p><strong>5.2 Buyer</strong></p><p>Total Quantity: ${totalContractQty.toLocaleString('en-IN')} kg</p><p>Price: ${formatCurrency(avgPricePerKg)} per kg</p><p>Platform Fee: ${formatCurrency(buyerPlatformFee)}</p><p>GST on Platform Fee: ${formatCurrency(buyerGst)}</p><p><strong>Total Amount (After Addition): ${formatCurrency(buyerTotalAmount)}</strong></p><p><strong>5.3 Payment Schedule</strong></p><p>25% advance at contract confirmation. 50% upon successful delivery. Remaining 25% within 7 working days after quality inspection.</p><p><strong>5.4 Mode of Payment:</strong> Bank Transfer / UPI / Cheque</p></section><section class="section"><h2>13. EXECUTION & DIGITAL ACCEPTANCE</h2><p>This Agreement may be executed electronically through the AgriAI platform. Digital acceptance using registered credentials shall constitute legally binding consent.</p><p>Buyer / Company</p><p>Name: ${signatureName}</p><p>Date: ${signatureDate}</p><p>Farmer / Producer</p><p>Name: ________________</p><p>Date: ________________</p><p>Witness: <strong>AgriAI</strong></p></section></body></html>`;
       }
 
       setContractHtml(html);
@@ -890,12 +873,108 @@ const Cart = () => {
   };
 
   const downloadContract = () => { try { const blob = new Blob([contractHtml], { type: 'text/html' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'contract.html'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); } catch (e) { console.warn(e); } };
-  const printContract = () => { try { const w = window.open('', '_blank'); w.document.write(contractHtml); w.document.close(); w.focus(); w.print(); } catch (e) { console.warn(e); } };
+  const printContract = () => { try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (printErr) {
+          console.warn('Print dialog failed:', printErr);
+        } finally {
+          setTimeout(() => { document.body.removeChild(iframe); }, 500);
+        }
+      };
+      iframe.srcdoc = contractHtml;
+    } catch (e) { console.warn(e); } };
 
-  const handleBuyNow = () => {
+  const handleSendContract = () => {
     setPaymentError('');
     const invalid = items.some(it => !it.order_quantity || Number(it.order_quantity) <= 0);
     if (invalid) { alert(t('editEnterOrderQty', lang)); return; }
+    // Open delivery date popup
+    setSelectedDeliveryDate('');
+    setShowDeliveryDateModal(true);
+  };
+
+  const handleConfirmDeliveryDate = () => {
+    if (!selectedDeliveryDate) {
+      alert(t('deliveryDateRequired', lang));
+      return;
+    }
+    setShowDeliveryDateModal(false);
+    generateContractAndShowPreview();
+  };
+
+  const generateContractAndShowPreview = async (forceOtpVerified = false) => {
+    try {
+      const lang = localStorage.getItem('agri_lang') || 'en';
+      const tLang = (key) => t(key, lang);
+      const startDateObj = new Date();
+      const startDate = startDateObj.toLocaleDateString('en-GB');
+      const endDate = selectedDeliveryDate.split('-').reverse().join('/'); // Convert YYYY-MM-DD to DD/MM/YYYY
+      const days = Math.round((new Date(selectedDeliveryDate) - startDateObj) / (24 * 3600 * 1000));
+      
+      const totalContractQty = totalOrderedQty;
+      const totalCropTradeValue = items.reduce((s, it) => s + ((Number(it.order_quantity || 0) || 0) * (Number(it.price_per_kg || 0) || 0)), 0);
+      const avgPricePerKg = totalContractQty > 0 ? (totalCropTradeValue / totalContractQty) : 0;
+
+      let farmerName = ''; let farmerId = ''; let farmerState = ''; let farmerRegion = ''; let farmerAddress = ''; let farmerPhone = '';
+      if (items && items.length > 0) { const first = items[0]; farmerId = first.user_id || first.farmer_id || first.seller_id || first._farmer_id || ''; farmerPhone = first.user_phone || first.seller_phone || ''; }
+      if (farmerId || farmerPhone) { try { let qs = ''; if (farmerId) qs += `id=${encodeURIComponent(farmerId)}`; if (farmerPhone) { if (qs) qs += '&'; qs += `phone=${encodeURIComponent(farmerPhone)}`; } const resF = await fetch(`${apiBase}/farmer/get?${qs}`); if (resF && resF.ok) { const jf = await resF.json().catch(() => null); if (jf && jf.ok && jf.farmer) { farmerId = jf.farmer.id ? String(jf.farmer.id) : farmerId; if (jf.farmer.name) farmerName = jf.farmer.name; farmerState = jf.farmer.state || farmerState; farmerRegion = jf.farmer.region || farmerRegion; } } } catch (e) { console.warn('farmer/get failed', e); } }
+      if (!farmerName && farmerId) farmerName = localStorage.getItem('agriai_name') || '';
+      if (!farmerAddress && items && items.length > 0) { const first = items[0]; farmerAddress = first.seller_address || first.farmer_address || ''; }
+      
+      let buyerName = localStorage.getItem('agriai_name') || '[Buyer Name]'; let buyerId = localStorage.getItem('agriai_id') || ''; let buyerPhone = localStorage.getItem('agriai_phone') || ''; let buyerState = localStorage.getItem('agriai_state') || ''; let buyerRegion = localStorage.getItem('agriai_region') || ''; let buyerAddress = '';
+      if (buyerId || buyerPhone) { try { let qs = ''; if (buyerId) qs += `id=${encodeURIComponent(buyerId)}`; if (buyerPhone) { if (qs) qs += '&'; qs += `phone=${encodeURIComponent(buyerPhone)}`; } const resB = await fetch(`${apiBase}/buyer/get?${qs}`); if (resB && resB.ok) { const jb = await resB.json().catch(() => null); if (jb && jb.ok && jb.buyer) { buyerId = jb.buyer.id ? String(jb.buyer.id) : buyerId; if (jb.buyer.name) buyerName = jb.buyer.name; buyerState = jb.buyer.state || buyerState; buyerRegion = jb.buyer.region || buyerRegion; buyerAddress = jb.buyer.address || buyerAddress; } } } catch (e) { console.warn('buyer/get failed', e); } }
+      
+      setCurrentBuyerName(buyerName);
+      const signed = forceOtpVerified || otpVerified;
+      const signatureName = signed ? (currentBuyerName || buyerName) : '________________';
+      const signatureDate = signed ? new Date().toLocaleDateString('en-GB') : '________________';
+      const round2 = (v) => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
+      let totalPlatformFee = 0; let totalGst = 0;
+      items.forEach(it => { const { gstAmt, commissionAmt } = calculateGstAndCommission(it); totalPlatformFee += commissionAmt; totalGst += gstAmt; });
+      totalPlatformFee = round2(totalPlatformFee); totalGst = round2(totalGst);
+      const totalAmountInvoice = round2(totalCropTradeValue - totalPlatformFee - totalGst);
+      const buyerPlatformFee = totals.commission;
+      const buyerGst = totals.gst;
+      const buyerTotalAmount = grandTotal;
+      
+      const qtyKg = Math.round(totalContractQty || 0); const qtyRateMap = [{ min:0,max:40,rates:[12,18,22] },{ min:41,max:400,rates:[18,22,28] },{ min:401,max:1500,rates:[22,28,35] },{ min:1501,max:5000,rates:[28,35,45] },{ min:5001,max:10000,rates:[35,45,60] }]; let matching = qtyRateMap.find(r => qtyKg >= r.min && qtyKg <= r.max); if (!matching) matching = qtyRateMap[qtyRateMap.length - 1];
+      const formatRates = (arr) => { const parts = (arr || []).map(v => `₹${v} / km`); if (parts.length === 0) return '₹-- / km'; if (parts.length === 1) return parts[0]; if (parts.length === 2) return `${parts[0]} or ${parts[1]}`; return `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}`; };
+      const deliveryRateDisplay = `${formatRates(matching.rates)}`;
+      
+      const metadata = { contract_number: 'CNT' + Date.now(), farmer_id: farmerId, farmer_name: farmerName, farmer_address: farmerAddress, farmer_state: farmerState, buyer_id: buyerId, buyer_name: buyerName, buyer_address: buyerAddress, buyer_state: buyerState, contract_nature: contractNature, contract_duration: contractDuration, start_date: startDate, end_date: endDate, duration: days, farmer_platform_fee: totalPlatformFee, farmer_gst: totalGst, buyer_platform_fee: buyerPlatformFee, buyer_gst: buyerGst, delivery_cost: deliveryRateDisplay, crops: (items || []).map(it => ({ id: it.id, buyer_id: it.buyer_id, crop_name: it.crop_name, variety: it.variety || '', quantity: Number(it.order_quantity || 0), price_per_kg: Number(it.price_per_kg || 0), amount: Number(it.order_quantity || 0) * Number(it.price_per_kg || 0) })) };
+      setContractMetadata(metadata);
+      
+      const rowsHtml = (items || []).map((it, idx) => { const qty = Number(it.order_quantity || 0) || 0; const variety = it.variety || it.Variety || ''; const price = Number(it.price_per_kg || 0) || 0; const amount = Math.round((qty * price + Number.EPSILON) * 100) / 100; return `<tr><td style="padding:8px;border:1px solid #ddd;text-align:center">${idx + 1}</td><td style="padding:8px;border:1px solid #ddd;text-align:center">${it.crop_name || ''}</td><td style="padding:8px;border:1px solid #ddd;text-align:center">${variety}</td><td style="padding:8px;border:1px solid #ddd;text-align:center">${qty.toLocaleString('en-IN')} kg</td><td style="padding:8px;border:1px solid #ddd;text-align:center">${formatCurrency(price)}</td><td style="padding:8px;border:1px solid #ddd;text-align:center">${formatCurrency(amount)}</td></tr>`; }).join('');
+      
+      const logoSrc = window.location.origin + logo;
+      let html = '';
+      if (lang === 'en') {
+        html = `<!doctype html><html><head><meta charset="utf-8"/><title>AgriAI Contract</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Times New Roman',Times,serif;color:#1a1a1a;line-height:1.8;background:#fff;}.header{text-align:center;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #236902;}.header img{width:80px;height:auto;margin:0 auto 16px auto;display:block;}h1{text-align:center;color:#236902;margin:8px 0;font-size:28px;font-weight:700;letter-spacing:0.5px;}h2{color:#1a5c10;margin:12px 0 8px 0;font-size:18px;font-weight:700;padding-bottom:8px;border-bottom:2px solid #e0e0e0;}h3{color:#236902;margin:10px 0 6px 0;font-size:15px;font-weight:700;}p{margin:6px 0;text-align:justify;font-size:14px;}.section{margin:12px 0;padding:8px 0;}ul{margin:6px 0 6px 24px;font-size:14px;list-style-type:disc;}li{margin:3px 0;list-style-type:disc;}table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1);}th{background:#236902;color:#fff;padding:12px 8px;text-align:center;font-weight:700;font-size:13px;border:1px solid #ddd;}td{padding:10px 8px;border:1px solid #ddd;text-align:center;font-size:13px;}tr:nth-child(even){background:#f9f9f9;}tr:hover{background:#f0f7ff;}strong{font-weight:700;color:#1a5c10;}.party-section{background:#f5f9f5;padding:12px;border-left:4px solid #236902;margin:8px 0;border-radius:4px;}.signature-section{margin-top:20px;padding-top:16px;border-top:2px solid #ddd;display:flex;justify-content:space-around;gap:32px;}.signature-line{text-align:center;width:200px;}.signature-line p{margin:4px 0;font-size:15px;}.signature-line .line{border-top:1px solid #000;margin:24px 0 4px 0;min-height:20px;}@media print{body{padding:0;}.section{page-break-inside:avoid;}h2{page-break-after:avoid;}}</style></head><body><div class="header"><img src="${logoSrc}" alt="AgriAI" /><h1>AGRIAI FARMING AGREEMENT</h1></div><section class="section"><h2>PARTIES TO THE CONTRACT</h2><div class="party-section"><p><strong>Party A – Buyer / Company</strong></p><p><b>Name:</b> ${buyerName}</p><p><b>Buyer ID:</b> ${buyerId || '[Buyer ID]'}</p><p><b>Address:</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p></div><div class="party-section"><p><strong>Party B – Farmer / Producer</strong></p><p><b>Name:</b> ${farmerName}</p><p><b>Farmer ID:</b> ${farmerId}</p><p><b>Address:</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p></div><p>Party A and Party B are collectively referred to as "the Parties." AgriAI acts solely as a digital facilitation platform and is not a buyer, seller, transporter, insurer, or agent of either Party.</p></section><section class="section"><h2>1. PURPOSE OF AGREEMENT</h2><p>This Agreement defines the terms and conditions under which the Farmer agrees to produce and supply agricultural produce to the Buyer, and the Buyer agrees to procure such produce at a pre-determined price, ensuring:</p><ul><li>Assured market access to the Farmer</li><li>Fair and transparent pricing</li><li>Timely and secure payment</li><li>Reduced dependency on intermediaries</li></ul></section><section class="section"><h2>2. CONTRACT TYPE & DURATION</h2><p><b>Contract Nature:</b> ${contractNature === 'pre-harvest' ? 'Pre-Harvest Production Contract' : 'Post-Harvest Procurement Contract'}</p><p><b>Contract Duration:</b> ${contractDuration === 'one-time' ? 'One-Time' : (contractDuration === 'seasonal' ? 'Seasonal' : 'Yearly')}</p><p><b>Start Date:</b> ${startDate}</p><p><b>End Date:</b> ${endDate}</p><p><b>Duration:</b> ${days} Days</p></section><section class="section"><h2>3. DATA PRIVACY & PLATFORM COMPLIANCE</h2><p>All personal, agricultural, and transactional data collected through the AgriAI platform shall be stored securely and used only for contract execution and renewal, payment settlement, insurance facilitation, and legal and regulatory compliance. This Agreement is fully compliant with the Digital Personal Data Protection Act, 2023.</p></section><section class="section"><h2>4. COMMODITY DETAILS</h2><table><thead><tr><th>Sl. No</th><th>Crop Name</th><th>Variety</th><th>Quantity (kg)</th><th>Price (₹/kg)</th><th>Amount (₹)</th></tr></thead><tbody>${rowsHtml}</tbody></table></section><section class="section"><h2>5. PRICE & PAYMENT TERMS</h2><h3>5.1 Farmer's Payment Structure</h3><p><b>Total Quantity:</b> ${totalContractQty.toLocaleString('en-IN')} kg</p><p><b>Price per Unit:</b> ${formatCurrency(avgPricePerKg)} per kg</p><p><b>Subtotal:</b> ${formatCurrency(totalCropTradeValue)}</p><p><b>Platform Fee:</b> ${formatCurrency(totalPlatformFee)}</p><p><b>GST (18%):</b> ${formatCurrency(totalGst)}</p><p><b style="font-size:16px;color:#236902;">Total Amount (After Deduction):</b> <b style="font-size:16px;color:#236902;">${formatCurrency(totalAmountInvoice)}</b></p><h3 style="margin-top:20px;">5.2 Buyer's Payment Structure</h3><p><b>Total Quantity:</b> ${totalContractQty.toLocaleString('en-IN')} kg</p><p><b>Price per Unit:</b> ${formatCurrency(avgPricePerKg)} per kg</p><p><b>Subtotal:</b> ${formatCurrency(totalCropTradeValue)}</p><p><b>Platform Fee:</b> ${formatCurrency(buyerPlatformFee)}</p><p><b>GST (18%):</b> ${formatCurrency(buyerGst)}</p><p><b style="font-size:16px;color:#236902;">Total Amount Payable:</b> <b style="font-size:16px;color:#236902;">${formatCurrency(buyerTotalAmount)}</b></p><h3 style="margin-top:20px;">5.3 Payment Schedule</h3><ul><li><b>Advance (25%):</b> ${formatCurrency(buyerTotalAmount * 0.25)} – Due at contract confirmation</li><li><b>On Delivery (50%):</b> ${formatCurrency(buyerTotalAmount * 0.50)} – Due upon successful delivery</li><li><b>Final (25%):</b> ${formatCurrency(buyerTotalAmount * 0.25)} – Due within 7 working days after quality acceptance</li></ul><h3 style="margin-top:20px;">5.4 Mode of Payment</h3><p>Bank Transfer / UPI / Cheque. The Buyer shall issue digital or physical receipts for all payments made.</p></section><section class="section"><h2>6. DELIVERY, LOGISTICS & TRANSPORTATION</h2><h3>6.1 Role of AgriAI</h3><p>AgriAI operates solely as a digital technology platform. AgriAI shall not be deemed a buyer, seller, trader, commission agent, transporter, or custodian of goods. All obligations remain strictly between the Parties.</p><h3>6.2 Transportation</h3><p>Transportation shall be facilitated through third-party logistics service providers approved by the AgriAI platform based on crop nature, quantity, distance, and handling requirements.</p><h3>6.3 Delivery Charges</h3><p>Delivery charges shall be determined by the third-party logistics provider based on actual distance, vehicle type, loading requirements, and location. Such charges shall be paid directly by the Buyer to the logistics provider.</p><h3>6.4 Transfer of Risk</h3><p>Risk and responsibility for the produce shall remain with the logistics provider during transit. Risk shall transfer to the Buyer only upon successful delivery and signed Proof of Delivery (POD).</p><h3>6.5 Delay, Damage & Loss</h3><p>Any delay, damage, shortage, or loss occurring during transit shall be governed by the logistics provider's terms and conditions. AgriAI shall not be liable for any such claims.</p></section><section class="section"><h2>7. QUALITY STANDARDS, INSPECTION & ACCEPTANCE</h2><p>The produce supplied shall meet the mutually agreed specifications. The Buyer shall complete quality inspection within 3 working days from delivery. Any rejection must be raised in writing through the AgriAI platform within the inspection period. If no dispute is raised within 3 working days, the produce shall be deemed accepted.</p></section><section class="section"><h2>8. RISK, LIABILITY & INSURANCE</h2><p>The Farmer shall follow standard agricultural and post-harvest practices. In case of crop loss due to natural calamities before dispatch, obligations may be reviewed mutually. Crop insurance, if applicable under government schemes, shall remain in the Farmer's name. Any insurance compensation received shall belong solely to the Farmer. After delivery and acceptance, all risks and liabilities shall transfer entirely to the Buyer.</p></section><section class="section"><h2>9. FORCE MAJEURE</h2><p>Neither Party shall be liable for failure caused by events beyond reasonable control, including natural disasters, government restrictions, war, or strikes. Obligations shall resume once such conditions cease.</p></section><section class="section"><h2>10. DISPUTE RESOLUTION & JURISDICTION</h2><p>Any dispute arising out of this Agreement shall first be resolved amicably through discussion via the AgriAI platform. If unresolved within 15 days, disputes shall be referred to arbitration under the Arbitration and Conciliation Act, 1996. Subject to arbitration, the courts of Bengaluru, Karnataka shall have exclusive jurisdiction for enforcement and legal proceedings.</p></section><section class="section"><h2>11. TERMINATION</h2><p>Either Party may terminate this Agreement for material breach, including non-payment, non-delivery, misrepresentation, or violation of agreed terms. In case of payment default beyond agreed timelines, the defaulting Party may face account suspension, penalty charges, and recovery proceedings.</p></section><section class="section"><h2>12. LANGUAGE OF AGREEMENT</h2><p>This Agreement has been explained and translated to the Farmer in English. In case of any inconsistency, the English version shall prevail.</p></section><section class="section"><h2>13.  EXECUTION & DIGITAL ACCEPTANCE</h2><p>This Agreement may be executed electronically through the AgriAI platform. Digital acceptance using registered credentials shall constitute legally binding consent.</p><section class="signature-section"><div class="signature-line"><p><b>Buyer / Company</b></p><p>Name: ${signatureName}</p><p>Date: ${signatureDate}</p></div><div class="signature-line"><p><b>Farmer / Producer</b></p><p>Name: ________________</p><p>Date: ________________</p></div></section></section><p style="text-align:center;margin-top:40px;padding-top:20px;border-top:2px solid #ddd;font-size:12px;color:#000;font-weight:bold;"><b>Witness:</b> AgriAI Platform | Digital Record: ${new Date().toISOString()}</p></body></html>`;
+      } else {
+        html = `<!doctype html><html><head><meta charset="utf-8"/><title>AgriAI Contract</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Times New Roman',Times,serif;color:#1a1a1a;line-height:1.8;background:#fff;}.header{text-align:center;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #236902;}.header img{width:80px;height:auto;margin:0 auto 16px auto;display:block;}h1{text-align:center;color:#236902;margin:8px 0;font-size:28px;font-weight:700;letter-spacing:0.5px;}h2{color:#1a5c10;margin:12px 0 8px 0;font-size:18px;font-weight:700;padding-bottom:8px;border-bottom:2px solid #e0e0e0;}h3{color:#236902;margin:10px 0 6px 0;font-size:15px;font-weight:700;}p{margin:6px 0;text-align:justify;font-size:14px;}.section{margin:12px 0;padding:8px 0;}ul{margin:6px 0 6px 24px;font-size:14px;list-style-type:disc;}li{margin:3px 0;list-style-type:disc;}table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1);}th{background:#236902;color:#fff;padding:12px 8px;text-align:center;font-weight:700;font-size:13px;border:1px solid #ddd;}td{padding:10px 8px;border:1px solid #ddd;text-align:center;font-size:13px;}tr:nth-child(even){background:#f9f9f9;}tr:hover{background:#f0f7ff;}strong{font-weight:700;color:#1a5c10;}.party-section{background:#f5f9f5;padding:12px;border-left:4px solid #236902;margin:8px 0;border-radius:4px;}.signature-section{margin-top:20px;padding-top:16px;border-top:2px solid #ddd;display:flex;justify-content:space-around;gap:32px;}.signature-line{text-align:center;width:200px;}.signature-line p{margin:4px 0;font-size:15px;}.signature-line .line{border-top:1px solid #000;margin:24px 0 4px 0;min-height:20px;}@media print{body{padding:0;}.section{page-break-inside:avoid;}h2{page-break-after:avoid;}}</style></head><body><div class="header"><img src="${logoSrc}" alt="AgriAI" /><h1>${lang === 'hi' ? 'एग्रीएआई कृषि समझौता' : 'ಅಗ್ರಿ ಎಐ ಕೃಷಿ ಒಪ್ಪಂದ'}</h1></div><section class="section"><h2>${lang === 'hi' ? 'अनुबंध पक्षकार' : 'ಒಪ್ಪಂದದ ಪಕ್ಷಗಳು'}</h2><div class="party-section"><p><strong>${lang === 'hi' ? 'अनुबंध पक्ष A – खरीदार / कंपनी' : 'ಒಪ್ಪಂದ ಪಕ್ಷ A – ಖರೀದಿದಾರ / ಕಂಪನಿ'}</strong></p><p><b>${lang === 'hi' ? 'नाम:' : 'ಹೆಸರು:'}</b> ${buyerName}</p><p><b>${lang === 'hi' ? 'खरीदार आईडी:' : 'ಖರೀದಿದಾರ ಐಡಿ:'}</b> ${buyerId || '[Buyer ID]'}</p><p><b>${lang === 'hi' ? 'पता:' : 'ವಿಳಾಸ:'}</b> ${buyerState ? buyerState : ''}${buyerRegion ? (buyerState ? ', ' + buyerRegion : buyerRegion) : ''}</p></div><div class="party-section"><p><strong>${lang === 'hi' ? 'अनुबंध पक्ष B – किसान / उत्पादक' : 'ಒಪ್ಪಂದ ಪಕ್ಷ B – ರೈತ / ಉತ್ಪಾದಕ'}</strong></p><p><b>${lang === 'hi' ? 'नाम:' : 'ಹೆಸರು:'}</b> ${farmerName}</p><p><b>${lang === 'hi' ? 'किसान आईडी:' : 'ರೈತ ಐಡಿ:'}</b> ${farmerId}</p><p><b>${lang === 'hi' ? 'पता:' : 'ವಿಳಾಸ:'}</b> ${farmerState ? farmerState : ''}${farmerRegion ? (farmerState ? ', ' + farmerRegion : farmerRegion) : ''}</p></div><p>${lang === 'hi' ? 'अनुबंध पक्ष A और पक्ष B को सामूहिक रूप से "पक्षकार" कहा जाएगा। एग्रीएआई केवल एक डिजिटल सुविधा मंच के रूप में कार्य करता है और किसी भी पक्ष का खरीदार, विक्रेता, परिवहनक, बीमाकर्ता या एजेंट नहीं है।' : 'ಒಪ್ಪಂದ ಪಕ್ಷ A ಮತ್ತು ಪಕ್ಷ B ಯನ್ನು ಸಾಮೂಹಿಕವಾಗಿ "ಪಕ್ಷಗಳು" ಎಂದು ಕರೆಯಲಾಗುತ್ತದೆ. ಅಗ್ರಿ ಎಐ ಕೇವಲ ಡಿಜಿಟಲ್ ಸೌಲಭ್ಯ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಆಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ ಮತ್ತು ಯಾವುದೇ ಪಕ್ಷದ ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ಸಾರಿಗೆದಾರ, ವಿಮಾಕರ್ತ ಅಥವಾ ಏಜೆಂಟ್ ಅಲ್ಲ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '1. समझौते का उद्देश्य' : '1. ಒಪ್ಪಂದದ ಉದ್ದೇಶ'}</h2><p>${lang === 'hi' ? 'यह समझौता उन शर्तों और निबंधनों को परिभाषित करता है जिनके तहत किसान कृषि उत्पाद का उत्पादन और आपूर्ति करने के लिए सहमत है, और खरीदार पूर्व-निर्धारित मूल्य पर ऐसे उत्पाद खरीदने के लिए सहमत है, यह सुनिश्चित करते हुए:' : 'ಈ ಒಪ್ಪಂದವು ರೈತನು ಕೃಷಿ ಉತ್ಪನ್ನವನ್ನು ಉತ್ಪಾದಿಸಲು ಮತ್ತು ಪೂರೈಸಲು ಸಮ್ಮತಿಸುವ ಷರತ್ತುಗಳು ಮತ್ತು ನಿಬಂಧನೆಗಳನ್ನು ವ್ಯಾಖ್ಯಾನಿಸುತ್ತದೆ, ಮತ್ತು ಖರೀದಿದಾರನು ಮುಂಜಾಗ್ರತಾ ನಿರ್ಧಾರಿತ ಬೆಲೆಯಲ್ಲಿ ಅಂತಹ ಉತ್ಪನ್ನವನ್ನು ಖರೀದಿಸಲು ಸಮ್ಮತಿಸುತ್ತಾನೆ, ಇದು ಖಚಿತಪಡಿಸುತ್ತದೆ:'}</p><ul><li>${lang === 'hi' ? 'किसान को बाजार पहुंच की गारंटी' : 'ರೈತನಿಗೆ ಮಾರುಕಟ್ಟೆ ಪ್ರವೇಶದ ಖಾತರಿ'}</li><li>${lang === 'hi' ? 'निष्पक्ष और पारदर्शी मूल्य निर्धारण' : 'ನ್ಯಾಯೋಚಿತ ಮತ್ತು ಪಾರದರ್ಶಕ ಬೆಲೆ ನಿರ್ಧಾರಣ'}</li><li>${lang === 'hi' ? 'समय पर और सुरक्षित भुगतान' : 'ಸಮಯೋಚಿತ ಮತ್ತು ಸುರಕ್ಷಿತ ಪಾವತಿ'}</li><li>${lang === 'hi' ? 'मध्यस्थों पर निर्भरता में कमी' : 'ಮಧ್ಯವರ್ತಿಗಳ ಮೇಲೆ ಅವಲಂಬನೆಯ ಕಡಿತ'}</li></ul></section><section class="section"><h2>${lang === 'hi' ? '2. अनुबंध प्रकार और अवधि' : '2. ಒಪ್ಪಂದ ಪ್ರಕಾರ ಮತ್ತು ಅವಧಿ'}</h2><p><b>${lang === 'hi' ? 'अनुबंध प्रकृति:' : 'ಒಪ್ಪಂದ ಪ್ರಕೃತಿ:'}</b> ${contractNature === 'pre-harvest' ? (lang === 'hi' ? 'फसल उत्पादन अनुबंध' : 'ಫಸಲ್ ಉತ್ಪಾದನ ಒಪ್ಪಂದ') : (lang === 'hi' ? 'कटाई के बाद की खरीद अनुबंध' : 'ಕತ್ತರಣೆಯ ಬಳಿಕ ಖರೀದಿ ಒಪ್ಪಂದ')}</p><p><b>${lang === 'hi' ? 'अनुबंध अवधि:' : 'ಒಪ್ಪಂದ ಅವಧಿ:'}</b> ${contractDuration === 'one-time' ? (lang === 'hi' ? 'एक बार' : 'ಒಮ್ಮೆ') : (contractDuration === 'seasonal' ? (lang === 'hi' ? 'मौसमी' : 'ಹಂಗಾಮಿ') : (lang === 'hi' ? 'वार्षिक' : 'ವಾರ್ಷಿಕ'))}</p><p><b>${lang === 'hi' ? 'प्रारंभ तिथि:' : 'ಪ್ರಾರಂಭ ದಿನಾಂಕ:'}</b> ${startDate}</p><p><b>${lang === 'hi' ? 'समाप्ति तिथि:' : 'ಅಂತಿಮ ದಿನಾಂಕ:'}</b> ${endDate}</p><p><b>${lang === 'hi' ? 'अवधि:' : 'ಅವಧಿ:'}</b> ${days} ${lang === 'hi' ? 'दिन' : 'ದಿನ'}</p></section><section class="section"><h2>${lang === 'hi' ? '3. डेटा गोपनीयता और प्लेटफॉर्म अनुपालन' : '3. ಡೇಟಾ ಗೌಪ್ಯತೆ ಮತ್ತು ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಅನುಸರಣೆ'}</h2><p>${lang === 'hi' ? 'एग्रीएआई प्लेटफॉर्म के माध्यम से एकत्र किए गए सभी व्यक्तिगत, कृषि और लेनदेन संबंधी डेटा को सुरक्षित रूप से संग्रहीत किया जाएगा और इसका उपयोग केवल अनुबंध निष्पादन और नवीनीकरण, भुगतान निपटान, बीमा सुविधा, और कानूनी और नियामक अनुपालन के लिए किया जाएगा। यह समझौता डिजिटल व्यक्तिगत डेटा संरक्षण अधिनियम, 2023 के साथ पूरी तरह से अनुपालित है।' : 'ಅಗ್ರಿ ಎಐ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಮೂಲಕ ಸಂಗ್ರಹಿಸಲಾದ ಎಲ್ಲಾ ವೈಯಕ್ತಿಕ, ಕೃಷಿ ಮತ್ತು ವಹಿವಾಟಿನ ಡೇಟಾವನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಅದನ್ನು ಕೇವಲ ಒಪ್ಪಂದದ ಕಾರ್ಯಗತಗೊಳಿಕೆ ಮತ್ತು ನವೀಕರಣ, ಪಾವತಿ ನಿಷ್ಪತ್ತಿ, ವಿಮಾ ಸೌಲಭ್ಯ, ಮತ್ತು ಕಾನೂನಿಕ ಮತ್ತು ನಿಯಾಮಕ ಅನುಸರಣೆಗಾಗಿ ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ. ಈ ಒಪ್ಪಂದವು ಡಿಜಿಟಲ್ ವೈಯಕ್ತಿಕ ಡೇಟಾ ಸಂರಕ್ಷಣೆ ಕಾಯ್ದೆ, 2023 ರೊಂದಿಗೆ ಸಂಪೂರ್ಣವಾಗಿ ಅನುಸರಣೆಯಲ್ಲಿದೆ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '4. वस्तु विवरण' : '4.ವಸ್ತು ವಿವರಗಳು'}</h2><table><thead><tr><th>${lang === 'hi' ? 'क्रम सं.' : 'ಕ್ರಮ ಸಂ.'}</th><th>${lang === 'hi' ? 'फसल का नाम' : 'ಬೆಳೆಯ ಹೆಸರು'}</th><th>${lang === 'hi' ? 'किस्म' : 'ವೈವಿಧ್ಯ'}</th><th>${lang === 'hi' ? 'मात्रा (किग्रा)' : 'ಪ್ರಮಾಣ (ಕೆಜಿ)'}</th><th>${lang === 'hi' ? 'मूल्य (₹/किग्रा)' : 'ಬೆಲೆ (₹/ಕೆಜಿ)'}</th><th>${lang === 'hi' ? 'राशि (₹)' : 'ಮೊತ್ತ (₹)'}</th></tr></thead><tbody>${rowsHtml}</tbody></table></section><section class="section"><h2>${lang === 'hi' ? '5. मूल्य और भुगतान शर्तें' : '5. ಬೆಲೆ ಮತ್ತು ಪಾವತಿ ನಿಯಮಗಳು'}</h2><h3>${lang === 'hi' ? '5.1 किसान की भुगतान संरचना' : '5.1 ರೈತನ ಪಾವತಿ ರಚನೆ'}</h3><p><b>${lang === 'hi' ? 'कुल मात्रा:' : 'ಒಟ್ಟು ಪ್ರಮಾಣ:'}</b> ${totalContractQty.toLocaleString('en-IN')} kg</p><p><b>${lang === 'hi' ? 'प्रति इकाई मूल्य:' : 'ಪ್ರತಿ ಯೂನಿಟ್ ಬೆಲೆ:'}</b> ${formatCurrency(avgPricePerKg)} per kg</p><p><b>${lang === 'hi' ? 'सबटोटल:' : 'ಸಬ್‌ಟೋಟಲ್:'}</b> ${formatCurrency(totalCropTradeValue)}</p><p><b>${lang === 'hi' ? 'प्लेटफॉर्म शुल्क:' : 'ವೇದಿಕೆ ಶುಲ್ಕ:'}</b> ${formatCurrency(totalPlatformFee)}</p><p><b>${lang === 'hi' ? 'जीएसटी (18%):' : 'ಜಿಎಸ್ಟಿ (18%):'}</b> ${formatCurrency(totalGst)}</p><p><b style="font-size:16px;color:#236902;">${lang === 'hi' ? 'कटौती के बाद कुल राशि:' : 'ಕಡಿತದ ನಂತರ ಒಟ್ಟು ಮೊತ್ತ:'}</b> <b style="font-size:16px;color:#236902;">${formatCurrency(totalAmountInvoice)}</b></p><h3 style="margin-top:20px;">${lang === 'hi' ? '5.2 खरीदार की भुगतान संरचना' : '5.2 ಖರೀದಿದಾರನ ಪಾವತಿ ರಚನೆ'}</h3><p><b>${lang === 'hi' ? 'कुल मात्रा:' : 'ಒಟ್ಟು ಪ್ರಮಾಣ:'}</b> ${totalContractQty.toLocaleString('en-IN')} kg</p><p><b>${lang === 'hi' ? 'प्रति इकाई मूल्य:' : 'ಪ್ರತಿ ಯೂನಿಟ್ ಬೆಲೆ:'}</b> ${formatCurrency(avgPricePerKg)} per kg</p><p><b>${lang === 'hi' ? 'सबटोटल:' : 'ಸಬ್‌ಟೋಟಲ್:'}</b> ${formatCurrency(totalCropTradeValue)}</p><p><b>${lang === 'hi' ? 'प्लेटफॉर्म शुल्क:' : 'ವೇದಿಕೆ ಶುಲ್ಕ:'}</b> ${formatCurrency(buyerPlatformFee)}</p><p><b>${lang === 'hi' ? 'जीएसटी (18%):' : 'ಜಿಎಸ್ಟಿ (18%):'}</b> ${formatCurrency(buyerGst)}</p><p><b style="font-size:16px;color:#236902;">${lang === 'hi' ? 'कुल देय राशि:' : 'ಒಟ್ಟು ನೀಡಬೇಕಾದ ಮೊತ್ತ:'}</b> <b style="font-size:16px;color:#236902;">${formatCurrency(buyerTotalAmount)}</b></p><h3 style="margin-top:20px;">${lang === 'hi' ? '5.3 भुगतान अनुसूची' : '5.3 ಪಾವತಿ ವೇಳಾಪಟ್ಟಿ'}</h3><ul><li><b>${lang === 'hi' ? 'अग्रिम (25%):' : 'ಮುಂಗಡ (25%):'}</b> ${formatCurrency(buyerTotalAmount * 0.25)} – ${lang === 'hi' ? 'अनुबंध पुष्टि पर' : 'ಒಪ್ಪಂದದ ದೃಢೀಕರಣದಲ್ಲಿ'}</li><li><b>${lang === 'hi' ? 'वितरण पर (50%):' : 'ವಿತರಣೆಯ ಮೇಲೆ (50%):'}</b> ${formatCurrency(buyerTotalAmount * 0.50)} – ${lang === 'hi' ? 'सफल वितरण पर' : 'ಯಶಸ್ವಿ ವಿತರಣೆಯ ಮೇಲೆ'}</li><li><b>${lang === 'hi' ? 'अंतिम (25%):' : 'ಅಂತಿಮ (25%):'}</b> ${formatCurrency(buyerTotalAmount * 0.25)} – ${lang === 'hi' ? 'गुणवत्ता स्वीकृति के बाद 7 कार्य दिवसों के भीतर' : 'ಗುಣಮಟ್ಟದ ಸ್ವೀಕೃತಿಯ ನಂತರ 7 ಕೆಲಸದ ದಿನಗಳಲ್ಲಿ'}</li></ul><h3 style="margin-top:20px;">${lang === 'hi' ? '5.4 भुगतान का तरीका' : '5.4 ಪಾವತಿ ಮೋಡ್'}</h3><p>${lang === 'hi' ? 'बैंक ट्रांसफर / यूपीआई / चेक। खरीदार द्वारा सभी भुगतानों के लिए डिजिटल या भौतिक रसीदें जारी की जाएंगी।' : 'ಬ್ಯಾಂಕ್ ಟ್ರಾನ್ಸ್‌ಫರ್ / ಯೂಪಿಐ / ಚೆಕ್. ಖರೀದಿದಾರರಿಂದ ಎಲ್ಲಾ ಪಾವತಿಗಳಿಗೆ ಡಿಜಿಟಲ್ ಅಥವಾ ಭೌತಿಕ ರಸೀದುಗಳನ್ನು ನೀಡಲಾಗುತ್ತದೆ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '6. वितरण, रसद और परिवहन' : '6. ವಿತರಣೆ, ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಮತ್ತು ಸಾರಿಗೆ'}</h2><h3>${lang === 'hi' ? '6.1 एग्रीएआई की भूमिका' : '6.1 ಅಗ್ರಿ ಎಐಯ ಪಾತ್ರ'}</h3><p>${lang === 'hi' ? 'एग्रीएआई केवल एक डिजिटल तकनीक प्लेटफॉर्म के रूप में संचालित करता है। एग्रीएआई को खरीदार, विक्रेता, व्यापारी, कमीशन एजेंट, परिवहनक या वस्तुओं का अभिरक्षक नहीं माना जाएगा। सभी दायित्व पक्षों के बीच सख्ती से बने रहेंगे।' : 'ಅಗ್ರಿ ಎಐ ಕೇವಲ ಡಿಜಿಟಲ್ ತಂತ್ರಜ್ಞಾನ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಆಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ. ಅಗ್ರಿ ಎಐಯನ್ನು ಖರೀದಿದಾರ, ಮಾರಾಟಗಾರ, ವ್ಯಾಪಾರಿ, ಕಮಿಷನ್ ಏಜೆಂಟ್, ಸಾರಿಗೆದಾರ ಅಥವಾ ಸರಕುಗಳ ಕಸ್ಟೋಡಿಯನ್ ಎಂದು ಪರಿಗಣಿಸಲಾಗುವುದಿಲ್ಲ. ಎಲ್ಲಾ ಕರ್ತವ್ಯಗಳು ಪಕ್ಷಗಳ ನಡುವೆ ಸ್ಟ್ರಿಕ್ಟ್ ಆಗಿ ಉಳಿಯುತ್ತವೆ.'}</p><h3>${lang === 'hi' ? '6.2 परिवहन' : '6.2 ಸಾರಿಗೆ'}</h3><p>${lang === 'hi' ? 'परिवहन को फसल की प्रकृति, मात्रा, दूरी और हैंडलिंग आवश्यकताओं के आधार पर एग्रीएआई प्लेटफॉर्म द्वारा अनुमोदित तृतीय-पक्ष लॉजिस्टिक्स सेवा प्रदाताओं के माध्यम से सुविधाजनक बनाया जाएगा।' : 'ಸಾರಿಗೆಯನ್ನು ಬೆಳೆಯ ಸ್ವರೂಪ, ಪ್ರಮಾಣ, ದೂರ ಮತ್ತು ನಿರ್ವಹಣೆ ಅವಶ್ಯಕತೆಗಳ ಆಧಾರದ ಮೇಲೆ ಅಗ್ರಿ ಎಐ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಮೂಲಕ ಅನುಮೋದಿಸಲಾದ ಮೂರನೇ ಪಕ್ಷದ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಸೇವಾ ಪೂರೈಕೆದಾರರ ಮೂಲಕ ಸೌಲಭ್ಯಗೊಳಿಸಲಾಗುತ್ತದೆ.'}</p><h3>${lang === 'hi' ? '6.3 वितरण शुल्क' : '6.3 ವಿತರಣೆ ಶುಲ್ಕ'}</h3><p>${lang === 'hi' ? 'वितरण शुल्क वास्तविक दूरी, वाहन प्रकार, लोडिंग आवश्यकताओं और स्थान के आधार पर तृतीय-पक्ष लॉजिस्टिक्स प्रदाता द्वारा निर्धारित किए जाएंगे। ऐसे शुल्क खरीदार द्वारा सीधे लॉजिस्टिक्स प्रदाता को भुगतान किए जाएंगे।' : 'ವಿತರಣೆ ಶುಲ್ಕವನ್ನು ನಿಜವಾದ ದೂರ, ವಾಹನ ಪ್ರಕಾರ, ಲೋಡಿಂಗ್ ಅವಶ್ಯಕತೆಗಳು ಮತ್ತು ಸ್ಥಳದ ಆಧಾರದ ಮೇಲೆ ಮೂರನೇ ಪಕ್ಷದ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರಿಂದ ನಿರ್ಧಾರಿಸಲಾಗುತ್ತದೆ. ಅಂತಹ ಶುಲ್ಕವನ್ನು ಖರೀದಿದಾರರಿಂದ ನೇರವಾಗಿ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರಿಗೆ ಪಾವತಿಸಲಾಗುತ್ತದೆ.'}</p><h3>${lang === 'hi' ? '6.4 जोखिम का हस्तांतरण' : '6.4 ಅಪಾಯದ ಸ್ಥಳಾಂತರ'}</h3><p>${lang === 'hi' ? 'उत्पाद के लिए जोखिम और जिम्मेदारी परिवहन के दौरान लॉजिस्टिक्स प्रदाता के साथ बनी रहेगी। जोखिम खरीदार को केवल सफल डिलीवरी और हस्ताक्षरित डिलीवरी प्रमाण (POD) पर स्थानांतरित होगी।' : 'ಉತ್ಪನ್ನದ ಅಪಾಯ ಮತ್ತು ಜವಾಬ್ದಾರಿಕೆ ಸಾರಿಗೆಯ ಸಮಯದಲ್ಲಿ ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರೊಂದಿಗೆ ಉಳಿಯುತ್ತದೆ. ಅಪಾಯವು ಯಶಸ್ವಿ ವಿತರಣೆ ಮತ್ತು ಸಹಿ ಮಾಡಿದ ವಿತರಣೆ ಪ್ರೂಫ್ (POD) ಮೇಲೆ ಮಾತ್ರ ಖರೀದಿದಾರರಿಗೆ ಸ್ಥಳಾಂತರಿಸುತ್ತದೆ.'}</p><h3>${lang === 'hi' ? '6.5 देरी, क्षति और हानि' : '6.5 ವಿಳಂಬ, ಹಾನಿ ಮತ್ತು ನಷ್ಟ'}</h3><p>${lang === 'hi' ? 'परिवहन के दौरान होने वाली कोई भी देरी, क्षति, कमी या हानि लॉजिस्टिक्स प्रदाता की शर्तों और निबंधनों द्वारा शासित होगी। एग्रीएआई ऐसे किसी भी दावों के लिए उत्तरदायी नहीं होगा।' : 'ಸಾರಿಗೆಯ ಸಮಯದಲ್ಲಿ ಸಂಭವಿಸುವ ಯಾವುದೇ ವಿಳಂಬ, ಹಾನಿ, ಕೊರತೆ ಅಥವಾ ನಷ್ಟವನ್ನು ಲಾಜಿಸ್ಟಿಕ್ಸ್ ಪೂರೈಕೆದಾರರ ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳಿಂದ ನಿಯಂತ್ರಿಸಲಾಗುತ್ತದೆ. ಅಗ್ರಿ ಎಐ ಅಂತಹ ಯಾವುದೇ ಹಕ್ಕುಗಳಿಗೆ ಜವಾಬ್ದಾರಿಯಿಲ್ಲ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '7. गुणवत्ता मानक, निरीक्षण और स्वीकृति' : '7. ಗುಣಮಟ್ಟದ ಮಾನದಂಡಗಳು, ಪರಿಶೀಲನೆ ಮತ್ತು ಸ್ವೀಕೃತಿ'}</h2><p>${lang === 'hi' ? 'आपूर्ति किए गए उत्पाद परस्पर सहमत विनिर्देशों को पूरा करेंगे। खरीदार को डिलीवरी से 3 कार्य दिवसों के भीतर गुणवत्ता निरीक्षण पूरा करना होगा। निरीक्षण अवधि के भीतर एग्रीएआई प्लेटफॉर्म के माध्यम से लिखित रूप में कोई भी अस्वीकार उठाया जाना चाहिए। यदि 3 कार्य दिवसों के भीतर कोई विवाद नहीं उठाया जाता है, तो उत्पाद स्वीकार किया गया माना जाएगा।' : 'ಪೂರೈಸಲಾದ ಉತ್ಪನ್ನವು ಪರಸ್ಪರ ಸಮ್ಮತಿಸಿದ ವಿಶೇಷಣಗಳನ್ನು ಪೂರೈಸಬೇಕು. ಖರೀದಿದಾರನು ವಿತರಣೆಯಿಂದ 3 ಕೆಲಸದ ದಿನಗಳಲ್ಲಿ ಗುಣಮಟ್ಟದ ಪರಿಶೀಲನೆಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಬೇಕು. ಪರಿಶೀಲನೆಯ ಅವಧಿಯಲ್ಲಿ ಅಗ್ರಿ ಎಐ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಮೂಲಕ ಲಿಖಿತವಾಗಿ ಯಾವುದೇ ತಿರಸ್ಕಾರವನ್ನು ಎತ್ತಬೇಕು. 3 ಕೆಲಸದ ದಿನಗಳಲ್ಲಿ ಯಾವುದೇ ವಿವಾದವನ್ನು ಎತ್ತದಿದ್ದರೆ, ಉತ್ಪನ್ನವನ್ನು ಸ್ವೀಕರಿಸಲಾಗಿದೆ ಎಂದು ಪರಿಗಣಿಸಲಾಗುತ್ತದೆ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '8. जोखिम, दायित्व और बीमा' : '8. ಅಪಾಯ, ಜವಾಬ್ದಾರಿಕೆ ಮತ್ತು ವಿಮೆ'}</h2><p>${lang === 'hi' ? 'किसान को मानक कृषि और फसल कटाई के बाद की प्रथाओं का पालन करना होगा। प्रेषण से पहले प्राकृतिक आपदाओं के कारण फसल हानि की स्थिति में, दायित्वों की परस्पर समीक्षा की जा सकती है। सरकारी योजनाओं के तहत लागू होने पर फसल बीमा किसान के नाम में रहेगा। प्राप्त कोई भी बीमा मुआवजा पूरी तरह से किसान का होगा। डिलीवरी और स्वीकृति के बाद, सभी जोखिम और दायित्व पूरी तरह से खरीदार को स्थानांतरित हो जाएंगे।' : 'ರೈತನು ಪ್ರಮಾಣಿತ ಕೃಷಿ ಮತ್ತು ಕತ್ತರಣೆಯ ನಂತರದ ಅಭ್ಯಾಸಗಳನ್ನು ಅನುಸರಿಸಬೇಕು. ಕಳುಹಿಸುವ ಮೊದಲು ನೈಸರ್ಗಿಕ ಆಪತ್ತುಗಳಿಂದ ಬೆಳೆ ನಷ್ಟವಾದ ಸಂದರ್ಭದಲ್ಲಿ, ಕರ್ತವ್ಯಗಳನ್ನು ಪರಸ್ಪರ ಪರಿಶೀಲಿಸಬಹುದು. ಸರ್ಕಾರಿ ಯೋಜನೆಗಳ ಅಡಿಯಲ್ಲಿ ಅನ್ವಯಿಸುವ ಸಂದರ್ಭದಲ್ಲಿ ಬೆಳೆ ವಿಮೆ ರೈತನ ಹೆಸರಿನಲ್ಲಿರುತ್ತದೆ. ಸ್ವೀಕರಿಸಿದ ಯಾವುದೇ ವಿಮೆ ಪರಿಹಾರವು ಸಂಪೂರ್ಣವಾಗಿ ರೈತನದ್ದಾಗಿರುತ್ತದೆ. ವಿತರಣೆ ಮತ್ತು ಸ್ವೀಕೃತಿಯ ನಂತರ, ಎಲ್ಲಾ ಅಪಾಯಗಳು ಮತ್ತು ಜವಾಬ್ದಾರಿಕೆಗಳು ಸಂಪೂರ್ಣವಾಗಿ ಖರೀದಿದಾರರಿಗೆ ಸ್ಥಳಾಂತರಿಸುತ್ತವೆ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '9. फोर्स मेजर' : '9. ಫೋರ್ಸ್ ಮೇಜರ್'}</h2><p>${lang === 'hi' ? 'कोई भी पक्ष उचित नियंत्रण से परे घटनाओं के कारण विफलता के लिए उत्तरदायी नहीं होगा, जिसमें प्राकृतिक आपदाएं, सरकारी प्रतिबंध, युद्ध या हड़ताल शामिल हैं। ऐसी स्थितियां समाप्त होने के बाद दायित्व फिर से शुरू होंगे।' : 'ಯಾವುದೇ ಪಕ್ಷವು ಸಮಂಜಸ ನಿಯಂತ್ರಣದಿಂದ ಮೀರಿದ ಘಟನೆಗಳಿಂದ ಉಂಟಾದ ವಿಫಲತೆಗೆ ಜವಾಬ್ದಾರಿಯಿಲ್ಲ, ಇದರಲ್ಲಿ ನೈಸರ್ಗಿಕ ಆಪತ್ತುಗಳು, ಸರ್ಕಾರಿ ನಿರ್ಬಂಧಗಳು, ಯುದ್ಧ ಅಥವಾ ಹೋರಾಟಗಳು ಸೇರಿವೆ. ಅಂತಹ ಸ್ಥಿತಿಗಳು ನಿಲ್ಲಿಸಿದ ನಂತರ ಕರ್ತವ್ಯಗಳು ಮರುಪ್ರಾರಂಭವಾಗುತ್ತವೆ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '10. विवाद समाधान और अधिकार क्षेत्र' : '10. ವಿವಾದ ಪರಿಹಾರ ಮತ್ತು ಅಧಿಕಾರ ವ್ಯಾಪ್ತಿ'}</h2><p>${lang === 'hi' ? 'इस समझौते से उत्पन्न होने वाला कोई भी विवाद पहले एग्रीएआई प्लेटफॉर्म के माध्यम से चर्चा के जरिए मैत्रीपूर्ण रूप से हल किया जाएगा। यदि 15 दिनों के भीतर हल नहीं होता है, तो विवादों को मध्यस्थता और सुलह अधिनियम, 1996 के तहत मध्यस्थता में भेजा जाएगा। मध्यस्थता के अधीन, बेंगलुरु, कर्नाटक की अदालतों को प्रवर्तन और कानूनी कार्यवाही के लिए विशेष अधिकार क्षेत्र होगा।' : 'ಈ ಒಪ್ಪಂದದಿಂದ ಉಂಟಾಗುವ ಯಾವುದೇ ವಿವಾದವನ್ನು ಮೊದಲು ಅಗ್ರಿ ಎಐ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಮೂಲಕ ಚರ್ಚೆಯ ಮೂಲಕ ಸೌಹಾರ್ದದಿಂದ ಪರಿಹರಿಸಲಾಗುತ್ತದೆ. 15 ದಿನಗಳಲ್ಲಿ ಪರಿಹರಿಸದಿದ್ದರೆ, ವಿವಾದಗಳನ್ನು ಮಧ್ಯಸ್ಥತೆ ಮತ್ತು ಸಮಾಧಾನ ಕಾಯ್ದೆ, 1996 ರ ಅಡಿಯಲ್ಲಿ ಮಧ್ಯಸ್ಥತೆಗೆ ಉಲ್ಲೇಖಿಸಲಾಗುತ್ತದೆ. ಮಧ್ಯಸ್ಥತೆಗೆ ಒಳಪಟ್ಟು, ಬೆಂಗಳೂರು, ಕರ್ನಾಟಕದ ನ್ಯಾಯಾಲಯಗಳು ಜಾರಿಗೊಳಿಸುವಿಕೆ ಮತ್ತು ಕಾನೂನಿಕ ಕಾರ್ಯಾಚರಣೆಗಳಿಗೆ ವಿಶೇಷ ಅಧಿಕಾರ ವ್ಯಾಪ್ತಿಯನ್ನು ಹೊಂದಿರುತ್ತವೆ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '11. समाप्ति' : '11. ಅಂತ್ಯ'}</h2><p>${lang === 'hi' ? 'कोई भी पक्ष भौतिक उल्लंघन के लिए इस समझौते को समाप्त कर सकता है, जिसमें गैर-भुगतान, गैर-वितरण, गलत बयानी या सहमत शर्तों का उल्लंघन शामिल है। सहमत समयसीमा से परे भुगतान डिफॉल्ट की स्थिति में, डिफॉल्टिंग पार्टी को खाता निलंबन, दंड शुल्क और वसूली कार्यवाही का सामना करना पड़ सकता है।' : 'ಯಾವುದೇ ಪಕ್ಷವು ದ್ರವ್ಯ ಉಲ್ಲಂಘನೆಗಾಗಿ ಈ ಒಪ್ಪಂದವನ್ನು ಅಂತ್ಯಗೊಳಿಸಬಹುದು, ಇದರಲ್ಲಿ ಅಪಾವತಿ, ಅಪೂರೈಕೆ, ತಪ್ಪಾದ ಪ್ರತಿನಿಧಿಕೆ ಅಥವಾ ಸಮ್ಮತಿಸಿದ ಷರತ್ತುಗಳ ಉಲ್ಲಂಘನೆ ಸೇರಿವೆ. ಸಮ್ಮತಿಸಿದ ಸಮಯಸೀಮೆಗಳಿಗಿಂತ ಮೀರಿದ ಪಾವತಿ ಡೀಫಾಲ್ಟ್‌ನ ಸಂದರ್ಭದಲ್ಲಿ, ಡೀಫಾಲ್ಟಿಂಗ್ ಪಕ್ಷವು ಖಾತೆ ನಿಲುವು, ದಂಡ ಶುಲ್ಕಗಳು ಮತ್ತು ಮರುಪಡೆ ಕಾರ್ಯಾಚರಣೆಗಳನ್ನು ಎದುರಿಸಬಹುದು.'}</p></section><section class="section"><h2>${lang === 'hi' ? '12. समझौते की भाषा' : '12. ಒಪ್ಪಂದದ ಭಾಷೆ'}</h2><p>${lang === 'hi' ? 'इस समझौते को किसान को अंग्रेजी में समझाया और अनुवादित किया गया है। किसी भी असंगति की स्थिति में, अंग्रेजी संस्करण प्रबल होगा।' : 'ಈ ಒಪ್ಪಂದವನ್ನು ರೈತನಿಗೆ ಇಂಗ್ಲಿಷ್‌ನಲ್ಲಿ ವಿವರಿಸಲಾಗಿದೆ ಮತ್ತು ಅನುವಾದಿಸಲಾಗಿದೆ. ಯಾವುದೇ ಅಸಂಗತಿಯ ಸಂದರ್ಭದಲ್ಲಿ, ಇಂಗ್ಲಿಷ್ ಆವೃತ್ತಿಯು ಪ್ರಬಲವಾಗಿರುತ್ತದೆ.'}</p></section><section class="section"><h2>${lang === 'hi' ? '13. निष्पादन एवं डिजिटल स्वीकृति' : '13. ಜಾರಿ ಮತ್ತು ಡಿಜಿಟಲ್ ಒಪ್ಪುವಿಕೆ'}</h2><p>${lang === 'hi' ? 'यह समझौता एग्रीएआई प्लेटफॉर्म के माध्यम से इलेक्ट्रॉनिक रूप से निष्पादित किया जा सकता है। पंजीकृत क्रेडेंशियल्स का उपयोग करके डिजिटल स्वीकृति कानूनी रूप से बाध्यकारी सहमति का गठन करेगी।' : 'ಈ ಒಪ್ಪಂದವನ್ನು ಅಗ್ರಿ ಎಐ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಮೂಲಕ ಇಲೆಕ್ಟ್ರಾನಿಕ್ ರೂಪದಲ್ಲಿ ಕಾರ್ಯಗತಗೊಳಿಸಬಹುದು. ನೋಂದಾಯಿತ ರುಜುವಾತುಗಳನ್ನು ಬಳಸಿಕೊಂಡು ಡಿಜಿಟಲ್ ಒಪ್ಪಿಗೆಯು ಕಾನೂನುಬದ್ಧವಾದ ಬದ್ಧತೆಯನ್ನು ರಚಿಸುತ್ತದೆ.'}</p><section class="signature-section"><div class="signature-line"><p><b>${lang === 'hi' ? 'खरीदार / कंपनी' : 'ಖರೀದಿದಾರ / ಕಂಪನಿ'}</b></p><p>${lang === 'hi' ? 'नाम:' : 'ಹೆಸರು:'} ${signatureName}</p><p>${lang === 'hi' ? 'तिथि:' : 'ದಿನಾಂಕ:'} ${signatureDate}</p></div><div class="signature-line"><p><b>${lang === 'hi' ? 'किसान / उत्पादक' : 'ರೈತ / ಉತ್ಪಾದಕ'}</b></p><p>${lang === 'hi' ? 'नाम:' : 'ಹೆಸರು:'} ________________</p><p>${lang === 'hi' ? 'तिथि:' : 'ದಿನಾಂಕ:'} ________________</p></div></section></section><p style="text-align:center;margin-top:40px;padding-top:20px;border-top:2px solid #ddd;font-size:12px;color:#000;font-weight:bold;"><b>${lang === 'hi' ? 'गवाह:' : 'ಸಾಕ್ಷಿ:'}</b> ${lang === 'hi' ? 'एग्रीएआई प्लेटफॉर्म' : 'ಅಗ್ರಿ ಎಐ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್'} | ${lang === 'hi' ? 'डिजिटल रिकॉर्ड:' : 'ಡಿಜಿಟಲ್ ದಾಖಲೆ:'} ${new Date().toISOString()}</p></body></html>`;
+      }
+
+      setContractHtml(html);
+      setShowContractPreview(true);
+    } catch (e) {
+      console.error('Failed to generate contract', e);
+      alert(t('contractGenerateFailed', lang) || 'Failed to generate contract. See console for details.');
+    }
+  };
+
+  const proceedWithContract = () => {
     try {
       const invoiceId = 'ORD' + Date.now(); const createdAt = new Date().toISOString();
       const orderItems = items.map(it => { const { gstAmt, commissionAmt, lineTotal } = calculateGstAndCommission(it); return { id: it.id, crop_name: it.crop_name, variety: it.variety || it.Variety || '', farmer_id: it.user_id || it.seller_id || it._farmer_id || null, category: it.category || it.cat || '', price_per_kg: Number(it.price_per_kg || 0), order_quantity: Number(it.order_quantity || 0), image_url: it.image_url || '', subtotal: lineTotal, gst: gstAmt, platform_fee: commissionAmt, total: lineTotal + gstAmt + commissionAmt }; });
@@ -906,101 +985,116 @@ const Cart = () => {
       try { const updates = orderItems.filter(it => it && typeof it.id !== 'undefined').map(async (it) => { const remaining = Math.max(0, Number((items.find(x => x.id === it.id) || {}).quantity_kg || 0) - Number(it.order_quantity || 0)); try { await fetch(`${apiBase}/my-crops/${it.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quantity_kg: remaining }) }); } catch (e) {} }); Promise.allSettled(updates).catch(() => {}); } catch (e) {}
       try { const siteLang = localStorage.getItem('agri_lang') || 'en'; fetch(`${apiBase}/notifications/purchase`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Agri-Lang': siteLang }, body: JSON.stringify({ invoice_id: invoiceId, lang: siteLang, buyer, items: orderItems.map(({ id, crop_name, order_quantity, variety, farmer_id }) => ({ id, crop_name, order_quantity, variety, farmer_id })) }) }).catch(() => {}); try { const localKey = 'agriai_notifications'; const rawLocal = localStorage.getItem(localKey); const localArr = rawLocal ? JSON.parse(rawLocal) : []; const byFarmer = {}; orderItems.forEach(it => { const fid = it.farmer_id || 'unknown'; if (!byFarmer[fid]) byFarmer[fid] = []; byFarmer[fid].push(it); }); Object.keys(byFarmer).forEach((fid, idx) => { const group = byFarmer[fid]; const qty = group.reduce((s, x) => s + (Number(x.order_quantity||0)||0), 0); const subtotal = group.reduce((s, x) => s + (Number(x.subtotal||0)||0), 0); const notif = { id: `N${Date.now()}${idx}`, invoice_id: invoiceId, created_at: createdAt, farmer_id: fid === 'unknown' ? null : fid, buyer_name: buyer.name || '', buyer_id: buyer.id || null, items: group, quantity_kg: qty, _subtotal: subtotal, crop_name: group[0] ? group[0].crop_name : 'Order' }; localArr.unshift(notif); }); try { localStorage.setItem(localKey, JSON.stringify(localArr)); } catch (e) {} try { window.dispatchEvent(new Event('agriai:notifications:local:update')); } catch (e) {} } catch (e) {} } catch (e) {}
       localStorage.setItem('agriai_cart_buyer', JSON.stringify([])); setItems([]); try { clearCart(); } catch (e) {}
-      generateBill();
       try { const buyerId = localStorage.getItem('agriai_id') || null; const ordersPayload = orderItems.map(it => ({ invoice_id: invoiceId, crop_id: it.id, farmer_id: it.farmer_id || it.seller_id || it._farmer_id || null, buyer_id: buyerId, crop_name: it.crop_name, quantity_kg: Number(it.order_quantity || 0), price_per_kg: Number(it.price_per_kg || 0), total: Number(it.total || 0), payment_method: paymentMethod, contract_nature: contractNature, contract_duration: contractDuration })); fetch(`${apiBase}/buyer-orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orders: ordersPayload }) }).catch(() => {}); } catch (e) {}
       setTimeout(() => { window.location.href = '/history'; }, 100);
     } catch (e) { console.error('Failed to complete purchase:', e); alert(t('purchaseFailed', lang)); }
   };
 
   return (
-    <>
-      <style>{styles}</style>
-
-      <div className="cart-root">
-        {/* Orbs */}
-        <div className="cart-orb cart-orb-1" />
-        <div className="cart-orb cart-orb-2" />
-        <div className="cart-orb cart-orb-3" />
-        {/* Leaves */}
-        <div className="cart-leaf cart-leaf-1" />
-        <div className="cart-leaf cart-leaf-2" />
-        <div className="cart-leaf cart-leaf-3" />
-        <div className="cart-leaf cart-leaf-4" />
-        <div className="cart-leaf cart-leaf-5" />
-
-        <Navbar />
-
-        <main className="cart-main">
-          <div className="cart-glass">
-
-            {/* Header */}
-            <div className="cart-header-row">
-              <h1 className="cart-title">{t('cartTitle', lang)}</h1>
-              {items.length > 0 && (
-                <div className="cart-header-btns">
-                  <button className="cart-btn-secondary" onClick={() => window.location.href = '/dashboard/farmer'}>{t('continueShopping', lang)}</button>
-                  <button className="cart-btn-danger" onClick={clearCart}>{t('clearCart', lang)}</button>
-                </div>
-              )}
-            </div>
-
-            {items.length === 0 ? (
-              <div className="cart-empty">
-                <span className="cart-empty-icon">🧺</span>
-                <div className="cart-empty-text">{t('cartEmptyMessage', lang)}</div>
+    <div className="fc-root" style={{ background: 'rgba(83, 255, 3, 0.12)', backgroundAttachment: 'fixed', minHeight: '100vh', color: '#000', position: 'relative', overflow: 'hidden' }}>
+      <style>{`
+        .fc-root .navbar {
+          background: oklch(0.12 0.03 160 / 0.5) !important;
+          backdrop-filter: blur(12px) !important;
+          -webkit-backdrop-filter: blur(12px) !important;
+        }
+        .fc-root .navbar select {
+          background: oklch(0.12 0.03 160 / 0.6) !important;
+          border: 1px solid oklch(0.65 0.22 145 / 0.3) !important;
+          color: rgba(255,255,255,0.9) !important;
+        }
+        .fc-root .navbar select option {
+          background: #1a1a1a;
+          color: #ffffff;
+        }
+      `}</style>
+      <Navbar />
+      <main style={{ padding: '6rem 1rem 2rem', position: 'relative', zIndex: 1 }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(20px) saturate(1.6)', WebkitBackdropFilter: 'blur(20px) saturate(1.6)', border: '1px solid rgba(255,255,255,0.6)', borderRadius: '24px', padding: '2.5rem', boxShadow: '0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'nowrap', position: 'relative', padding: '12px 0 18px', minHeight: 64 }}>
+            <h1 style={{ backgroundImage: 'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', margin: 0, position: 'absolute', left: '50%', transform: 'translateX(-50%)', fontWeight: 800, fontSize: 32 }}>{t('cartTitle', lang)}</h1>
+            {items.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto', zIndex: 2 }}>
+                <button onClick={() => window.location.href = '/dashboard/farmer'} style={{ background: '#fff', border: '1px solid #dfeadf', color: '#236902', padding: '6px 10px', borderRadius: 6, fontWeight: 800 }}>{t('continueShopping', lang)}</button>
+                <button onClick={clearCart} style={{ background: '#fff', border: '1px solid #f0dede', color: '#d32f2f', padding: '6px 10px', borderRadius: 6, fontWeight: 800 }}>{t('clearCart', lang)}</button>
               </div>
-            ) : (
-              <div className="cart-layout">
+            )}
+          </div>
 
-                {/* Items column */}
-                <div className="cart-items-col">
+          {items.length === 0 ? (
+            <div style={{ textAlign: 'center', marginTop: 16 }}>
+              <div style={{ fontSize: 52, lineHeight: 1 }}>🧺</div>
+              <p style={{ marginTop: 8 }}>{t('cartEmptyMessage', lang)}</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 620px', minWidth: 320 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
                   {items.map(it => {
-                    const { gstRate, commissionRate, gstAmt, commissionAmt, lineTotal } = calculateGstAndCommission(it);
+                    const { gstRate, commissionRate: _commissionRate, gstAmt, commissionAmt, lineTotal, group: _group, categoryTotal: _categoryTotal } = calculateGstAndCommission(it);
                     return (
-                      <div key={it.id} className="cart-item-card">
-                        <div className="cart-item-img-wrap">
-                          {it.image_url
-                            ? <img className="cart-item-img" src={it.image_url} alt={it.crop_name} />
-                            : <div className="cart-item-no-img">📷<br />{t('noImage', lang)}</div>
-                          }
+                      <div key={it.id} style={{ display: 'flex', gap: 12, alignItems: 'center', border: '1px solid #eee', padding: 12, borderRadius: 8 }}>
+                        <div style={{ width: 120, height: 100, borderRadius: 6, overflow: 'hidden', background: '#f4f4f4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {it.image_url ? (
+                            <img 
+                              src={`${apiBase}/images/${it.image_url}`} 
+                              alt={it.crop_name} 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onLoad={() => console.log(`✅ Image loaded: ${it.crop_name} from ${apiBase}/images/${it.image_url}`)}
+                              onError={() => console.error(`❌ Failed to load image for ${it.crop_name}: ${apiBase}/images/${it.image_url}`)}
+                            />
+                          ) : (
+                            <div style={{ color: '#999' }}>📷 {t('noImage', lang)}</div>
+                          )}
                         </div>
-
-                        <div className="cart-item-info">
-                          <div className="cart-item-name-row">
-                            <span className="cart-item-name">{it.crop_name}</span>
-                            {it.variety && <span className="cart-variety-badge">{it.variety}</span>}
-                            {(it.category || it.cat) && <span className="cart-cat-badge">{it.category || it.cat}</span>}
-                          </div>
-                          <div className="cart-item-price">{formatCurrency(it.price_per_kg)} / {t('kg', lang)}</div>
-                          <div className="cart-item-fees">
-                            {userRole !== 'buyer' && (
-                              <>
-                                <span className="cart-item-fee-text">{t('tableGst', lang)}: {gstRate}% ({formatCurrency(gstAmt)})</span>
-                                <span className="cart-item-fee-text">{t('tablePlatformFee', lang)}: {formatCurrency(commissionAmt)}</span>
-                              </>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <div style={{ fontWeight: 800, color: '#236902' }}>{it.crop_name}</div>
+                            {it.variety && (
+                              <div style={{ background: '#f0f7ff', color: '#236902', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>{it.variety}</div>
                             )}
-                            <span className="cart-item-total">{t('itemTotalLabel', lang)} {formatCurrency(lineTotal + gstAmt + commissionAmt)}</span>
+                            {(it.category || it.cat) && (
+                              <div style={{ background: '#eaf6ea', color: '#236902', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>{it.category || it.cat}</div>
+                            )}
+                          </div>
+                          <div style={{ marginTop: 6, fontWeight: 700 }}>{formatCurrency(it.price_per_kg)} / {t('kg', lang)}</div>
+                          <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <div style={{ fontSize: 13, color: '#000000ff' }}>{t('subTotalLabel', lang)} {formatCurrency(lineTotal)}</div>
+                            <div style={{ fontSize: 13, color: '#000000ff' }}>{t('tablePlatformFee', lang)}: {formatCurrency(commissionAmt)}</div>
+                            <div style={{ fontSize: 13, color: '#000000ff' }}>{t('gstLabel', lang)}: {formatCurrency(gstAmt)}</div>
+                            <div style={{ fontSize: 13, color: '#000', fontWeight: 700 }}>{t('itemTotalLabel', lang)} {formatCurrency(lineTotal + gstAmt + commissionAmt)}</div>
                           </div>
                         </div>
-
-                        <div className="cart-item-controls">
-                          <div className="cart-avail-label">{t('availableLabel', lang)} {Number(it.quantity_kg || 0).toLocaleString('en-IN')} {t('kg', lang)}</div>
-                          <div className="cart-qty-row">
-                            <button className="cart-qty-btn" onClick={() => updateQuantity(it.id, -1)}>−</button>
-                            <div className="cart-qty-val">{Number(it.order_quantity || 0).toLocaleString('en-IN')} {t('kg', lang)}</div>
-                            <button className="cart-qty-btn" onClick={() => updateQuantity(it.id, 1)}>+</button>
-                          </div>
-                          <div className="cart-action-row">
-                            {editingId === it.id ? (
+                        <div style={{ textAlign: 'right', minWidth: 220 }}>
+                          {editingId !== it.id && (
+                            <>
+                              <div style={{ fontWeight: 700 }}>{t('availableLabel', lang)} {Number(it.quantity_kg || 0).toLocaleString('en-IN')} {t('kg', lang)}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
+                                <button onClick={() => updateQuantity(it.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>-</button>
+                                <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800 }}>{Number(it.order_quantity || 0).toLocaleString('en-IN')} kg</div>
+                                <button onClick={() => updateQuantity(it.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff' }}>+</button>
+                              </div>
+                            </>
+                          )}
+                          {editingId === it.id && (
+                            <>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                  <label style={{ fontSize: 12, fontWeight: 700 }}>{t('formQuantityLabel', lang)}</label>
+                                  <input type="number" step="0.001" value={editVal} onChange={e => setEditVal(e.target.value)} style={{ width: 100, padding: 8, borderRadius: 6, border: '1px solid #ccc', fontSize: 14, textAlign: 'center' }} />
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                                  <button onClick={() => saveEdit(it.id)} style={{ padding: '6px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700 }}>{t('saveButton', lang)}</button>
+                                  <button onClick={cancelEdit} style={{ padding: '6px 12px', background: '#ddd', border: 'none', borderRadius: 6, fontWeight: 700 }}>{t('cancelButton', lang)}</button>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                          <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                            {editingId !== it.id && (
                               <>
-                                <input type="number" step="0.001" value={editVal} onChange={e => setEditVal(e.target.value)} className="cart-edit-input" />
-                                <button className="cart-btn-save" onClick={() => saveEdit(it.id)}>{t('saveButton', lang)}</button>
-                                <button className="cart-btn-cancel" onClick={cancelEdit}>{t('cancelButton', lang)}</button>
-                              </>
-                            ) : (
-                              <>
-                                <button className="cart-btn-edit" onClick={() => startEdit(it)}>{t('editButton', lang)}</button>
-                                <button className="cart-btn-remove" onClick={() => removeItem(it.id)}>{t('deleteButton', lang)}</button>
+                                <button onClick={() => startEdit(it)} style={{ padding: '6px 12px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700 }}>{t('editButton', lang)}</button>
+                                <button onClick={() => removeItem(it.id)} style={{ background: '#fff', border: '1px solid #d32f2f', color: '#d32f2f', padding: '6px 10px', borderRadius: 6 }}>{t('deleteButton', lang)}</button>
                               </>
                             )}
                           </div>
@@ -1009,93 +1103,70 @@ const Cart = () => {
                     );
                   })}
                 </div>
-
-                {/* Summary sidebar */}
-                <div className="cart-summary-col">
-                  <div className="cart-summary-box">
-                    <div className="cart-summary-title">{t('orderSummary', lang)}</div>
-                    <div className="cart-summary-rows">
-                      <div className="cart-summary-row">{t('totalItemsLabel', lang)} {items.length}</div>
-                      <div className="cart-summary-row">{t('totalAvailableLabel', lang)} {Number(totalAvailableQty).toLocaleString('en-IN')} {t('kg', lang)}</div>
-                      <div className="cart-summary-row">{t('totalOrderedLabel', lang)} {Number(totalOrderedQty).toLocaleString('en-IN')} {t('kg', lang)}</div>
-                      <div className="cart-summary-row">{t('platformFeeLabel', lang)} {formatCurrency(totals.commission)}</div>
-                      <div className="cart-summary-row">{t('gstTotalLabel', lang)} {formatCurrency(totals.gst)}</div>
-                      <div className="cart-summary-total">{t('grandTotalLabel', lang)} {formatCurrency(grandTotal)}</div>
-                    </div>
-
-                    <div className="cart-section-divider" />
-
-                    {/* Contract Nature */}
-                    <div className="cart-options-title">{t('contractNatureLabel', lang)}</div>
-                    <div className="cart-radio-group">
-                      <label className="cart-radio-label">
-                        <input type="radio" name="contractNature" value="pre-harvest" checked={contractNature === 'pre-harvest'} onChange={() => setContractNature('pre-harvest')} />
-                        {t('preHarvestContract', lang)}
-                      </label>
-                      <label className="cart-radio-label">
-                        <input type="radio" name="contractNature" value="post-harvest" checked={contractNature === 'post-harvest'} onChange={() => setContractNature('post-harvest')} />
-                        {t('postHarvestContract', lang)}
-                      </label>
-                    </div>
-
-                    {/* Contract Duration */}
-                    <div className="cart-options-title">{t('contractDurationLabel', lang)}</div>
-                    <div className="cart-radio-group">
-                      <label className="cart-radio-label">
-                        <input type="radio" name="contractDuration" value="one-time" checked={contractDuration === 'one-time'} onChange={() => setContractDuration('one-time')} />
-                        {t('contractOneTime', lang)}
-                      </label>
-                      <label className="cart-radio-label">
-                        <input type="radio" name="contractDuration" value="seasonal" checked={contractDuration === 'seasonal'} onChange={() => setContractDuration('seasonal')} />
-                        {t('contractSeasonal', lang)}
-                      </label>
-                      <label className="cart-radio-label">
-                        <input type="radio" name="contractDuration" value="yearly" checked={contractDuration === 'yearly'} onChange={() => setContractDuration('yearly')} />
-                        {t('contractYearly', lang)}
-                      </label>
-                    </div>
-
-                    {userRole === 'buyer' && totalOrderedQty > 40 ? (
-                      <button className="cart-submit-btn" onClick={sendContract} disabled={!items.length}>
-                        {t('sendContract', lang)}
-                      </button>
-                    ) : (
-                      <button className="cart-submit-btn" onClick={handleBuyNow} disabled={!items.length}>
-                        {t('buyNow', lang)}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
               </div>
-            )}
-          </div>
-        </main>
-      </div>
 
-      {/* Contract Preview Modal */}
-      {showContractPreview && (
-        <div className="cart-modal-overlay">
-          <div className="cart-contract-modal">
-            <div className="cart-contract-header">
-              <span className="cart-contract-header-title">{t('contractPreview', lang)}</span>
-              <div className="cart-contract-header-actions">
-                <button className="cart-modal-btn" onClick={downloadContract}>{t('download', lang) || 'Download'}</button>
-                <button className="cart-modal-btn" onClick={printContract}>{t('print', lang) || 'Print'}</button>
-                <button className="cart-modal-btn" onClick={() => { setShowContractPreview(false); setContractMetadata(null); setOtpVerified(false); setDigitalSignature(''); }}>{t('close', lang) || 'Close'}</button>
+              <div style={{ flex: '0 0 320px', width: 320, position: 'sticky', top: 88, alignSelf: 'flex-start' }}>
+                <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
+                  <div style={{ fontWeight: 800, color: '#236902', marginBottom: 8 }}>{t('orderSummary', lang)}</div>
+                  <div style={{ display: 'grid', gap: 6, fontWeight: 700 }}>
+                    <div>{t('totalItemsLabel', lang)} {items.length}</div>
+                    <div>{t('totalOrderedLabel', lang)} {Number(totalOrderedQty).toLocaleString('en-IN')} {t('kg', lang)}</div>
+                    <div>{t('subTotalLabel', lang)} {formatCurrency(totals.subtotal)}</div>
+                    <div>{t('platformFeeLabel', lang)} {formatCurrency(totals.commission)}</div>
+                    <div>{t('gstLabel', lang)} {formatCurrency(totals.gst)}</div>
+                    <div style={{ fontSize: 18, color: '#236902', marginTop: 6 }}>{t('grandTotalLabel', lang)}: {formatCurrency(grandTotal)}</div>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>{t('contractNatureLabel', lang)}</div>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractNature" value="pre-harvest" checked={contractNature === 'pre-harvest'} onChange={() => setContractNature('pre-harvest')} /> {t('preHarvestContract', lang)}
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractNature" value="post-harvest" checked={contractNature === 'post-harvest'} onChange={() => setContractNature('post-harvest')} /> {t('postHarvestContract', lang)}
+                      </label>
+                    </div>
+
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>{t('contractDurationLabel', lang)}</div>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractDuration" value="one-time" checked={contractDuration === 'one-time'} onChange={() => setContractDuration('one-time')} /> {t('contractOneTime', lang)}
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractDuration" value="seasonal" checked={contractDuration === 'seasonal'} onChange={() => setContractDuration('seasonal')} /> {t('contractSeasonal', lang)}
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="radio" name="contractDuration" value="yearly" checked={contractDuration === 'yearly'} onChange={() => setContractDuration('yearly')} /> {t('contractYearly', lang)}
+                      </label>
+                    </div>
+                  </div>
+
+                  <button onClick={handleSendContract} disabled={!items.length} style={{ marginTop: 12, width: '100%', background: '#236902', color: '#fff', padding: '10px 12px', borderRadius: 6, border: 'none' }}>
+                    {t('sendContract', lang)}
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="cart-contract-body" dangerouslySetInnerHTML={{ __html: contractHtml }} />
-            <div className="cart-contract-send-row">
-              <button
-                className="cart-submit-btn"
-                style={{ width: 'auto', padding: '10px 24px' }}
-                disabled={uploadingContracts}
-                onClick={async () => {
-                  if (otpVerified) { await sendContract(); }
-                  else { setPendingContractAction(() => sendContract); openOtpForContract(); }
-                }}
-              >
+          )}
+        </div>
+      </main>
+
+      {showContractPreview && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+          <div style={{ width: '100%', maxWidth: '900px', height: '90vh', background: '#fff', display: 'flex', flexDirection: 'column', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden', margin: '0 auto' }}>
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px 24px', borderBottom: '2px solid #e5e5e5', background: '#f9f9f9' }}>
+              <h2 style={{ margin: 0, color: '#236902', fontSize: '18px', fontWeight: 700 }}>{t('contractPreview', lang) || 'Contract Preview'}</h2>
+              <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button onClick={printContract} style={{ padding: '5px 12px', background: '#fff', color: '#28a745', border: '2px solid #28a745', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px' }}>{t('print', lang) || 'Print'}</button>
+                <button onClick={() => { setShowContractPreview(false); setContractMetadata(null); }} style={{ padding: '5px 12px', background: '#fff', color: '#dc3545', border: '2px solid #dc3545', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px' }}>{t('close', lang) || 'Close'}</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', padding: '0', background: '#fff' }}>
+              <div style={{ padding: '40px 48px', lineHeight: '1.8' }} dangerouslySetInnerHTML={{ __html: contractHtml }} />
+            </div>
+            <div style={{ borderTop: '2px solid #e5e5e5', padding: '16px 24px', background: '#f9f9f9', display: 'flex', justifyContent: 'center', gap: 12 }}>
+              <button onClick={async () => { if (otpVerified) { await sendContract(); } else { setPendingContractAction(() => sendContract); openOtpForContract(); } }} disabled={uploadingContracts} style={{ padding: '8px 20px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}>
                 {t('sendContract', lang)}
               </button>
             </div>
@@ -1103,68 +1174,169 @@ const Cart = () => {
         </div>
       )}
 
-      {/* OTP Modal */}
+      {showDeliveryDateModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+          <div style={{ width: '90%', maxWidth: 400, background: '#fff', padding: 24, borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
+            <h2 style={{ margin: '0 0 16px 0', color: '#236902', fontSize: 20, textAlign: 'center', fontWeight: 600 }}>
+              {t('selectDeliveryDate', lang)}
+            </h2>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14, color: '#333' }}>
+                {t('deliveryDateLabel', lang)}
+              </label>
+              <input 
+                type="date" 
+                value={selectedDeliveryDate} 
+                onChange={(e) => setSelectedDeliveryDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                style={{ width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
+              />
+              <small style={{ display: 'block', marginTop: 6, color: '#666', fontSize: 12 }}>
+                {t('dateFormatHint', lang)}
+              </small>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button 
+                onClick={handleConfirmDeliveryDate} 
+                style={{ flex: 1, padding: 10, background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                {t('confirmButton', lang)}
+              </button>
+              <button 
+                onClick={() => setShowDeliveryDateModal(false)} 
+                style={{ flex: 1, padding: 10, background: '#ddd', border: 'none', borderRadius: 6, fontSize: 14, cursor: 'pointer', color: '#333', fontWeight: 500 }}>
+                {t('cancelButton', lang)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showOtpModal && (
-        <div className="cart-modal-overlay">
-          <div className="cart-otp-modal">
-            <h2 className="cart-otp-title">
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+          <div style={{ width: '90%', maxWidth: 500, background: '#fff', padding: 24, borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
+            <h2 style={{ margin: '0 0 16px 0', color: '#236902', fontSize: 20, textAlign: 'center' }}>
               {otpVerified ? t('signatureVerified', lang) : t('verifyIdentity', lang)}
             </h2>
-            <p className="cart-otp-desc">
+
+            <p style={{ color: '#666', marginBottom: 16, fontSize: 14 }}>
               {otpVerified ? t('verifyIdentitySigned', lang) : t('verifyIdentityDesc', lang)}
             </p>
 
             {otpVerified ? (
-              <div className="cart-sig-box">
+              <div style={{ background: '#f0f7ff', border: '2px solid #236902', borderRadius: 8, padding: 16, marginBottom: 16 }}>
                 <div style={{ marginBottom: 8 }}><strong>{t('signatureDetails', lang)}</strong></div>
                 <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#333' }}>
                   <div>📧 {t('signatureEmailLabel', lang)}: {otpEmail}</div>
                   <div>🕐 {t('signatureTimeLabel', lang)}: {digitalSignature.signature_timestamp}</div>
                   <div>✔ {t('signatureMethodLabel', lang)}: {digitalSignature.signature_method}</div>
-                  <div style={{ marginTop: 8, wordBreak: 'break-all' }}>{t('signatureHashLabel', lang)}: {digitalSignature.signature_hash ? digitalSignature.signature_hash.substring(0,40) + '...' : ''}</div>
+                  <div style={{ marginTop: 8, wordBreak: 'break-all' }}>{t('signatureHashLabel', lang)}: {digitalSignature.signature_hash ? digitalSignature.signature_hash.substring(0, 40) + '...' : ''}</div>
                 </div>
               </div>
             ) : (
               <>
-                <div style={{ marginBottom: 14 }}>
-                  <label className="cart-otp-label">{t('signatureEmailLabel', lang)}</label>
-                  <input type="email" value={otpEmail} disabled className="cart-otp-input" />
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 14 }}>{t('signatureEmailLabel', lang)}</label>
+                  <input type="email" value={otpEmail} disabled style={{ width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 6, fontSize: 14, background: '#f5f5f5' }} />
                 </div>
+
                 {!otpSent ? (
-                  <button className="cart-submit-btn" style={{ marginTop: 0 }} onClick={handleOtpSend} disabled={otpLoading}>
-                    {otpLoading ? (t('sendingOtp', lang) || 'Sending...') : t('sendOtpButton', lang)}
-                  </button>
+                  <div style={{ marginBottom: 16 }}>
+                    <button onClick={handleOtpSend} disabled={otpLoading} style={{ width: '100%', padding: 10, background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: otpLoading ? 'not-allowed' : 'pointer', opacity: otpLoading ? 0.6 : 1 }}>
+                      {otpLoading ? (t('sendingOtp', lang) || 'Sending...') : t('sendOtpButton', lang)}
+                    </button>
+                  </div>
                 ) : (
                   <>
-                    <div style={{ marginBottom: 14 }}>
-                      <label className="cart-otp-label">Enter OTP</label>
-                      <input type="text" placeholder={t('otpPlaceholder', lang)} value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))} className="cart-otp-code-input" />
-                      <div className="cart-otp-hint">{t('checkEmailMsg', lang)}</div>
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 14 }}>Enter OTP</label>
+                      <input type="text" placeholder={t('otpPlaceholder', lang)} value={otpCode} onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))} style={{ width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 6, fontSize: 14, textAlign: 'center', letterSpacing: '4px', fontWeight: 'bold' }} />
+                      <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{t('checkEmailMsg', lang)}</div>
                     </div>
-                    <button className="cart-submit-btn" style={{ marginTop: 0 }} onClick={handleOtpVerifyAndSign} disabled={otpLoading || otpCode.length < 6}>
-                      {otpLoading ? (t('verifying', lang) || 'Verifying...') : t('verifyAndSign', lang)}
-                    </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={handleOtpVerifyAndSign} disabled={otpLoading || otpCode.length < 6} style={{ flex: 1, padding: 10, background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: (otpLoading || otpCode.length < 6) ? 'not-allowed' : 'pointer', opacity: (otpLoading || otpCode.length < 6) ? 0.6 : 1 }}>
+                        {otpLoading ? (t('verifying', lang) || 'Verifying...') : t('verifyAndSign', lang)}
+                      </button>
+                    </div>
                   </>
                 )}
               </>
             )}
 
-            {otpError && <div className="cart-otp-error">⚠ {otpError}</div>}
+            {otpError && (
+              <div style={{ background: '#ffebee', border: '1px solid #d32f2f', color: '#d32f2f', padding: 10, borderRadius: 6, marginTop: 12, fontSize: 13 }}>
+                ⚠ {otpError}
+              </div>
+            )}
 
-            <div className="cart-otp-btn-row">
+            <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
               {otpVerified && pendingContractAction && (
-                <button className="cart-submit-btn" style={{ flex: 1, marginTop: 0 }} onClick={() => { pendingContractAction(); setPendingContractAction(null); }}>
+                <button onClick={() => { pendingContractAction(); setPendingContractAction(null); }} style={{ flex: 1, padding: 10, background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                   {t('proceedToSend', lang)}
                 </button>
               )}
-              <button className="cart-btn-cancel" style={{ flex: 1, padding: '10px 14px', fontSize: '0.9rem' }} onClick={resetOtpModal} disabled={otpLoading}>
+              <button onClick={resetOtpModal} disabled={otpLoading} style={{ flex: 1, padding: 10, background: '#ddd', border: 'none', borderRadius: 6, fontSize: 14, cursor: 'pointer' }}>
                 {t('close', lang) || 'Close'}
               </button>
             </div>
           </div>
         </div>
       )}
-    </>
+
+      <footer className="w-full border-t" style={{background:'#001400', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'1em 0'}}>
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid md:grid-cols-4 gap-4 mb-3">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-xl mb-2">
+                <div className="w-7 h-7 rounded-lg border border-primary/40 flex items-center justify-center" style={{background:'oklch(0.65 0.22 145 / 0.2)', borderColor:'oklch(0.65 0.22 145)'}}>
+                  <Leaf className="w-3.5 h-3.5" style={{color:'oklch(0.65 0.22 145)'}} />
+                </div>
+                <span style={{color:'oklch(0.65 0.22 145)', fontFamily:"'Times New Roman', Times, serif"}}>AgriAI</span>
+              </div>
+              <p className="text-white text-sm leading-relaxed" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                {t('footerDescription', localStorage.getItem('agri_lang') || 'en')}
+              </p>
+            </div>
+
+            {[
+              { title: t('footerPlatform', localStorage.getItem('agri_lang') || 'en'), links: ['footerAbout', 'footerHowItWorks', 'footerFeatures', 'footerPricing'] },
+              { title: t('footerUsers', localStorage.getItem('agri_lang') || 'en'), links: ['footerFarmers', 'footerBuyers', 'footerAgribusiness', 'footerPartners'] },
+              { title: t('footerLegal', localStorage.getItem('agri_lang') || 'en'), links: ['footerPrivacy', 'footerTerms', { label: t('footerContact', localStorage.getItem('agri_lang') || 'en'), path: "/contact" }] },
+            ].map((col) => (
+              <div key={col.title}>
+                <h4 className="font-semibold text-white mb-2" style={{fontFamily:"'Times New Roman', Times, serif"}}>{col.title}</h4>
+                <ul className="space-y-1">
+                  {col.links.map((link) => {
+                    const label = typeof link === 'string' ? t(link, localStorage.getItem('agri_lang') || 'en') : link.label;
+                    const path = typeof link === 'string' ? '/' : link.path;
+                    return (
+                      <li key={label}>
+                        {path === '/contact' ? (
+                          <Link to="/contact" className="text-white text-sm transition-colors" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                            {label}
+                          </Link>
+                        ) : (
+                          <a href={path} className="text-white text-sm transition-colors" style={{fontFamily:"'Times New Roman', Times, serif"}}>
+                            {label}
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-3 flex justify-center items-center text-white text-sm" style={{borderTop:'1px solid oklch(0.65 0.22 145 / 0.12)', fontFamily:"'Times New Roman', Times, serif"}}>
+            <span>
+              © {new Date().getFullYear()} AgriAI. {t('footerRights', localStorage.getItem('agri_lang') || 'en')}
+            </span>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 };
 

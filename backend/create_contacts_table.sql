@@ -138,6 +138,7 @@ CREATE TABLE `deals` (
   `buyer_phone` VARCHAR(20) DEFAULT NULL,
   `region` VARCHAR(50) DEFAULT NULL,
   `state` VARCHAR(100) DEFAULT NULL,
+  `address` VARCHAR(255) DEFAULT NULL,
   `category` VARCHAR(100) DEFAULT NULL,          -- New column for crop category
   `crop_id` BIGINT UNSIGNED DEFAULT NULL,
   `crop_name` VARCHAR(255) NOT NULL,

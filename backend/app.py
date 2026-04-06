@@ -11,6 +11,7 @@ import json
 import time
 import threading
 import sqlite3
+import mysql.connector as mysql
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -610,6 +611,38 @@ def update_user(role, user_id, name, phone, email, aadhar, region=None, state=No
             cur.execute(f"UPDATE {role} SET name=%s, phone=%s, email=%s, aadhar=%s, region=%s, state=%s, address=%s, lang=%s WHERE id=%s", (name, phone, email if email else None, aadhar, region if region else None, state if state else None, address if address else None, lang if lang else None, user_id))
         else:
             cur.execute(f"UPDATE {role} SET name=?, phone=?, email=?, aadhar=?, region=?, state=?, address=?, lang=? WHERE id=?", (name, phone, email if email else None, aadhar, region if region else None, state if state else None, address if address else None, lang if lang else None, user_id))
+        
+        # If updating a farmer and state or region is provided, update the crops table as well
+        if role == 'farmer' and (state is not None or region is not None):
+            update_fields = []
+            update_values = []
+            if state is not None:
+                update_fields.append("state=%s" if kind == 'mysql' else "state=?")
+                update_values.append(state)
+            if region is not None:
+                update_fields.append("region=%s" if kind == 'mysql' else "region=?")
+                update_values.append(region)
+            update_values.append(user_id)
+            if update_fields:
+                cur.execute(f"UPDATE crops SET {', '.join(update_fields)} WHERE seller_id={'%s' if kind == 'mysql' else '?'}", update_values)
+        
+        # If updating a buyer and state, region, or address is provided, update the deals table as well
+        if role == 'buyer' and (state is not None or region is not None or address is not None):
+            update_fields = []
+            update_values = []
+            if state is not None:
+                update_fields.append("state=%s" if kind == 'mysql' else "state=?")
+                update_values.append(state)
+            if region is not None:
+                update_fields.append("region=%s" if kind == 'mysql' else "region=?")
+                update_values.append(region)
+            if address is not None:
+                update_fields.append("address=%s" if kind == 'mysql' else "address=?")
+                update_values.append(address)
+            update_values.append(user_id)
+            if update_fields:
+                cur.execute(f"UPDATE deals SET {', '.join(update_fields)} WHERE buyer_id={'%s' if kind == 'mysql' else '?'}", update_values)
+        
         conn.commit()
         try:
             cur.close()
@@ -1926,6 +1959,7 @@ def ensure_deals_table():
                 "buyer_phone VARCHAR(20) DEFAULT NULL,"
                 "region VARCHAR(50) DEFAULT NULL,"
                 "state VARCHAR(100) DEFAULT NULL,"
+                "address VARCHAR(255) DEFAULT NULL,"
                 "category VARCHAR(100) DEFAULT NULL,"
                 "crop_name VARCHAR(255) NOT NULL,"
                 "variety VARCHAR(255) DEFAULT NULL,"
@@ -1959,6 +1993,10 @@ def ensure_deals_table():
                     cur.execute("ALTER TABLE deals ADD COLUMN delivery_date DATE DEFAULT NULL")
                 except Exception:
                     pass
+                try:
+                    cur.execute("ALTER TABLE deals ADD COLUMN address VARCHAR(255) DEFAULT NULL")
+                except Exception:
+                    pass
             except Exception:
                 # ignore alter errors
                 pass
@@ -1986,6 +2024,7 @@ def ensure_deals_table():
                     buyer_phone TEXT,
                     region TEXT,
                     state TEXT,
+                    address TEXT,
                     category TEXT,
                     crop_name TEXT NOT NULL,
                     variety TEXT,
@@ -2023,6 +2062,11 @@ def ensure_deals_table():
                 if 'delivery_date' not in cols:
                     try:
                         cur.execute("ALTER TABLE deals ADD COLUMN delivery_date DATE")
+                    except Exception:
+                        pass
+                if 'address' not in cols:
+                    try:
+                        cur.execute("ALTER TABLE deals ADD COLUMN address TEXT")
                     except Exception:
                         pass
                 conn.commit()
@@ -3024,15 +3068,16 @@ def create_purchase_notifications():
 
 @app.route('/notifications/list', methods=['GET'])
 def list_purchase_notifications():
-    """List notifications for a farmer from contract_b table ONLY. Query: farmer_id or farmer_phone"""
+    """List notifications for a farmer from contract_b table or buyer from contracts table. Query: farmer_id, farmer_phone, or buyer_id"""
     farmer_id_q = (request.args.get('farmer_id') or '').strip()
     farmer_phone_q = (request.args.get('farmer_phone') or '').strip()
+    buyer_id_q = (request.args.get('buyer_id') or '').strip()
     unread_only = (request.args.get('unread_only') or '').strip() in ('1', 'true', 'yes')
     
     # Debug logging
     try:
         with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-            f.write(f"{datetime.datetime.utcnow().isoformat()} NOTIF_LIST farmer_id={farmer_id_q} phone={farmer_phone_q}\n")
+            f.write(f"{datetime.datetime.utcnow().isoformat()} NOTIF_LIST farmer_id={farmer_id_q} phone={farmer_phone_q} buyer_id={buyer_id_q}\n")
     except:
         pass
     
@@ -3050,14 +3095,89 @@ def list_purchase_notifications():
             conn = mysql.connect(**cfg)
             cur = conn.cursor(dictionary=True) if hasattr(mysql, 'connect') else conn.cursor()
             
-            # Ensure contract_b table exists with read column
-            try:
+            if buyer_id_q:
+                # For buyers, fetch from contracts table
+                where = []
+                params = []
+                if buyer_id_q:
+                    where.append('buyer_id=%s'); params.append(int(buyer_id_q) if buyer_id_q.isdigit() else buyer_id_q)
+                # Fetch from contracts table
+                # Ensure is_read column exists in contracts table
+                try:
+                    cur.execute("ALTER TABLE contracts ADD COLUMN is_read INT DEFAULT 0")
+                    conn.commit()
+                except:
+                    pass  # Column probably already exists
+                
+                sql = 'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts'
+                where.append("status NOT IN ('rejected', 'declined', 'cancelled')")
+                if where:
+                    sql += ' WHERE ' + ' AND '.join(where)
+                sql += ' ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
+                
+                # Debug logging
+                try:
+                    with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
+                        f.write(f"  BUYER SQL: {sql} PARAMS: {params}\n")
+                except:
+                    pass
+                
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+                
+                # Debug logging
+                try:
+                    with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
+                        f.write(f"  BUYER ROWS_COUNT: {len(rows)}\n")
+                except:
+                    pass
+                
+                # normalize
+                for r in rows:
+                    if isinstance(r, dict):
+                        results.append({
+                            'id': r.get('contract_number'),  # Use contract_number as id for buyers
+                            'contract_number': r.get('contract_number'),
+                            'farmer_id': r.get('farmer_id'),
+                            'farmer_name': r.get('farmer_name'),
+                            'farmer_state': r.get('farmer_state'),
+                            'crop_name': r.get('crop_name'),
+                            'variety': r.get('variety'),
+                            'quantity_kg': r.get('quantity_kg'),
+                            'price_per_kg': r.get('price_per_kg'),
+                            'amount': r.get('amount'),
+                            'buyer_name': r.get('buyer_name'),
+                            'buyer_id': r.get('buyer_id'),
+                            'buyer_state': r.get('buyer_state'),
+                            'created_at': r.get('created_at'),
+                            'start_date': r.get('start_date'),
+                            'end_date': r.get('end_date'),
+                            'contract_nature': r.get('contract_nature'),
+                            'contract_duration': r.get('contract_duration'),
+                            'farmer_platform_fee': r.get('farmer_platform_fee'),
+                            'farmer_gst': r.get('farmer_gst'),
+                            'buyer_platform_fee': r.get('buyer_platform_fee'),
+                            'buyer_gst': r.get('buyer_gst'),
+                            'status': r.get('status'),
+                            'is_read': r.get('is_read', 0),
+                            'farmer_total': r.get('farmer_total', 0),
+                            'buyer_total': r.get('buyer_total', 0)
+                        })
+                    else:
+                        # Handle tuple case
+                        results.append({
+                            'id': r[0], 'contract_number': r[0], 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[4], 'variety': r[5], 'quantity_kg': r[6],
+                            'price_per_kg': r[7], 'amount': r[8], 'buyer_name': r[9], 'buyer_id': r[10], 'buyer_state': r[11], 'created_at': r[24], 'start_date': r[21], 'end_date': r[22],
+                            'contract_nature': r[19], 'contract_duration': r[20], 'farmer_platform_fee': r[9], 'farmer_gst': r[10], 'buyer_platform_fee': r[11], 'buyer_gst': r[12], 'status': r[18], 'is_read': r[25], 'farmer_total': r[17], 'buyer_total': r[16]
+                        })
+            else:
+                # For farmers, existing logic for contract_b
                 # First check if table exists
                 cur.execute("SHOW TABLES LIKE 'contract_b'")
                 table_exists = cur.fetchone() is not None
                 if not table_exists:
-                    # Create contract_b table if it doesn't exist
-                    cur.execute('''
+                        # Create contract_b table if it doesn't exist
+                        cur.execute('''
                         CREATE TABLE IF NOT EXISTS contract_b (
                             id INT AUTO_INCREMENT PRIMARY KEY,
                             contract_number VARCHAR(100) UNIQUE,
@@ -3098,7 +3218,7 @@ def list_purchase_notifications():
                             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                         )
                     ''')
-                    conn.commit()
+                        conn.commit()
                 else:
                     # Table exists, try to add missing columns
                     try:
@@ -3107,101 +3227,96 @@ def list_purchase_notifications():
                     except:
                         pass  # Column probably already exists
                     
-                    # Add farmer signature columns if missing
-                    try:
-                        cur.execute("ALTER TABLE contract_b ADD COLUMN farmer_signed_date VARCHAR(100)")
-                        conn.commit()
-                    except:
-                        pass  # Column probably already exists
+                        # Add farmer signature columns if missing
+                        try:
+                            cur.execute("ALTER TABLE contract_b ADD COLUMN farmer_signed_date VARCHAR(100)")
+                            conn.commit()
+                        except:
+                            pass  # Column probably already exists
+                        
+                        try:
+                            cur.execute("ALTER TABLE contract_b ADD COLUMN farmer_signature_method VARCHAR(255)")
+                            conn.commit()
+                        except:
+                            pass  # Column probably already exists
+                        
+                        try:
+                            cur.execute("ALTER TABLE contract_b ADD COLUMN farmer_signature_timestamp DATETIME")
+                            conn.commit()
+                        except:
+                            pass  # Column probably already exists
+                
+                    where = []
+                    params = []
+                    if farmer_id_q:
+                        where.append('farmer_id=%s'); params.append(int(farmer_id_q) if farmer_id_q.isdigit() else farmer_id_q)
+                    if farmer_phone_q:
+                        where.append('farmer_id IN (SELECT id FROM farmer WHERE phone=%s)'); params.append(farmer_phone_q)
+                    # Fetch ONLY from contract_b table with status filter
+                    sql = 'SELECT id, contract_number, farmer_id, farmer_name, farmer_address, farmer_state, crop_name, variety, quantity_kg, price_per_kg, amount, buyer_name, buyer_id, buyer_address, buyer_state, start_date, end_date, duration, contract_nature, contract_duration, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, status, COALESCE(`read`, 0) as is_read, sender, farmer_total FROM contract_b'
+                    where.append("status NOT IN ('rejected', 'declined', 'cancelled')")
+                    if where:
+                        sql += ' WHERE ' + ' AND '.join(where)
+                    sql += ' ORDER BY id DESC LIMIT 100'
                     
+                    # Debug logging
                     try:
-                        cur.execute("ALTER TABLE contract_b ADD COLUMN farmer_signature_method VARCHAR(255)")
-                        conn.commit()
+                        with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
+                            f.write(f"  SQL: {sql} PARAMS: {params}\n")
                     except:
-                        pass  # Column probably already exists
+                        pass
                     
+                    cur.execute(sql, tuple(params))
+                    rows = cur.fetchall()
+                    
+                    # Debug logging
                     try:
-                        cur.execute("ALTER TABLE contract_b ADD COLUMN farmer_signature_timestamp DATETIME")
-                        conn.commit()
+                        with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
+                            f.write(f"  ROWS_COUNT: {len(rows)}\n")
                     except:
-                        pass  # Column probably already exists
-            except Exception as col_err:
-                try:
-                    conn.rollback()
-                except:
-                    pass
-                print(f"Error ensuring contract_b table: {col_err}")
+                        pass
+                    
+                    # normalize
+                    for r in rows:
+                        if isinstance(r, dict):
+                            results.append({
+                                'id': r.get('id'),
+                                'contract_number': r.get('contract_number'),
+                                'farmer_id': r.get('farmer_id'),
+                                'farmer_name': r.get('farmer_name'),
+                                'farmer_address': r.get('farmer_address'),
+                                'farmer_state': r.get('farmer_state'),
+                                'crop_name': r.get('crop_name'),
+                                'variety': r.get('variety'),
+                                'quantity_kg': r.get('quantity_kg'),
+                                'price_per_kg': r.get('price_per_kg'),
+                                'amount': r.get('amount'),
+                                'buyer_name': r.get('buyer_name'),
+                                'buyer_id': r.get('buyer_id'),
+                                'buyer_address': r.get('buyer_address'),
+                                'buyer_state': r.get('buyer_state'),
+                                'created_at': r.get('start_date'),
+                                'start_date': r.get('start_date'),
+                                'end_date': r.get('end_date'),
+                                'duration': r.get('duration'),
+                                'contract_nature': r.get('contract_nature'),
+                                'contract_duration': r.get('contract_duration'),
+                                'farmer_platform_fee': r.get('farmer_platform_fee'),
+                                'farmer_gst': r.get('farmer_gst'),
+                                'buyer_platform_fee': r.get('buyer_platform_fee'),
+                                'buyer_gst': r.get('buyer_gst'),
+                                'status': r.get('status'),
+                                'sender': r.get('sender', 'buyer'),
+                                'is_read': r.get('is_read', 0),
+                                'farmer_total': r.get('farmer_total', 0)
+                            })
+                        else:
+                            results.append({
+                                'id': r[0], 'contract_number': r[1], 'farmer_id': r[2], 'farmer_name': r[3], 'farmer_address': r[4], 'farmer_state': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8],
+                                'price_per_kg': r[9], 'amount': r[10], 'buyer_name': r[11], 'buyer_id': r[12], 'buyer_address': r[13], 'buyer_state': r[14], 'created_at': r[15], 'start_date': r[15], 'end_date': r[16], 'duration': r[17],
+                                'contract_nature': r[18], 'contract_duration': r[19], 'farmer_platform_fee': r[20], 'farmer_gst': r[21], 'buyer_platform_fee': r[22], 'buyer_gst': r[23], 'status': r[24], 'is_read': r[25], 'sender': r[26], 'farmer_total': r[27]
+                            })
             
-            where = []
-            params = []
-            if farmer_id_q:
-                where.append('farmer_id=%s'); params.append(int(farmer_id_q) if farmer_id_q.isdigit() else farmer_id_q)
-            if farmer_phone_q:
-                where.append('farmer_id IN (SELECT id FROM farmer WHERE phone=%s)'); params.append(farmer_phone_q)
-            # Fetch ONLY from contract_b table with status filter
-            sql = 'SELECT id, contract_number, farmer_id, farmer_name, farmer_address, farmer_state, crop_name, variety, quantity_kg, price_per_kg, amount, buyer_name, buyer_id, buyer_address, buyer_state, start_date, end_date, duration, contract_nature, contract_duration, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, status, COALESCE(`read`, 0) as is_read, sender, farmer_total FROM contract_b'
-            where.append("status NOT IN ('rejected', 'declined', 'cancelled')")
-            if where:
-                sql += ' WHERE ' + ' AND '.join(where)
-            sql += ' ORDER BY id DESC LIMIT 100'
-            
-            # Debug logging
-            try:
-                with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                    f.write(f"  SQL: {sql} PARAMS: {params}\n")
-            except:
-                pass
-            
-            cur.execute(sql, tuple(params))
-            rows = cur.fetchall()
-            
-            # Debug logging
-            try:
-                with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                    f.write(f"  ROWS_COUNT: {len(rows)}\n")
-            except:
-                pass
-            
-            # normalize
-            for r in rows:
-                if isinstance(r, dict):
-                    results.append({
-                        'id': r.get('id'),
-                        'contract_number': r.get('contract_number'),
-                        'farmer_id': r.get('farmer_id'),
-                        'farmer_name': r.get('farmer_name'),
-                        'farmer_address': r.get('farmer_address'),
-                        'farmer_state': r.get('farmer_state'),
-                        'crop_name': r.get('crop_name'),
-                        'variety': r.get('variety'),
-                        'quantity_kg': r.get('quantity_kg'),
-                        'price_per_kg': r.get('price_per_kg'),
-                        'amount': r.get('amount'),
-                        'buyer_name': r.get('buyer_name'),
-                        'buyer_id': r.get('buyer_id'),
-                        'buyer_address': r.get('buyer_address'),
-                        'buyer_state': r.get('buyer_state'),
-                        'created_at': r.get('start_date'),
-                        'start_date': r.get('start_date'),
-                        'end_date': r.get('end_date'),
-                        'duration': r.get('duration'),
-                        'contract_nature': r.get('contract_nature'),
-                        'contract_duration': r.get('contract_duration'),
-                        'farmer_platform_fee': r.get('farmer_platform_fee'),
-                        'farmer_gst': r.get('farmer_gst'),
-                        'buyer_platform_fee': r.get('buyer_platform_fee'),
-                        'buyer_gst': r.get('buyer_gst'),
-                        'status': r.get('status'),
-                        'sender': r.get('sender', 'buyer'),
-                        'is_read': r.get('is_read', 0),
-                        'farmer_total': r.get('farmer_total', 0)
-                    })
-                else:
-                    results.append({
-                        'id': r[0], 'contract_number': r[1], 'farmer_id': r[2], 'farmer_name': r[3], 'farmer_address': r[4], 'farmer_state': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8],
-                        'price_per_kg': r[9], 'amount': r[10], 'buyer_name': r[11], 'buyer_id': r[12], 'buyer_address': r[13], 'buyer_state': r[14], 'created_at': r[15], 'start_date': r[15], 'end_date': r[16], 'duration': r[17],
-                        'contract_nature': r[18], 'contract_duration': r[19], 'farmer_platform_fee': r[20], 'farmer_gst': r[21], 'buyer_platform_fee': r[22], 'buyer_gst': r[23], 'status': r[24], 'is_read': r[25], 'sender': r[26], 'farmer_total': r[27]
-                    })
             try: cur.close()
             except Exception: pass
             try: conn.close()
@@ -3356,12 +3471,17 @@ def list_purchase_notifications():
 
 @app.route('/notifications/mark-read', methods=['POST'])
 def mark_notifications_read():
-    """Mark notifications/contracts as read. JSON: { ids: [ ... ] }"""
+    """Mark notifications/contracts as read based on user role. JSON: { ids: [...], user_role: 'buyer'|'farmer', buyer_id: ..., farmer_id: ... }"""
     ensure_purchase_notifications_table()
     data = request.get_json(silent=True) or {}
     ids = data.get('ids') or []
+    user_role = data.get('user_role', '').strip()
+    buyer_id = data.get('buyer_id')
+    farmer_id = data.get('farmer_id')
+    
     if not isinstance(ids, list) or not ids:
         return jsonify({'ok': False, 'error': 'ids_required'}), 400
+    
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
     try:
         if use_mysql:
@@ -3375,29 +3495,37 @@ def mark_notifications_read():
             conn = mysql.connect(**cfg)
             cur = conn.cursor()
             
-            # First, ensure read column exists in contract_b table
-            try:
-                cur.execute("ALTER TABLE contract_b ADD COLUMN `read` INT DEFAULT 0")
-                conn.commit()
-                print("Added read column to contract_b table")
-            except Exception as e:
-                print(f"Column might already exist or error: {e}")
+            if user_role == 'buyer' and buyer_id:
+                # For buyers, mark contracts as read in contracts table
                 try:
-                    conn.rollback()
-                except:
-                    pass
-            
-            # Update contract_b table to mark as read
-            in_clause = ','.join(['%s'] * len(ids))
-            cur.execute(f'UPDATE contract_b SET `read`=1 WHERE id IN ({in_clause})', tuple(ids))
-            conn.commit()
-            
-            # Also try to update purchase_notifications if they exist there
-            try:
-                cur.execute(f'UPDATE purchase_notifications SET is_read=1 WHERE id IN ({in_clause})', tuple(ids))
-                conn.commit()
-            except:
-                pass
+                    # Ensure is_read column exists in contracts table
+                    try:
+                        cur.execute("ALTER TABLE contracts ADD COLUMN is_read INT DEFAULT 0")
+                        conn.commit()
+                    except:
+                        pass  # Column probably already exists
+                    
+                    in_clause = ','.join(['%s'] * len(ids))
+                    cur.execute(f'UPDATE contracts SET is_read=1 WHERE contract_number IN ({in_clause}) AND buyer_id=%s', tuple(ids) + (buyer_id,))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error marking buyer contracts as read: {e}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+            elif user_role == 'farmer' and farmer_id:
+                # For farmers, mark contracts as read in contract_b table
+                try:
+                    in_clause = ','.join(['%s'] * len(ids))
+                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE id IN ({in_clause}) AND farmer_id=%s', tuple(ids) + (farmer_id,))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error marking farmer contracts as read: {e}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
             
             try: cur.close()
             except Exception: pass
@@ -3408,29 +3536,37 @@ def mark_notifications_read():
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
             
-            # First, ensure read column exists in contract_b table
-            try:
-                cur.execute("ALTER TABLE contract_b ADD COLUMN read INTEGER DEFAULT 0")
-                conn.commit()
-                print("Added read column to contract_b table (SQLite)")
-            except Exception as e:
-                print(f"Column might already exist or error: {e}")
+            if user_role == 'buyer' and buyer_id:
+                # For buyers, mark contracts as read in contracts table
                 try:
-                    conn.rollback()
-                except:
-                    pass
-            
-            # Update contract_b table to mark as read
-            in_clause = ','.join(['?'] * len(ids))
-            cur.execute(f'UPDATE contract_b SET `read`=1 WHERE id IN ({in_clause})', tuple(ids))
-            conn.commit()
-            
-            # Also try to update purchase_notifications if they exist there
-            try:
-                cur.execute(f'UPDATE purchase_notifications SET is_read=1 WHERE id IN ({in_clause})', tuple(ids))
-                conn.commit()
-            except:
-                pass
+                    # Ensure is_read column exists in contracts table
+                    try:
+                        cur.execute("ALTER TABLE contracts ADD COLUMN is_read INTEGER DEFAULT 0")
+                        conn.commit()
+                    except:
+                        pass  # Column probably already exists
+                    
+                    in_clause = ','.join(['?'] * len(ids))
+                    cur.execute(f'UPDATE contracts SET is_read=1 WHERE contract_number IN ({in_clause}) AND buyer_id=?', tuple(ids) + (buyer_id,))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error marking buyer contracts as read (SQLite): {e}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+            elif user_role == 'farmer' and farmer_id:
+                # For farmers, mark contracts as read in contract_b table
+                try:
+                    in_clause = ','.join(['?'] * len(ids))
+                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE id IN ({in_clause}) AND farmer_id=?', tuple(ids) + (farmer_id,))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error marking farmer contracts as read (SQLite): {e}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
             
             try: cur.close()
             except Exception: pass
@@ -3659,6 +3795,16 @@ def get_contract(contract_number):
             cols = [d[0] for d in cur.description]
             row = cur.fetchone()
             
+            # If not found in contract_b, fall back to contracts table for buyer-side contract rows
+            if not row:
+                print(f"⚠️ get_contract: No contract_b row for '{contract_number}', falling back to contracts table")
+                if kind == 'mysql':
+                    cur.execute('SELECT * FROM contracts WHERE contract_number = %s LIMIT 1', (contract_number,))
+                else:
+                    cur.execute('SELECT * FROM contracts WHERE contract_number = ? LIMIT 1', (contract_number,))
+                cols = [d[0] for d in cur.description]
+                row = cur.fetchone()
+            
             # Log result
             if not row:
                 print(f"❌ get_contract: No contract found for '{contract_number}'")
@@ -3669,9 +3815,18 @@ def get_contract(contract_number):
                     else:
                         cur.execute('SELECT contract_number FROM contract_b LIMIT 5')
                     all_contracts = [r[0] for r in cur.fetchall()]
-                    print(f"   Available contracts in database: {all_contracts}")
+                    print(f"   Available contract_b rows: {all_contracts}")
                 except Exception as e:
-                    print(f"   Error listing contracts: {e}")
+                    print(f"   Error listing contract_b rows: {e}")
+                try:
+                    if kind == 'mysql':
+                        cur.execute('SELECT contract_number FROM contracts LIMIT 5')
+                    else:
+                        cur.execute('SELECT contract_number FROM contracts LIMIT 5')
+                    all_contracts = [r[0] for r in cur.fetchall()]
+                    print(f"   Available contracts rows: {all_contracts}")
+                except Exception as e:
+                    print(f"   Error listing contracts rows: {e}")
                 
                 return jsonify({'ok': False, 'error': 'contract_not_found'}), 404
             
@@ -3687,6 +3842,194 @@ def get_contract(contract_number):
         print(f'❌ get_contract error: {e}')
         import traceback
         traceback.print_exc()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/buyer/contracts', methods=['GET'])
+def buyer_contracts():
+    """Return contract rows from `contracts` table for the given buyer id or email.
+    Query params: buyer_id (int) or buyer_email (string). Returns JSON list.
+    """
+    try:
+        buyer_id = request.args.get('buyer_id') or request.args.get('id') or None
+        buyer_email = request.args.get('buyer_email') or request.args.get('email') or None
+        if not buyer_id and not buyer_email:
+            return jsonify({'ok': False, 'error': 'buyer_id_or_email_required'}), 400
+
+        kind, conn = get_db_connection()
+        cur = get_cursor(kind, conn)
+        rows = []
+        try:
+            print(f"🔍 buyer_contracts: buyer_id={buyer_id}, buyer_email={buyer_email}")
+            
+            if kind == 'mysql':
+                if buyer_id:
+                    cur.execute('''
+                        SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
+                               quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety, price_per_kg,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status,
+                               start_date, end_date, contract_nature, contract_duration
+                        FROM contracts 
+                        WHERE buyer_id=%s
+                        ORDER BY updated_at DESC
+                    ''', (int(buyer_id),))
+                else:
+                    cur.execute('''
+                        SELECT c.farmer_id, c.farmer_name, c.farmer_state, c.buyer_id, c.buyer_name, c.buyer_state,
+                               c.quantity_kg, c.amount, c.contract_number, c.updated_at as created_at, c.crop_name, c.variety, c.price_per_kg,
+                               c.farmer_platform_fee, c.farmer_gst, c.buyer_platform_fee, c.buyer_gst, c.buyer_total, c.farmer_total, c.delivery_cost, c.status,
+                               c.start_date, c.end_date, c.contract_nature, c.contract_duration
+                        FROM contracts c
+                        WHERE c.buyer_id IN (SELECT id FROM buyer WHERE email=%s LIMIT 1)
+                        ORDER BY c.updated_at DESC
+                    ''', (buyer_email,))
+                cols = [d[0] for d in cur.description]
+                fetched = cur.fetchall()
+                print(f"   MySQL found {len(fetched)} rows from contracts")
+                for r in fetched:
+                    rows.append(dict(zip(cols, r)))
+            else:
+                if buyer_id:
+                    cur.execute('''
+                        SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
+                               quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety, price_per_kg,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status,
+                               start_date, end_date, contract_nature, contract_duration
+                        FROM contracts 
+                        WHERE buyer_id=?
+                        ORDER BY updated_at DESC
+                    ''', (int(buyer_id),))
+                else:
+                    cur.execute('''
+                        SELECT c.farmer_id, c.farmer_name, c.farmer_state, c.buyer_id, c.buyer_name, c.buyer_state,
+                               c.quantity_kg, c.amount, c.contract_number, c.updated_at as created_at, c.crop_name, c.variety, c.price_per_kg,
+                               c.farmer_platform_fee, c.farmer_gst, c.buyer_platform_fee, c.buyer_gst, c.buyer_total, c.farmer_total, c.delivery_cost, c.status,
+                               c.start_date, c.end_date, c.contract_nature, c.contract_duration
+                        FROM contracts c
+                        WHERE c.buyer_id IN (SELECT id FROM buyer WHERE email=? LIMIT 1)
+                        ORDER BY c.updated_at DESC
+                    ''', (buyer_email,))
+                cols = [d[0] for d in cur.description]
+                fetched = cur.fetchall()
+                print(f"   SQLite found {len(fetched)} rows from contracts")
+                for r in fetched:
+                    rows.append(dict(zip(cols, r)))
+            
+            print(f"✅ buyer_contracts returning {len(rows)} contracts")
+            for r in rows:
+                print(f"   - {r.get('contract_number', 'UNKNOWN')} (buyer_id={r.get('buyer_id')})")
+                
+        finally:
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+
+        return jsonify({'ok': True, 'contracts': rows}), 200
+    except Exception as e:
+        print(f'❌ buyer_contracts error: {e}')
+        import traceback
+        traceback.print_exc()
+        try:
+            cur.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/buyer/contracts-b', methods=['GET'])
+def buyer_contracts_b():
+    """Return contract rows from `contract_b` table for the given buyer id with status IN ('pending', 'accepted', 'rejected').
+    Query params: buyer_id (int) or buyer_email (string). Returns JSON list.
+    """
+    try:
+        buyer_id = request.args.get('buyer_id') or request.args.get('id') or None
+        buyer_email = request.args.get('buyer_email') or request.args.get('email') or None
+        if not buyer_id and not buyer_email:
+            return jsonify({'ok': False, 'error': 'buyer_id_or_email_required'}), 400
+
+        kind, conn = get_db_connection()
+        cur = get_cursor(kind, conn)
+        rows = []
+        try:
+            print(f"🔍 buyer_contracts_b: buyer_id={buyer_id}, buyer_email={buyer_email}")
+            
+            if kind == 'mysql':
+                if buyer_id:
+                    cur.execute('''
+                        SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
+                               quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, sender
+                        FROM contract_b 
+                        WHERE buyer_id=%s AND status IN ('pending', 'accepted', 'rejected')
+                        ORDER BY updated_at DESC
+                    ''', (int(buyer_id),))
+                else:
+                    cur.execute('''
+                        SELECT cb.farmer_id, cb.farmer_name, cb.farmer_state, cb.buyer_id, cb.buyer_name, cb.buyer_state,
+                               cb.quantity_kg, cb.amount, cb.contract_number, cb.updated_at as created_at, cb.crop_name, cb.variety,
+                               cb.farmer_platform_fee, cb.farmer_gst, cb.buyer_platform_fee, cb.buyer_gst, cb.buyer_total, cb.farmer_total, cb.delivery_cost, cb.status, cb.sender
+                        FROM contract_b cb
+                        WHERE cb.buyer_id IN (SELECT id FROM buyer WHERE email=%s LIMIT 1) AND cb.status IN ('pending', 'accepted', 'rejected')
+                        ORDER BY cb.updated_at DESC
+                    ''', (buyer_email,))
+                cols = [d[0] for d in cur.description]
+                fetched = cur.fetchall()
+                print(f"   MySQL found {len(fetched)} rows from contract_b")
+                for r in fetched:
+                    rows.append(dict(zip(cols, r)))
+            else:
+                if buyer_id:
+                    cur.execute('''
+                        SELECT farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state,
+                               quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety,
+                               farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, sender
+                        FROM contract_b 
+                        WHERE buyer_id=? AND status IN ('pending', 'accepted', 'rejected')
+                        ORDER BY updated_at DESC
+                    ''', (int(buyer_id),))
+                else:
+                    cur.execute('''
+                        SELECT cb.farmer_id, cb.farmer_name, cb.farmer_state, cb.buyer_id, cb.buyer_name, cb.buyer_state,
+                               cb.quantity_kg, cb.amount, cb.contract_number, cb.updated_at as created_at, cb.crop_name, cb.variety,
+                               cb.farmer_platform_fee, cb.farmer_gst, cb.buyer_platform_fee, cb.buyer_gst, cb.buyer_total, cb.farmer_total, cb.delivery_cost, cb.status, cb.sender
+                        FROM contract_b cb
+                        WHERE cb.buyer_id IN (SELECT id FROM buyer WHERE email=? LIMIT 1) AND cb.status IN ('pending', 'accepted', 'rejected')
+                        ORDER BY cb.updated_at DESC
+                    ''', (buyer_email,))
+                cols = [d[0] for d in cur.description]
+                fetched = cur.fetchall()
+                print(f"   SQLite found {len(fetched)} rows from contract_b")
+                for r in fetched:
+                    rows.append(dict(zip(cols, r)))
+            
+            print(f"✅ buyer_contracts_b returning {len(rows)} contracts with status IN ('pending', 'accepted', 'rejected')")
+            for r in rows:
+                print(f"   - {r.get('contract_number', 'UNKNOWN')} (status={r.get('status')}, buyer_id={r.get('buyer_id')})")
+                
+        finally:
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+
+        return jsonify({'ok': True, 'contracts': rows}), 200
+    except Exception as e:
+        print(f'❌ buyer_contracts_b error: {e}')
+        import traceback
+        traceback.print_exc()
+        try:
+            cur.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
@@ -3734,10 +4077,31 @@ def accept_contract():
         farmer_sig_method = farmer_sig.get('signature_method')
         farmer_sig_timestamp = farmer_sig.get('signature_timestamp')
         
+        # Fetch current contract status and restoration details before changing status
+        old_status = None
+        restore_source = None
+        try:
+            if kind == 'mysql':
+                cur.execute("SELECT status, farmer_id, crop_name, variety, quantity_kg FROM contract_b WHERE contract_number=%s LIMIT 1", (contract_number,))
+            else:
+                cur.execute("SELECT status, farmer_id, crop_name, variety, quantity_kg FROM contract_b WHERE contract_number=? LIMIT 1", (contract_number,))
+            restore_source = cur.fetchone()
+            if restore_source:
+                old_status = restore_source[0]
+        except Exception as e:
+            print(f"⚠️ accept_contract: failed to fetch contract_b current status for {contract_number}: {e}")
+            restore_source = None
+            old_status = None
+
         print(f"📝 Action type - is_farmer: {is_farmer_action}, is_buyer: {is_buyer_action}")
         print(f"📝 Signature data - buyer: {buyer_sig}, farmer: {farmer_sig}, status: {status_to_set}")
         
-        # Update contract_b table with new status and signature info
+        # For buyer actions, ensure both tables exist; for farmer actions, ensure contract_b exists
+        if is_buyer_action:
+            ensure_contracts_table()
+        
+        # Update contract_b table with new status and signature info (attempt for both farmer and buyer)
+        contract_b_updated = False
         if kind == 'mysql':
             if is_farmer_action:
                 # Farmer action (acceptance or rejection)
@@ -3764,8 +4128,9 @@ def accept_contract():
                         """,
                         (status_to_set, contract_number)
                     )
+                contract_b_updated = cur.rowcount > 0
             else:
-                # Buyer action - update buyer signature fields
+                # Buyer action - try to update contract_b if it exists
                 cur.execute(
                     """
                     UPDATE contract_b
@@ -3776,6 +4141,11 @@ def accept_contract():
                     """,
                     (status_to_set, buyer_sig_method, buyer_sig_timestamp, contract_number)
                 )
+                contract_b_updated = cur.rowcount > 0
+                if contract_b_updated:
+                    print(f"✅ Updated contract_b for buyer action on {contract_number}")
+                else:
+                    print(f"⚠️ contract_b not found for buyer action {contract_number} - this is OK, will update contracts table only")
         else:
             if is_farmer_action:
                 # Farmer action (acceptance or rejection)
@@ -3802,8 +4172,9 @@ def accept_contract():
                         """,
                         (status_to_set, contract_number)
                     )
+                contract_b_updated = cur.rowcount > 0
             else:
-                # Buyer action - update buyer signature fields
+                # Buyer action - try to update contract_b if it exists
                 cur.execute(
                     """
                     UPDATE contract_b
@@ -3814,11 +4185,99 @@ def accept_contract():
                     """,
                     (status_to_set, buyer_sig_method, buyer_sig_timestamp, contract_number)
                 )
+                contract_b_updated = cur.rowcount > 0
+                if contract_b_updated:
+                    print(f"✅ Updated contract_b for buyer action on {contract_number}")
+                else:
+                    print(f"⚠️ contract_b not found for buyer action {contract_number} - this is OK, will update contracts table only")
+        
+        # For buyer actions, also update the contracts table
+        contracts_updated = False
+        if is_buyer_action:
+            ensure_contracts_table()
+            if kind == 'mysql':
+                cur.execute(
+                    """
+                    UPDATE contracts
+                    SET status=%s
+                    WHERE contract_number=%s
+                    """,
+                    (status_to_set, contract_number)
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE contracts
+                    SET status=?
+                    WHERE contract_number=?
+                    """,
+                    (status_to_set, contract_number)
+                )
+            contracts_updated = cur.rowcount > 0
+            print(f"✅ Updated contracts table for buyer action on {contract_number}, rows affected: {cur.rowcount}")
+
+        # Restore crops when the contract is newly rejected
+        if status_to_set == 'rejected' and restore_source and old_status != 'rejected':
+            try:
+                farmer_id = restore_source[1]
+                crop_name = restore_source[2]
+                variety = restore_source[3]
+                contract_quantity = float(restore_source[4]) if restore_source[4] else 0
+                if farmer_id and crop_name and variety and contract_quantity > 0:
+                    if kind == 'mysql':
+                        cur.execute(
+                            "UPDATE crops SET quantity_kg = quantity_kg + %s WHERE seller_id=%s AND crop_name=%s AND variety=%s",
+                            (contract_quantity, farmer_id, crop_name, variety)
+                        )
+                        restored_count = cur.rowcount
+                    else:
+                        cur.execute(
+                            "UPDATE crops SET quantity_kg = quantity_kg + ? WHERE seller_id=? AND crop_name=? AND variety=?",
+                            (contract_quantity, farmer_id, crop_name, variety)
+                        )
+                        restored_count = cur.rowcount
+                    print(f"✅ accept_contract: restored {restored_count} crop(s) quantity for farmer_id={farmer_id} after rejection")
+                else:
+                    print(f"⚠️ accept_contract: rejection restoration skipped due missing data for {contract_number}")
+            except Exception as e:
+                print(f"⚠️ accept_contract: failed to restore crops on rejection for {contract_number}: {e}")
         
         conn.commit()
-        if cur.rowcount == 0:
-            print(f"⚠️ accept_contract: no rows updated for {contract_number}")
-            return jsonify({'ok': False, 'error': 'contract_not_found'}), 404
+        
+        # Verify contract was updated based on the action type
+        contract_found = False
+        verification_msg = ""
+        
+        if is_buyer_action:
+            # For buyer actions, require contracts table to have the record
+            if kind == 'mysql':
+                cur.execute("SELECT COUNT(*) FROM contracts WHERE contract_number=%s", (contract_number,))
+            else:
+                cur.execute("SELECT COUNT(*) FROM contracts WHERE contract_number=?", (contract_number,))
+            contract_found = cur.fetchone()[0] > 0
+            verification_msg = f"contracts table (buyer): found={contract_found}"
+            
+            # Also check if contract_b was updated (if it exists)
+            if kind == 'mysql':
+                cur.execute("SELECT COUNT(*) FROM contract_b WHERE contract_number=%s", (contract_number,))
+            else:
+                cur.execute("SELECT COUNT(*) FROM contract_b WHERE contract_number=?", (contract_number,))
+            contract_b_found = cur.fetchone()[0] > 0
+            verification_msg += f", contract_b (farmer): found={contract_b_found}"
+        else:
+            # For farmer actions, require contract_b table to have the record
+            if kind == 'mysql':
+                cur.execute("SELECT COUNT(*) FROM contract_b WHERE contract_number=%s", (contract_number,))
+            else:
+                cur.execute("SELECT COUNT(*) FROM contract_b WHERE contract_number=?", (contract_number,))
+            contract_found = cur.fetchone()[0] > 0
+            verification_msg = f"contract_b table (farmer): found={contract_found}"
+        
+        if not contract_found:
+            print(f"⚠️ accept_contract: contract not found - {verification_msg}")
+            return jsonify({'ok': False, 'error': 'contract_not_found', 'verification': verification_msg}), 404
+        
+        print(f"✅ accept_contract: contract verification passed - {verification_msg}")
         
         print(f"✅ accept_contract: successfully updated contract {contract_number} status to {status_to_set}")
         return jsonify({'ok': True}), 200
@@ -3837,10 +4296,10 @@ def accept_contract():
 
 @app.route('/contracts/delete/<contract_number>', methods=['DELETE'])
 def delete_contract(contract_number):
-    """Remove a contract row (used by farmer when cancelling a pending deal).
+    """Remove a contract row (used by both farmer and buyer when cancelling a pending deal).
     Also removes the same contract from contract_b table if it exists (cascading delete).
-    Also restores quantity to buyer's deals if contract has buyer_id.
-    Does NOT perform any authentication; caller must ensure only rightful farmer
+    Also restores quantity to farmer's crops if contract has farmer_id, crop_name, variety.
+    Does NOT perform any authentication; caller must ensure only rightful user
     can delete (frontend restricts button visibility to owner and pending status).
     """
     ensure_contracts_table()
@@ -3848,28 +4307,31 @@ def delete_contract(contract_number):
     cur = get_cursor(kind, conn)
     try:
         print(f"🔧 delete_contract called: contract_number={contract_number}")
-        
-        # First, fetch contract details to get buyer_id, crop_name, and quantity for restoration
+
+        # First, fetch contract details from contract_b to get farmer_id, crop_name, variety, and quantity for restoration
         try:
             if kind == 'mysql':
-                cur.execute("SELECT buyer_id, crop_name, quantity_kg FROM contracts WHERE contract_number=%s LIMIT 1", (contract_number,))
+                cur.execute("SELECT farmer_id, crop_name, variety, quantity_kg FROM contract_b WHERE contract_number=%s LIMIT 1", (contract_number,))
             else:
-                cur.execute("SELECT buyer_id, crop_name, quantity_kg FROM contracts WHERE contract_number=? LIMIT 1", (contract_number,))
+                cur.execute("SELECT farmer_id, crop_name, variety, quantity_kg FROM contract_b WHERE contract_number=? LIMIT 1", (contract_number,))
             contract_row = cur.fetchone()
-            buyer_id = None
+            farmer_id = None
             crop_name = None
+            variety = None
             contract_quantity = 0
             if contract_row:
-                buyer_id = contract_row[0]
+                farmer_id = contract_row[0]
                 crop_name = contract_row[1]
-                contract_quantity = float(contract_row[2]) if contract_row[2] else 0
+                variety = contract_row[2]
+                contract_quantity = float(contract_row[3]) if contract_row[3] else 0
         except Exception as e:
-            print(f"⚠️ delete_contract: failed to fetch contract details: {e}")
+            print(f"⚠️ delete_contract: failed to fetch contract_b details: {e}")
             contract_row = None
-            buyer_id = None
+            farmer_id = None
             crop_name = None
+            variety = None
             contract_quantity = 0
-        
+
         # Delete from contracts table
         if kind == 'mysql':
             cur.execute("DELETE FROM contracts WHERE contract_number=%s", (contract_number,))
@@ -3877,7 +4339,7 @@ def delete_contract(contract_number):
         else:
             cur.execute("DELETE FROM contracts WHERE contract_number=?", (contract_number,))
             contracts_deleted = cur.rowcount
-        
+
         # Also delete from contract_b table if it exists (cascading delete)
         try:
             if kind == 'mysql':
@@ -3890,45 +4352,170 @@ def delete_contract(contract_number):
         except Exception as e:
             print(f"⚠️ delete_contract: contract_b deletion skipped (table may not exist): {e}")
             contract_b_deleted = 0
-        
-        # Restore quantity to deals for this buyer if buyer_id and crop_name are available
-        deals_restored = 0
+
+        # Restore quantity to farmer's crops if farmer_id, crop_name, variety are available
+        crops_restored = 0
         try:
-            if buyer_id and crop_name and contract_quantity > 0:
-                # Find the deal(s) for this buyer with matching crop_name and update quantity
+            if farmer_id and crop_name and variety and contract_quantity > 0:
+                # Find the crop(s) for this farmer with matching crop_name and variety, then update quantity
                 try:
                     if kind == 'mysql':
                         cur.execute(
-                            "UPDATE deals SET quantity_kg = quantity_kg + %s WHERE buyer_id=%s AND crop_name=%s",
-                            (contract_quantity, buyer_id, crop_name)
+                            "UPDATE crops SET quantity_kg = quantity_kg + %s WHERE seller_id=%s AND crop_name=%s AND variety=%s",
+                            (contract_quantity, farmer_id, crop_name, variety)
                         )
-                        deals_restored = cur.rowcount
+                        crops_restored = cur.rowcount
                     else:
                         cur.execute(
-                            "UPDATE deals SET quantity_kg = quantity_kg + ? WHERE buyer_id=? AND crop_name=?",
-                            (contract_quantity, buyer_id, crop_name)
+                            "UPDATE crops SET quantity_kg = quantity_kg + ? WHERE seller_id=? AND crop_name=? AND variety=?",
+                            (contract_quantity, farmer_id, crop_name, variety)
                         )
-                        deals_restored = cur.rowcount
-                    print(f"✅ delete_contract: restored {deals_restored} deal(s) quantity for buyer_id={buyer_id}")
+                        crops_restored = cur.rowcount
+                    print(f"✅ delete_contract: restored {crops_restored} crop(s) quantity for farmer_id={farmer_id}")
                 except Exception as e:
-                    print(f"⚠️ delete_contract: failed to restore deals quantity: {e}")
-                    deals_restored = 0
+                    print(f"⚠️ delete_contract: failed to restore crops quantity: {e}")
+                    crops_restored = 0
         except Exception as e:
-            print(f"⚠️ delete_contract: error in deals restoration logic: {e}")
-        
+            print(f"⚠️ delete_contract: error in crops restoration logic: {e}")
+
         conn.commit()
-        
+
         if contracts_deleted == 0 and contract_b_deleted == 0:
             print(f"⚠️ delete_contract: no rows deleted for {contract_number}")
             return jsonify({'ok': False, 'error': 'contract_not_found'}), 404
-        
+
         print(f"✅ delete_contract: successfully removed contract {contract_number}")
-        return jsonify({'ok': True, 'deleted_from_contracts': contracts_deleted, 'deleted_from_contract_b': contract_b_deleted, 'deals_restored': deals_restored}), 200
+        return jsonify({'ok': True, 'deleted_from_contracts': contracts_deleted, 'deleted_from_contract_b': contract_b_deleted, 'crops_restored': crops_restored}), 200
     except Exception as e:
         print(f'❌ delete_contract error: {e}')
         import traceback
         traceback.print_exc()
         return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        try: cur.close()
+        except: pass
+        try: conn.close()
+        except: pass
+
+
+@app.route('/buyer/delete_contract', methods=['POST'])
+def buyer_delete_contract():
+    """Allow buyer to delete their own pending contracts.
+    Requires buyer_id and contract_number in JSON payload.
+    Only allows deletion of pending contracts owned by the buyer.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'ok': False, 'error': 'missing_json'}), 400
+        
+        buyer_id = data.get('buyer_id')
+        contract_number = data.get('contract_number')
+        
+        if not buyer_id or not contract_number:
+            return jsonify({'ok': False, 'error': 'missing_buyer_id_or_contract_number'}), 400
+        
+        ensure_contracts_table()
+        kind, conn = get_db_connection()
+        cur = get_cursor(kind, conn)
+        
+        # Resolve buyer_id: could be integer id, phone, or email
+        actual_buyer_id = None
+        try:
+            # Try to parse as integer (direct id)
+            actual_buyer_id = int(buyer_id)
+        except ValueError:
+            # Not an integer, treat as phone or email
+            if kind == 'mysql':
+                cur.execute("SELECT id FROM buyer WHERE phone=%s OR email=%s LIMIT 1", (buyer_id, buyer_id))
+            else:
+                cur.execute("SELECT id FROM buyer WHERE phone=? OR email=? LIMIT 1", (buyer_id, buyer_id))
+            buyer_row = cur.fetchone()
+            if buyer_row:
+                actual_buyer_id = buyer_row[0]
+            else:
+                return jsonify({'ok': False, 'error': 'buyer_not_found'}), 404
+        
+        # First, verify the contract exists and belongs to this buyer and is pending
+        try:
+            if kind == 'mysql':
+                cur.execute(
+                    "SELECT status FROM contract_b WHERE contract_number=%s AND buyer_id=%s LIMIT 1",
+                    (contract_number, actual_buyer_id)
+                )
+            else:
+                cur.execute(
+                    "SELECT status FROM contract_b WHERE contract_number=? AND buyer_id=? LIMIT 1",
+                    (contract_number, actual_buyer_id)
+                )
+            contract_row = cur.fetchone()
+            
+            if not contract_row:
+                return jsonify({'ok': False, 'error': 'contract_not_found_or_not_owned'}), 404
+            
+            status = contract_row[0]
+            if str(status).lower() != 'pending':
+                return jsonify({'ok': False, 'error': 'can_only_delete_pending_contracts'}), 400
+                
+        except Exception as e:
+            print(f"⚠️ buyer_delete_contract: failed to verify contract: {e}")
+            return jsonify({'ok': False, 'error': 'verification_failed'}), 500
+        
+        # Now perform the deletion logic similar to delete_contract
+        # Fetch contract details for quantity restoration
+        try:
+            if kind == 'mysql':
+                cur.execute("SELECT crop_name, quantity_kg FROM contract_b WHERE contract_number=%s LIMIT 1", (contract_number,))
+            else:
+                cur.execute("SELECT crop_name, quantity_kg FROM contract_b WHERE contract_number=? LIMIT 1", (contract_number,))
+            contract_row = cur.fetchone()
+            crop_name = None
+            contract_quantity = 0
+            if contract_row:
+                crop_name = contract_row[0]
+                contract_quantity = float(contract_row[1]) if contract_row[1] else 0
+        except Exception as e:
+            print(f"⚠️ buyer_delete_contract: failed to fetch contract details: {e}")
+            crop_name = None
+            contract_quantity = 0
+        
+        # Delete from contracts table
+        if kind == 'mysql':
+            cur.execute("DELETE FROM contracts WHERE contract_number=%s", (contract_number,))
+            contracts_deleted = cur.rowcount
+        else:
+            cur.execute("DELETE FROM contracts WHERE contract_number=?", (contract_number,))
+            contracts_deleted = cur.rowcount
+        
+        # Also delete from contract_b table if it exists
+        try:
+            if kind == 'mysql':
+                cur.execute("DELETE FROM contract_b WHERE contract_number=%s", (contract_number,))
+                contract_b_deleted = cur.rowcount
+            else:
+                cur.execute("DELETE FROM contract_b WHERE contract_number=?", (contract_number,))
+                contract_b_deleted = cur.rowcount
+            print(f"✅ buyer_delete_contract: removed {contracts_deleted} from contracts, {contract_b_deleted} from contract_b")
+        except Exception as e:
+            print(f"⚠️ buyer_delete_contract: contract_b deletion skipped: {e}")
+            contract_b_deleted = 0
+        
+        # For buyer deletion, we don't restore quantity to deals since buyer is removing their own demand
+        # (unlike farmer deletion which restores buyer's demand)
+        
+        conn.commit()
+        
+        if contracts_deleted == 0 and contract_b_deleted == 0:
+            return jsonify({'success': False, 'error': 'contract_not_found'}), 404
+        
+        print(f"✅ buyer_delete_contract: successfully removed contract {contract_number}")
+        return jsonify({'success': True, 'message': 'Contract deleted successfully'}), 200
+        
+    except Exception as e:
+        print(f'❌ buyer_delete_contract error: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         try: cur.close()
         except: pass

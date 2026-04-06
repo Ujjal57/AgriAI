@@ -627,6 +627,68 @@ function LoginProfile() {
     window.addEventListener('agri:lang:change', onLang);
     return () => window.removeEventListener('agri:lang:change', onLang);
   }, []);
+
+  // Reset state when region changes if current state is not valid for new region
+  useEffect(() => {
+    if (signupData.region && signupData.state) {
+      const validStates = getStatesForRegion(signupData.region).map(s => s.value);
+      if (!validStates.includes(signupData.state)) {
+        setSignupData(prev => ({ ...prev, state: '' }));
+      }
+    }
+  }, [signupData.region]);
+
+  const getStatesForRegion = (region) => {
+    const allStates = [
+      { value: 'punjab', label: t('statePunjab', siteLang) },
+      { value: 'haryana', label: t('stateHaryana', siteLang) },
+      { value: 'himachal-pradesh', label: t('stateHimachalPradesh', siteLang) },
+      { value: 'uttarakhand', label: t('stateUttarakhand', siteLang) },
+      { value: 'uttar-pradesh', label: t('stateUttarPradesh', siteLang) },
+      { value: 'andhra-pradesh', label: t('stateAndhraPradesh', siteLang) },
+      { value: 'telangana', label: t('stateTelangana', siteLang) },
+     { value: 'karnataka', label: t('stateKarnataka', siteLang) },
+      { value: 'tamil-nadu', label: t('stateTamilNadu', siteLang) },
+      { value: 'kerala', label: t('stateKerala', siteLang) },
+      { value: 'bihar', label: t('stateBihar', siteLang) },
+      { value: 'jharkhand', label: t('stateJharkhand', siteLang) },
+      { value: 'odisha', label: t('stateOdisha', siteLang) },
+      { value: 'west-bengal', label: t('stateWestBengal', siteLang) },
+      { value: 'rajasthan', label: t('stateRajasthan', siteLang) },
+      { value: 'gujarat', label: t('stateGujarat', siteLang) },
+      { value: 'maharashtra', label: t('stateMaharashtra', siteLang) },
+      { value: 'goa', label: t('stateGoa', siteLang) },
+      { value: 'madhya-pradesh', label: t('stateMadhyaPradesh', siteLang) },
+      { value: 'chhattisgarh', label: t('stateChhattisgarh', siteLang) },
+      { value: 'assam', label: t('stateAssam', siteLang) },
+      { value: 'arunachal-pradesh', label: t('stateArunachalPradesh', siteLang) },
+      { value: 'nagaland', label: t('stateNagaland', siteLang) },
+      { value: 'manipur', label: t('stateManipur', siteLang) },
+      { value: 'mizoram', label: t('stateMizoram', siteLang) },
+      { value: 'tripura', label: t('stateTripura', siteLang) },
+      { value: 'meghalaya', label: t('stateMeghalaya', siteLang) },
+      { value: 'sikkim', label: t('stateSikkim', siteLang) }
+    ];
+
+    if (!region) return allStates;
+
+    switch (region) {
+      case 'north':
+        return allStates.filter(state => ['punjab', 'haryana', 'himachal-pradesh', 'uttarakhand', 'uttar-pradesh'].includes(state.value));
+      case 'south':
+        return allStates.filter(state => ['andhra-pradesh', 'telangana', 'karnataka', 'tamil-nadu', 'kerala'].includes(state.value));
+      case 'east':
+        return allStates.filter(state => ['bihar', 'jharkhand', 'odisha', 'west-bengal'].includes(state.value));
+      case 'west':
+        return allStates.filter(state => ['rajasthan', 'gujarat', 'maharashtra', 'goa'].includes(state.value));
+      case 'central':
+        return allStates.filter(state => ['madhya-pradesh', 'chhattisgarh'].includes(state.value));
+      case 'north-east':
+        return allStates.filter(state => ['assam', 'arunachal-pradesh', 'nagaland', 'manipur', 'mizoram', 'tripura', 'meghalaya', 'sikkim'].includes(state.value));
+      default:
+        return allStates;
+    }
+  };
   
   const handleSignupSubmit = async e => {
     e.preventDefault();
@@ -647,11 +709,15 @@ function LoginProfile() {
       alert(t('regSelectAccount', siteLang));
       return;
     }
+    if (signupData.state && !signupData.region) {
+      alert(t('regStateRequiresRegion', siteLang));
+      return;
+    }
     if (!signupData.region) {
       alert(t('regSelectRegion', siteLang));
       return;
     }
-    if (!signupData.state || !/^[A-Za-z\s]{2,}$/.test(signupData.state)) {
+    if (!signupData.state) {
       alert(t('regInvalidState', siteLang));
       return;
     }
@@ -1106,8 +1172,15 @@ function LoginProfile() {
                   <option value='south'>{t('regionSouth', siteLang)}</option>
                   <option value='east'>{t('regionEast', siteLang)}</option>
                   <option value='west'>{t('regionWest', siteLang)}</option>
+                  <option value='central'>{t('regionCentral', siteLang)}</option>
+                  <option value='north-east'>{t('regionNorthEast', siteLang)}</option>
                 </select>
-                <SmallInput type='text' name='state' placeholder={t('placeholderState', siteLang)} value={signupData.state} onChange={handleSignupChange} style={{width:'100%', marginTop:0, marginBottom:10}} />
+                <select name='state' value={signupData.state} onChange={handleSignupChange} style={{width:'100%', padding:'0.9rem', border:'1px solid oklch(0.65 0.22 145 / 0.2)', borderRadius:4, background:'oklch(0.16 0.03 160 / 0.5)', marginBottom:10, color:'oklch(0.97 0.01 100)', fontSize:'1rem'}}>
+                  <option value=''>{t('selectState', siteLang)}</option>
+                  {getStatesForRegion(signupData.region).map(state => (
+                    <option key={state.value} value={state.value}>{state.label}</option>
+                  ))}
+                </select>
                 <SmallInput type='text' name='address' placeholder={t('placeholderAddress', siteLang)} value={signupData.address} onChange={handleSignupChange} style={{width:'100%', marginTop:0}} />
               </div>
               <div style={{width: '100%', textAlign: 'center', marginTop: '6px'}}>

@@ -285,57 +285,62 @@ export default function FarmerHistory() {
         return;
       }
 
-      // Add the contract quantity back to the farmer's crop listing
+      // Add the contract quantity back to the farmer's deals
       if (contractToDelete && contractToDelete.quantity_kg && contractToDelete.crop_name) {
         try {
-          const sellerId = localStorage.getItem('agriai_id') || '';
-          const sellerPhone = localStorage.getItem('agriai_phone') || '';
-          let listUrl = `${apiBase}/my-crops/list`;
-          if (sellerId) listUrl += `?seller_id=${encodeURIComponent(sellerId)}`;
-          else if (sellerPhone) listUrl += `?seller_phone=${encodeURIComponent(sellerPhone)}`;
-          
+          // Try to find and update deals using crop_name and buyer_id
+          const listUrl = `${apiBase}/deals/list`;
           const listResp = await fetch(listUrl);
           const listJson = await listResp.json().catch(() => ({}));
           
-          if (listResp.ok && listJson.ok && Array.isArray(listJson.crops)) {
-            // Find matching crop(s) by crop_name and variety
-            const matchingCrops = listJson.crops.filter(c => 
-              c.crop_name === contractToDelete.crop_name && 
-              c.variety === contractToDelete.variety
+          if (listResp.ok && listJson.ok && Array.isArray(listJson.deals)) {
+            // Find deals matching the crop and buyer
+            const matchingDeals = listJson.deals.filter(d => 
+              d.crop_name === contractToDelete.crop_name && 
+              String(d.buyer_id) === String(contractToDelete.buyer_id)
             );
             
-            // Update all matching crops to add back the quantity
-            for (const crop of matchingCrops) {
-              const currentQty = crop.quantity_kg || 0;
+            console.log(`[Delete] Found ${matchingDeals.length} matching deals for crop "${contractToDelete.crop_name}" and buyer ${contractToDelete.buyer_id}`);
+            
+            // Update all matching deals to add back the quantity
+            for (const deal of matchingDeals) {
+              const currentQty = Number(deal.quantity_kg || 0);
               const newQty = currentQty + Number(contractToDelete.quantity_kg);
               
               try {
-                await fetch(`${apiBase}/my-crops/${crop.id}`, {
+                const updateResp = await fetch(`${apiBase}/deals/${deal.id}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ quantity_kg: newQty })
                 });
+                
+                if (updateResp.ok) {
+                  console.log(`[Delete] Restored ${contractToDelete.quantity_kg} kg to deal ${deal.id} (new qty: ${newQty})`);
+                } else {
+                  console.warn(`[Delete] Failed to update deal ${deal.id}:`, updateResp.status);
+                }
               } catch (e) {
-                console.warn('Failed to update crop quantity:', e);
+                console.warn('[Delete] Failed to update deal quantity:', e);
               }
             }
           }
         } catch (e) {
-          console.warn('Failed to add quantity back to crops:', e);
+          console.warn('[Delete] Error restoring quantities:', e);
         }
       }
 
       // Remove from local state only (no localStorage)
       setOrders(prev => (prev || []).filter(o => ((o.contract_number || o.invoice_id) !== idKey)));
 
-      // Dispatch event to notify buyer deals page to refresh with restored quantities
+      // Dispatch event to notify other components about quantity restoration
       try {
         window.dispatchEvent(new CustomEvent('agriai:contract:deleted', { 
           detail: { 
-            contract_number: idKey, 
+            contract_number: idKey,
             quantity_restored: contractToDelete?.quantity_kg,
             buyer_id: contractToDelete?.buyer_id,
-            crop_name: contractToDelete?.crop_name
+            crop_name: contractToDelete?.crop_name,
+            restored_to_deals: true
           } 
         }));
       } catch (e) {}
@@ -360,50 +365,26 @@ export default function FarmerHistory() {
           
           // If contract is rejected and we haven't processed it yet
           if (isRejected && contractNum && !processed.has(contractNum)) {
-            const quantity = Number(order.quantity_kg || 0);
-            const cropName = order.crop_name || '';
-            const buyerId = order.buyer_id || '';
-            
-            if (quantity > 0 && (cropName || buyerId)) {
-              try {
-                // Try to find and update deals using crop_name and buyer_id
-                const listUrl = `${apiBase}/deals/list`;
-                const listResp = await fetch(listUrl);
-                const listJson = await listResp.json().catch(() => ({}));
-                
-                if (listResp.ok && listJson.ok && Array.isArray(listJson.deals)) {
-                  // Find deals matching the crop and buyer
-                  const matchingDeals = listJson.deals.filter(d => 
-                    d.crop_name === cropName && 
-                    d.buyer_id === buyerId
-                  );
-                  
-                  console.log(`[Rejection] Found ${matchingDeals.length} matching deals for crop "${cropName}" and buyer ${buyerId}`);
-                  
-                  // Update all matching deals to add back the quantity
-                  for (const deal of matchingDeals) {
-                    const currentQty = Number(deal.quantity_kg || 0);
-                    const newQty = currentQty + quantity;
-                    
-                    try {
-                      const updateResp = await fetch(`${apiBase}/deals/${deal.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ quantity_kg: newQty })
-                      });
-                      
-                      if (updateResp.ok) {
-                        console.log(`[Rejection] Restored ${quantity} kg to deal ${deal.id} (new qty: ${newQty})`);
-                      } else {
-                        console.warn(`[Rejection] Failed to update deal ${deal.id}:`, updateResp.status);
-                      }
-                    } catch (e) {
-                      console.warn('[Rejection] Failed to update deal quantity:', e);
-                    }
+            // Restore quantities the same way as delete: for each item, reduce-quantity with negative
+            const items = order.items || [];
+            for (const item of items) {
+              const dealId = item.deal_id;
+              const qtyToRestore = Number(item.order_quantity || item.quantity || 0);
+              if (dealId && qtyToRestore > 0) {
+                try {
+                  const resp = await fetch(`${apiBase}/deals/reduce-quantity`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deal_id: dealId, quantity: -qtyToRestore })
+                  });
+                  if (resp.ok) {
+                    console.log(`[Rejection] Restored ${qtyToRestore} kg to deal ${dealId}`);
+                  } else {
+                    console.warn(`[Rejection] Failed to restore quantity for deal ${dealId}:`, resp.status);
                   }
+                } catch (e) {
+                  console.warn('[Rejection] Error restoring quantity:', e);
                 }
-              } catch (e) {
-                console.warn('[Rejection] Error restoring quantities:', e);
               }
             }
             
@@ -411,14 +392,12 @@ export default function FarmerHistory() {
             processed.add(contractNum);
             sessionStorage.setItem(processedKey, JSON.stringify(Array.from(processed)));
             
-            // Dispatch event to notify buyer deals page
+            // Dispatch event to notify other components about quantity restoration
             try {
               window.dispatchEvent(new CustomEvent('agriai:contract:rejected', { 
                 detail: { 
                   contract_number: contractNum,
-                  quantity_restored: quantity,
-                  buyer_id: buyerId,
-                  crop_name: cropName
+                  restored_to_deals: true
                 } 
               }));
             } catch (e) {}
@@ -544,7 +523,7 @@ export default function FarmerHistory() {
     const contractNature = dbContract.contract_nature || order.contract_nature || order.contractNature || cm.contract_nature || cm.contractNature || 'post-harvest';
     const contractDuration = dbContract.contract_duration || order.contract_duration || order.contractDuration || cm.contract_duration || cm.contractDuration || 'one-time';
     const contractLang = order.contract_language || order.contractLanguage || cm.lang || (localStorage.getItem('agri_lang') || 'en');
-    const startDate = dbContract.start_date || (cm.start_date || cm.startDate) || (order.start_date || order.startDate) || (new Date().toLocaleDateString('en-GB'));
+    const startDate = dbContract.updated_at || dbContract.updatedAt || dbContract.start_date || (cm.start_date || cm.startDate) || (order.start_date || order.startDate) || (new Date().toLocaleDateString('en-GB'));
     // compute endDate: prefer database, then ISO if available, else use stored strings, else derive from start + duration
     let endDate = dbContract.end_date || (cm.end_date || cm.endDate) || (order.end_date || order.endDate) || '';
     try {
@@ -1255,7 +1234,7 @@ export default function FarmerHistory() {
       <section class="signature-section">
         <div class="signature-line">
           ${ (dbContract && dbContract.status && String(dbContract.status).toLowerCase() === 'accepted') ?
-    `<p>Buyer / Company</p>
+    `<p><b>Buyer / Company</b></p>
      <p>Name: ${buyerName}</p>
      <p>Date: ${date}</p>
       ` :

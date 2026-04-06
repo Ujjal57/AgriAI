@@ -75,6 +75,13 @@ Each user role has secure authentication and role-based access.
 
 ## ⚙️ Installation & Running Locally
 
+### 🔹 Prerequisites
+
+- **Python 3.8+** - [Download Python](https://www.python.org/downloads/)
+- **Node.js 16+** - [Download Node.js](https://nodejs.org/)
+- **MySQL 8.0+** - [Download MySQL](https://dev.mysql.com/downloads/mysql/)
+- **Git** - [Download Git](https://git-scm.com/)
+
 ### 🔹 1. Clone the repository
 
 ```bash
@@ -82,22 +89,96 @@ git clone https://github.com/Ujjal57/AgriAI.git
 cd AgriAI
 ```
 
-### 🔹 2. Set Up XAMPP
+### 🔹 2. Backend Setup (Python/Flask)
 
-- Install [XAMPP]
-- Start **Apache** and **MySQL** services
-- Copy the project folder to:
+```bash
+# Navigate to backend directory
+cd backend
 
-```makefile
-C:\xampp\htdocs\AgriAI
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+# source venv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env file with your database credentials:
+# DB_HOST=localhost
+# DB_USER=your_mysql_username
+# DB_PASSWORD=your_mysql_password
+# DB_NAME=agri_ai
+# DB_PORT=3306
+
+# Initialize database tables
+python init_database.py
 ```
 
-### 🔹 3. Backend setup
+### 🔹 3. Database Setup (MySQL)
 
-- Install Python packages:
+```sql
+-- Create database
+CREATE DATABASE agri_ai;
 
-```makefile
-C:\xampp\htdocs\AgriAI
+-- The application will automatically create required tables
+-- when you run init_database.py
+```
+
+### 🔹 4. Frontend Setup (React)
+
+```bash
+# Return to root directory
+cd ..
+
+# Install Node.js dependencies
+npm install
+
+# Start the React development server
+npm start
+```
+
+### 🔹 5. Run the Application
+
+**Terminal 1: Start Backend Server**
+```bash
+cd backend
+python app.py
+```
+- Backend API will run on: http://localhost:5000
+
+**Terminal 2: Start Frontend Server**
+```bash
+npm start
+```
+- Frontend will run on: http://localhost:3000
+
+### 🔹 6. Access the Application
+
+- **Frontend:** http://localhost:3000
+- **Backend API:** http://localhost:5000
+
+### 🔹 Troubleshooting
+
+- **Port conflicts:** If ports 3000 or 5000 are busy, React/Flask will prompt for alternative ports
+- **Database connection:** Ensure MySQL is running and credentials in `.env` are correct
+- **Python virtual environment:** Always activate the virtual environment before running backend commands
+- **Dependencies:** If you encounter import errors, ensure all packages from `requirements.txt` are installed
+
+### 🔹 Optional Features
+
+To enable additional features, uncomment the relevant packages in `backend/requirements.txt`:
+
+- **AI/ML Features:** Uncomment groq, mediapipe, scikit-learn, opencv
+- **Translation:** Uncomment deep-translator, langdetect, gTTS
+- **Admin Dashboard:** Uncomment streamlit
+- **PDF Processing:** Uncomment PyMuPDF
+- **Document Processing:** Uncomment python-docx
 ```
 
 ### 🔹 4. Frontend setup
