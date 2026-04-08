@@ -4,6 +4,237 @@ import './Chatbot.css';
 
 const initialMessages = [];
 const base = process.env.REACT_APP_API_BASE || 'http://127.0.0.1:5000';
+const AGMARKNET_API_KEY = '579b464db66ec23bdd0000017904e9540634499d702edcacef299acc';
+const AGMARKNET_API_URL = 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070';
+const AGMARKNET_COMMODITIES = [
+  'potato', 'tomato', 'onion', 'wheat', 'rice', 'maize', 'barley', 'sugarcane', 'cotton', 'coffee', 'tea',
+  'banana', 'apple', 'orange', 'grapes', 'mango', 'coconut', 'ginger', 'tur', 'arhar', 'lentil', 'pulses',
+  'mustard', 'chilli', 'peas', 'beans', 'cauliflower', 'cabbage', 'brinjal', 'garlic', 'coriander', 'soybean'
+];
+const AGMARKNET_STATES = [
+  'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat', 'haryana', 'himachal pradesh',
+  'jharkhand', 'karnataka', 'kerala', 'madhya pradesh', 'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland',
+  'odisha', 'punjab', 'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh', 'uttarakhand',
+  'west bengal', 'andaman and nicobar islands', 'chandigarh', 'dadra and nagar haveli', 'daman and diu', 'delhi',
+  'jammu and kashmir', 'ladakh', 'puducherry'
+];
+const PRICE_QUERY_PATTERN = /(?:price|rate|market|mandi|agmarknet|modal|arrival|commodity|crop|wholesale|daily price|price of)/i;
+
+const normalizeTitleCase = (text) => text
+  .replace(/(^|\s)[a-z]/g, (match) => match.toUpperCase())
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const translateText = (lang, key, fallback) => {
+  if (translations[lang] && translations[lang][key]) return translations[lang][key];
+  if (translations.en && translations.en[key]) return translations.en[key];
+  return fallback;
+};
+
+const extractAgmarknetFilters = (text) => {
+  const lc = text.toLowerCase();
+  const filters = {};
+
+  for (const commodity of AGMARKNET_COMMODITIES) {
+    const pattern = new RegExp(`\\b${commodity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (pattern.test(text)) {
+      filters.commodity = commodity;
+      break;
+    }
+  }
+
+  for (const state of AGMARKNET_STATES) {
+    const pattern = new RegExp(`\\b${state.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (pattern.test(text)) {
+      filters.state = normalizeTitleCase(state);
+      break;
+    }
+  }
+
+  // Try to extract APMC or market names (e.g., "Davangere APMC", "Bangalore market")
+  const apmcMatch = lc.match(/([a-z]+)\s+apmc/i);
+  if (apmcMatch) {
+    filters.market = normalizeTitleCase(apmcMatch[1]) + ' APMC';
+  } else {
+    const districtMatch = lc.match(/district(?: of| is| in)?\s+([a-z ]+)/i);
+    if (districtMatch) {
+      filters.district = normalizeTitleCase(districtMatch[1].replace(/district/i, '').trim());
+    }
+
+    const marketMatch = lc.match(/market(?: in| at| of| for)?\s+([a-z ]+)/i);
+    if (marketMatch) {
+      filters.market = normalizeTitleCase(marketMatch[1].replace(/market/i, '').trim());
+    }
+  }
+
+  const yesterdayMatch = /yesterd?ay|day before|previous day/i.test(lc);
+  const todayMatch = /\btoday\b/i.test(lc);
+  if (yesterdayMatch && todayMatch) {
+    filters.dateCompare = 'yesterday_vs_today';
+  } else if (yesterdayMatch) {
+    filters.date = 'yesterday';
+  } else if (todayMatch) {
+    filters.date = 'today';
+  }
+
+  const varietyMatch = lc.match(/variety(?: is| of)?\s+([a-z ]+)/i);
+  if (varietyMatch) {
+    filters.variety = normalizeTitleCase(varietyMatch[1].trim());
+  }
+
+  const gradeMatch = lc.match(/grade(?: is| of)?\s+([a-z0-9 ]+)/i);
+  if (gradeMatch) {
+    filters.grade = normalizeTitleCase(gradeMatch[1].trim());
+  }
+
+  return filters;
+};
+
+const formatAgmarknetRecord = (record, lang = 'en') => {
+  const commodity = record.Commodity || record.commodity || record['Commodity'] || 'Unknown commodity';
+  const market = record.Market || record.market || record['Market'] || 'Unknown market';
+  const state = record.State || record.state || record['State'] || '';
+  const variety = record.Variety || record.variety || record['Variety'] || 'General';
+  const minPrice = record['Min Price'] || record.min_price || record.MinPrice || record.minPrice || 'N/A';
+  const maxPrice = record['Max Price'] || record.max_price || record.MaxPrice || record.maxPrice || 'N/A';
+  const modalPrice = record['Modal Price'] || record.modal_price || record.ModalPrice || record.modalPrice || 'N/A';
+
+  const modalLabel = translateText(lang, 'modalLabel', 'modal');
+  const minLabel = translateText(lang, 'minLabel', 'min');
+  const maxLabel = translateText(lang, 'maxLabel', 'max');
+  const inLabel = translateText(lang, 'inLabel', 'in');
+  const onLabel = translateText(lang, 'onLabel', 'on');
+
+  // Extract and format date
+  let date = record.Date || record.date || record['Date'] || record.Arrival || record.arrival || record['Arrival'] || record.UpdatedDate || record.updated_date || '';
+  if (date) {
+    try {
+      const dateObj = new Date(date);
+      if (!isNaN(dateObj.getTime())) {
+        date = dateObj.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+    } catch (e) {}
+  }
+  date = date || translateText(lang, 'todayLabel', 'Today');
+
+  return `${commodity} (${variety}) ${inLabel} ${market}${state ? `, ${state}` : ''} ${onLabel} ${date}: ${modalLabel} ₹${modalPrice}, ${minLabel} ₹${minPrice}, ${maxLabel} ₹${maxPrice}`;
+};
+
+const normalizeAgmarknetDate = (value) => {
+  if (!value && value !== 0) return null;
+  const date = new Date(String(value).trim());
+  if (isNaN(date.getTime())) return null;
+  return date.toISOString().split('T')[0];
+};
+
+const fetchAgmarknetPriceData = async (text, language = 'en') => {
+  const filters = extractAgmarknetFilters(text);
+  const params = new URLSearchParams({
+    'api-key': AGMARKNET_API_KEY,
+    format: 'json',
+    offset: '0',
+    limit: '200'
+  });
+
+  if (filters.commodity) params.set('filters[commodity]', filters.commodity);
+  const useServerStateFilter = !!filters.district || !!filters.market;
+  if (useServerStateFilter && filters.state) params.set('filters[state]', filters.state);
+  if (filters.district) params.set('filters[district]', filters.district);
+  if (filters.market) params.set('filters[market]', filters.market);
+
+  const url = `${AGMARKNET_API_URL}?${params.toString()}`;
+  const res = await fetch(url);
+  const data = await res.json();
+
+  const records = Array.isArray(data.records)
+    ? data.records
+    : Array.isArray(data.data)
+      ? data.data
+      : Array.isArray(data)
+        ? data
+        : [];
+
+  if (!res.ok) {
+    const message = (data && (data.error || data.message || data.status)) ? `${data.error || data.message || data.status}` : 'Agmarknet API request failed';
+    throw new Error(message);
+  }
+
+  if (!records.length) {
+    const translationsForLang = translations[language] || translations.en;
+    const filtersText = Object.values(filters).filter(Boolean).join(', ');
+    return {
+      text: `${translateText(language, 'noCurrentMarketPrices', 'No current market prices found')}${filtersText ? ` ${translateText(language, 'forLabel', 'for')} ${filtersText}` : ''}. ${translateText(language, 'priceQuerySuggestion', 'Try adding a commodity, state, or market to your question.')}`
+    };
+  }
+
+  // Filter records to match the user's query filters
+  let filteredRecords = records;
+  
+  if (filters.state) {
+    filteredRecords = records.filter(r => {
+      const recordState = (r.State || r.state || r['State'] || '').toLowerCase();
+      return recordState.includes(filters.state.toLowerCase());
+    });
+  }
+  
+  if (filters.market && filteredRecords.length > 0) {
+    const normalizedMarketQuery = filters.market.toLowerCase().replace(/\s*apmc\s*$/, '').trim();
+    filteredRecords = filteredRecords.filter(r => {
+      const recordMarketRaw = (r.Market || r.market || r['Market'] || '').toLowerCase().trim();
+      const recordMarketClean = recordMarketRaw.replace(/\s*apmc\s*$/, '').trim();
+      const recordDistrict = (r.District || r.district || r['District'] || '').toLowerCase().trim();
+      return recordMarketRaw.includes(normalizedMarketQuery)
+        || recordMarketClean.includes(normalizedMarketQuery)
+        || recordDistrict.includes(normalizedMarketQuery);
+    });
+  }
+
+  const normalizeRecordDate = (record) => normalizeAgmarknetDate(
+    record.Date || record.date || record['Date'] || record.Arrival || record.arrival || record['Arrival'] || record.UpdatedDate || record.updated_date
+  );
+  const todayKey = new Date().toISOString().split('T')[0];
+  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+  if (filters.date === 'today') {
+    filteredRecords = filteredRecords.filter(r => normalizeRecordDate(r) === todayKey);
+  } else if (filters.date === 'yesterday') {
+    filteredRecords = filteredRecords.filter(r => normalizeRecordDate(r) === yesterdayKey);
+  }
+
+  const recordsToDisplay = filteredRecords.length > 0 ? filteredRecords : (filters.market ? [] : records);
+
+  if (filters.dateCompare === 'yesterday_vs_today') {
+    const todayRecords = filteredRecords.filter(r => normalizeRecordDate(r) === todayKey);
+    const yesterdayRecords = filteredRecords.filter(r => normalizeRecordDate(r) === yesterdayKey);
+    const translationsForLang = translations[language] || translations.en;
+    const todaySummary = todayRecords.length
+      ? todayRecords.slice(0, 5).map((record, idx) => `${idx + 1}. ${formatAgmarknetRecord(record, language)}`).join('\n')
+      : `${translateText(language, 'noRecordsForToday', 'No records for today.')}`;
+    const yesterdaySummary = yesterdayRecords.length
+      ? yesterdayRecords.slice(0, 5).map((record, idx) => `${idx + 1}. ${formatAgmarknetRecord(record, language)}`).join('\n')
+      : `${translateText(language, 'noRecordsForYesterday', 'No records for yesterday.')}`;
+    const details = filters.commodity ? filters.commodity : translationsForLang.currentCropPrices || 'current crop prices';
+    return {
+      text: `${translationsForLang.marketPricesFor || 'Market prices for'} ${details}${filters.state ? ` ${translationsForLang.inLabel || 'in'} ${filters.state}` : ''}${filters.market ? ` ${translationsForLang.atLabel || 'at'} ${filters.market}` : ''}:\n\n${translateText(language, 'todayLabel', 'Today')}:\n${todaySummary}\n\n${translateText(language, 'yesterdayLabel', 'Yesterday')}:\n${yesterdaySummary}`
+    };
+  }
+
+  if (filters.market && recordsToDisplay.length === 0) {
+    return {
+      text: `${translateText(language, 'noCurrentMarketPrices', 'No current market prices found')} ${translateText(language, 'forLabel', 'for')} ${filters.market} ${translateText(language, 'inLabel', 'in')} ${filters.state || translateText(language, 'requestedRegionLabel', 'the requested region')}.`
+    };
+  }
+
+  // Show 10 results if no market specified, 5 if market specified
+  const resultLimit = filters.market ? 5 : 10;
+  const summary = recordsToDisplay.slice(0, resultLimit).map((record, idx) => `${idx + 1}. ${formatAgmarknetRecord(record, language)}`).join('\n');
+  const translationsForLang = translations[language] || translations.en;
+  const details = filters.commodity ? filters.commodity : translationsForLang.currentCropPrices || 'current crop prices';
+  return {
+    text: `${translationsForLang.marketPricesFor || 'Market prices for'} ${details}${filters.state ? ` ${translationsForLang.inLabel || 'in'} ${filters.state}` : ''}${filters.market ? ` ${translationsForLang.atLabel || 'at'} ${filters.market}` : ''}:\n${summary}`
+  };
+};
+
 function getTimeGreeting() {
   const now = new Date();
   const hour = now.getHours();
@@ -19,21 +250,69 @@ const translations = {
     demo: 'Sorry, I am a demo! (You can connect me to a real AI backend.)',
     placeholder: 'Type your message...',
     botName: 'Farmer',
-    botSubtitle: 'Your Farming Assistant'
+    botSubtitle: 'Your Farming Assistant',
+    marketPricesFor: 'Market prices for',
+    currentCropPrices: 'current crop prices',
+    onLabel: 'on',
+    inLabel: 'in',
+    atLabel: 'at',
+    modalLabel: 'modal',
+    minLabel: 'min',
+    maxLabel: 'max',
+    todayLabel: 'Today',
+    yesterdayLabel: 'Yesterday',
+    noCurrentMarketPrices: 'No current market prices found',
+    priceQuerySuggestion: 'Try adding a commodity, state, or market to your question.',
+    noRecordsForToday: 'No records for today.',
+    noRecordsForYesterday: 'No records for yesterday.',
+    forLabel: 'for',
+    requestedRegionLabel: 'the requested region'
   },
     hi: {
       greeting: () => 'नमस्ते — AgriAI में आपका स्वागत है। मैं आपका कृषि सहायक। मैं आपकी कैसे मदद कर सकता हूँ?',
       demo: 'माफ़ कीजिये, मैं एक डेमो हूँ! (आप मुझे किसी वास्तविक AI backend से कनेक्ट कर सकते हैं.)',
       placeholder: 'अपना संदेश टाइप करें...',
         botName: 'किसान',
-      botSubtitle: 'आपका कृषि सहायक'
+      botSubtitle: 'आपका कृषि सहायक',
+      marketPricesFor: 'बाज़ार की कीमतें',
+      currentCropPrices: 'वर्तमान फ़सल की कीमतें',
+      onLabel: 'पर',
+      inLabel: 'में',
+      atLabel: 'पर',
+      modalLabel: 'मोडल',
+      minLabel: 'न्यूनतम',
+      maxLabel: 'अधिकतम',
+      todayLabel: 'आज',
+      yesterdayLabel: 'कल',
+      noCurrentMarketPrices: 'कोई वर्तमान मंडी की कीमतें नहीं मिलीं',
+      priceQuerySuggestion: 'कृपया अपने प्रश्न में कोई फ़सल, राज्य, या मंडी जोड़ें।',
+      noRecordsForToday: 'आज के लिए कोई रिकार्ड नहीं मिला।',
+      noRecordsForYesterday: 'कल के लिए कोई रिकार्ड नहीं मिला।',
+      forLabel: 'के लिए',
+      requestedRegionLabel: 'अनुरोधित क्षेत्र'
     },
     kn: {
       greeting: () => 'ನಮಸ್ಕಾರ — AgriAIಗೆ ಸ್ವಾಗತ. ನಾನು ಕಿಸಾನ್, ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕರಾಗಿದ್ದೇನೆ. ನಾನು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?',
       demo: 'ಕ್ಷಮಿಸಿ, ನಾನು ಒಂದು ಡೆಮೋ! (ನೀವು ನನ್ನನ್ನು ನಿಜವಾದ AI ಬ್ಯಾಕ್‌ಎಂಡ್‌ಗೆ ಸಂಪರ್ಕಿಸಬಹುದಾಗಿದೆ.)',
       placeholder: 'ನಿಮ್ಮ ಸಂದೇಶವನ್ನು ಟೈಪ್ ಮಾಡಿ...',
         botName: 'ರೈತ',
-      botSubtitle: 'ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕ'
+      botSubtitle: 'ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕ',
+      marketPricesFor: 'ಮಾರುಕಟ್ಟೆ ಬೆಲೆಗಳು',
+      currentCropPrices: 'ಪ್ರಸ್ತುತ ಬೆಳೆ ಬೆಲೆಗಳು',
+      onLabel: 'ನಲ್ಲಿ',
+      inLabel: 'ನಲ್ಲಿ',
+      atLabel: 'ನಲ್ಲಿ',
+      modalLabel: 'ಮಾಡಲ್',
+      minLabel: 'ಕನಿಷ್ಠ',
+      maxLabel: 'ಗರಿಷ್ಠ',
+      todayLabel: 'ಇಂದು',
+      yesterdayLabel: 'ನಿನ್ನೆ',
+      noCurrentMarketPrices: 'ಪ್ರಸ್ತುತ ಮಾರುಕಟ್ಟೆ ಬೆಲಿಗಳು ದೊರೆಯಲಿಲ್ಲ',
+      priceQuerySuggestion: 'ದಯವಿಟ್ಟು ನಿಮ್ಮ ಪ್ರಶ್ನೆಯಲ್ಲಿ ಬೆಳೆ, ರಾಜ್ಯ ಅಥವಾ ಮಾರುಕಟ್ಟೆ ಸೇರಿಸಿ.',
+      noRecordsForToday: 'ಇಂದು ಯಾವುದೇ ದಾಖಲೆಗಳು ಲಭ್ಯವಿಲ್ಲ.',
+      noRecordsForYesterday: 'ನಿನ್ನೆ ಯಾವುದೇ ದಾಖಲೆಗಳು ಲಭ್ಯವಿಲ್ಲ.',
+      forLabel: 'ಕೆಲಗಾಗಿ',
+      requestedRegionLabel: 'ಕೋರಿಕೆಯ ಪ್ರಾದೇಶಿಕ'
     }
   };
 
@@ -275,7 +554,19 @@ const Chatbot = () => {
     console.log("📤 Sending payload:", JSON.stringify({ q: userInput, lang: language }));
 
     try {
-      // detect user intent for detailed or stepwise responses in multiple languages
+      const isPriceQuery = PRICE_QUERY_PATTERN.test(userInput);
+      if (isPriceQuery) {
+        try {
+          const agResult = await fetchAgmarknetPriceData(userInput, language);
+          setMessages(prev => [...prev, { sender: 'bot', text: agResult.text }]);
+          setLoading(false);
+          return;
+        } catch (apiError) {
+          console.warn('Agmarknet API fetch failed:', apiError);
+          setMessages(prev => [...prev, { sender: 'bot', text: `⚠️ Agmarknet lookup failed: ${apiError.message}. Falling back to regular assistant response.` }]);
+        }
+      }
+
       const wantsDetailEn = /\b(detail|explain|expand|more|detailed|step|step-by-step)\b/i.test(userInput);
       const wantsStepEn = /\b(step|stepwise|steps|how to|how do i)\b/i.test(userInput);
       const wantsDetailHi = /(?:विस्तार|विस्तृत|बताइए|समझाइए|विस्तार से)/i.test(userInput);
