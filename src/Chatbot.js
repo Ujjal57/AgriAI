@@ -4,7 +4,7 @@ import './Chatbot.css';
 
 const initialMessages = [];
 const base = process.env.REACT_APP_API_BASE || 'http://127.0.0.1:5000';
-const AGMARKNET_API_KEY = '579b464db66ec23bdd0000017904e9540634499d702edcacef299acc';
+const AGMARKNET_API_KEY = process.env.REACT_APP_AGMARKNET_API_KEY || '579b464db66ec23bdd0000017904e9540634499d702edcacef299acc';
 const AGMARKNET_API_URL = 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070';
 const AGMARKNET_COMMODITIES = [
   'potato', 'tomato', 'onion', 'wheat', 'rice', 'maize', 'barley', 'sugarcane', 'cotton', 'coffee', 'tea',
@@ -143,8 +143,30 @@ const fetchAgmarknetPriceData = async (text, language = 'en') => {
   if (filters.market) params.set('filters[market]', filters.market);
 
   const url = `${AGMARKNET_API_URL}?${params.toString()}`;
-  const res = await fetch(url);
-  const data = await res.json();
+  
+  let res, data;
+  try {
+    res = await fetch(url);
+  } catch (fetchError) {
+    throw new Error(`Failed to fetch from Agmarknet: ${fetchError.message || 'Network error'}`);
+  }
+
+  if (!res.ok) {
+    let errorMsg = `Agmarknet API returned status ${res.status}`;
+    try {
+      const errorData = await res.json();
+      errorMsg = errorData.error || errorData.message || errorData.status || errorMsg;
+    } catch (e) {
+      // Fallback to status message if JSON parsing fails
+    }
+    throw new Error(errorMsg);
+  }
+
+  try {
+    data = await res.json();
+  } catch (parseError) {
+    throw new Error(`Failed to parse Agmarknet response: ${parseError.message}`);
+  }
 
   const records = Array.isArray(data.records)
     ? data.records
@@ -153,11 +175,6 @@ const fetchAgmarknetPriceData = async (text, language = 'en') => {
       : Array.isArray(data)
         ? data
         : [];
-
-  if (!res.ok) {
-    const message = (data && (data.error || data.message || data.status)) ? `${data.error || data.message || data.status}` : 'Agmarknet API request failed';
-    throw new Error(message);
-  }
 
   if (!records.length) {
     const translationsForLang = translations[language] || translations.en;
@@ -563,7 +580,7 @@ const Chatbot = () => {
           return;
         } catch (apiError) {
           console.warn('Agmarknet API fetch failed:', apiError);
-          setMessages(prev => [...prev, { sender: 'bot', text: `⚠️ Agmarknet lookup failed: ${apiError.message}. Falling back to regular assistant response.` }]);
+          // Silently fall back to regular assistant response with DETAILED mode for price queries
         }
       }
 
@@ -578,13 +595,21 @@ const Chatbot = () => {
       const wantsDetail = (langFlag === 'hi' && (wantsDetailHi || wantsStepHi)) || (langFlag === 'kn' && (wantsDetailKn || wantsStepKn)) || (langFlag === 'en' && (wantsDetailEn || wantsStepEn));
       const wantsStepwise = (langFlag === 'hi' && wantsStepHi) || (langFlag === 'kn' && wantsStepKn) || (langFlag === 'en' && wantsStepEn);
 
-      // Build user prompt; keep short if not requested
+      // Build user prompt; force detailed mode for price queries; keep short if not requested
       let userPrompt = userInput;
-      if (!wantsDetail && !wantsStepwise) {
+      let mode = 'short';
+      
+      if (isPriceQuery) {
+        // Always request detailed district/market-level pricing for price queries
+        mode = 'detailed';
+        userPrompt = `${userInput}. Please provide a detailed breakdown by district or market with prices. Format: list each district/market with its price range.`;
+      } else if (wantsStepwise) {
+        mode = 'stepwise';
+      } else if (wantsDetail) {
+        mode = 'detailed';
+      } else {
         userPrompt = `${userInput}. Give a short and clear answer (max 3 sentences).`;
       }
-
-      const mode = wantsStepwise ? 'stepwise' : (wantsDetail ? 'detailed' : 'short');
 
       console.log(`📤 Sending to ${base}/ai/groq:`, { q: userPrompt, lang: langFlag, mode });
 

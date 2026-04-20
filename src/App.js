@@ -340,7 +340,7 @@ export default function App() {
             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1, delay: 0.3, ease: "easeOut" }} className="h-[500px] rounded-2xl overflow-hidden">
               <Suspense fallback={<div className="h-full flex items-center justify-center glass-card rounded-2xl"><div className="text-neon animate-spin w-8 h-8 border-2 border-current border-t-transparent rounded-full" /></div>}>
                 <Canvas camera={{ position: [0, 0, 6], fov: 50 }}>
-                  <IndiaMap3D />
+                  <NetworkSphere />
                   <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
                 </Canvas>
               </Suspense>
