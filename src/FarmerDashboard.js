@@ -717,7 +717,7 @@ function BuyerSearchBox() {
                             const seller_email = (c && (c.seller_email || c.email)) || '';
                             const seller_region = (c && (c.region || c.seller_region)) || '';
                             const seller_state = (c && (c.state || c.seller_state)) || '';
-                            const item = { id: c.id, crop_name: c.crop_name, price_per_kg: c.price_per_kg, quantity_kg: c.quantity_kg, image_url: c.image_path, seller_name: c.farmer_name || c.seller_name, seller_phone: c.farmer_phone || c.seller_phone, seller_address: seller_addr, seller_email: seller_email, seller_region: seller_region, seller_state: seller_state, category: c.category || c.cat || '', variety: c.variety || '' };
+                            const item = { id: c.id, crop_name: c.crop_name, price_per_kg: c.price_per_kg, quantity_kg: c.quantity_kg, image_url: c.image_url, seller_name: c.farmer_name || c.seller_name, seller_phone: c.farmer_phone || c.seller_phone, seller_address: seller_addr, seller_email: seller_email, seller_region: seller_region, seller_state: seller_state, category: c.category || c.cat || '', variety: c.variety || '' };
                             if (!arr.find(x => x && x.id === item.id)) arr.push(item);
                             localStorage.setItem(cartKey, JSON.stringify(arr));
 
@@ -732,7 +732,7 @@ function BuyerSearchBox() {
                                 user_type: userRole || (userId ? 'farmer' : 'buyer'),
                                 user_id: (userId != null && userId !== '') ? (isNaN(userId) ? userId : Number(userId)) : undefined,
                                 user_phone: userPhone || undefined,
-                                items: [ { crop_id: c.id, crop_name: c.crop_name, variety: c.variety || '', quantity_kg: c.quantity_kg || 0, price_per_kg: c.price_per_kg || null, image_path: c.image_path || null, category: c.category || c.cat || '' } ]
+                                items: [ { crop_id: c.id, crop_name: c.crop_name, variety: c.variety || '', quantity_kg: c.quantity_kg || 0, price_per_kg: c.price_per_kg || null, image_path: c.image_url || null, category: c.category || c.cat || '' } ]
                               };
                               fetch(`${apiBase}/cart/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
                                 .then(async res => { if (!res.ok) { const t = await res.text().catch(()=>''); console.warn('cart/add failed', res.status, t); } else { try { window.dispatchEvent(new Event('agriai:cart:update')); } catch(e){} } })

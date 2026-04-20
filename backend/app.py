@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, Response, redirect
 from flask import send_from_directory
 import openpyxl
 import os
@@ -4970,7 +4970,7 @@ def cart_list():
                 where.append('user_id=%s'); params.append(user_id)
             if user_phone:
                 where.append('user_phone=%s'); params.append(user_phone)
-            sql = f'SELECT id, user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, category, total_quantity, total_price, delivery_date, added_at FROM {table_name}'
+            sql = f'SELECT id, user_type, user_id, buyer_id, user_phone, crop_id, crop_name, variety, quantity_kg, price_per_kg, image_path, total_quantity, total_price, delivery_date, added_at FROM {table_name}'
             if where:
                 sql += ' WHERE ' + ' AND '.join(where)
             sql += ' ORDER BY id DESC'
@@ -4981,7 +4981,7 @@ def cart_list():
                     results.append(r)
                 else:
                     results.append({
-                        'id': r[0], 'user_type': r[1], 'user_id': r[2], 'buyer_id': r[3], 'user_phone': r[4], 'crop_id': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'price_per_kg': r[9], 'image_path': r[10], 'category': r[11], 'total_quantity': r[12], 'total_price': r[13], 'delivery_date': r[14], 'added_at': r[15]
+                        'id': r[0], 'user_type': r[1], 'user_id': r[2], 'buyer_id': r[3], 'user_phone': r[4], 'crop_id': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'price_per_kg': r[9], 'image_path': r[10], 'total_quantity': r[11], 'total_price': r[12], 'delivery_date': r[13], 'added_at': r[14]
                     })
             try: cur.close()
             except Exception: pass
@@ -6822,18 +6822,42 @@ def get_crop_image(crop_id):
         try:
             conn = mysql.connect(**cfg)
             cur = conn.cursor()
+            # First try image_blob
             cur.execute('SELECT image_blob FROM crops WHERE id = %s', (crop_id,))
+            row = cur.fetchone()
+            if row and row[0]:
+                cur.close()
+                conn.close()
+                return Response(row[0], mimetype='image/jpeg')
+            # If no blob, try image_path
+            cur.execute('SELECT image_path FROM crops WHERE id = %s', (crop_id,))
             row = cur.fetchone()
             cur.close()
             conn.close()
             if row and row[0]:
-                return Response(row[0], mimetype='image/jpeg')
+                # Redirect to /images/filename
+                return redirect(f'/images/{row[0]}')
             else:
                 return Response('', status=404)
         except Exception as e:
             return Response('', status=500)
     else:
-        return Response('', status=404)
+        # SQLite
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute('SELECT image_path FROM crops WHERE id = ?', (crop_id,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row and row[0]:
+                uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+                return send_from_directory(uploads_dir, row[0])
+            else:
+                return Response('', status=404)
+        except Exception as e:
+            return Response('', status=500)
 
     # SQLite fallback only when DB_USE != 'mysql'
     try:

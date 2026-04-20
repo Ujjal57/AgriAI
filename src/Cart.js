@@ -1037,11 +1037,11 @@ const Cart = () => {
                         <div style={{ width: 120, height: 100, borderRadius: 6, overflow: 'hidden', background: '#f4f4f4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {it.image_url ? (
                             <img 
-                              src={`${apiBase}/images/${it.image_url}`} 
+                              src={it.image_url} 
                               alt={it.crop_name} 
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              onLoad={() => console.log(`✅ Image loaded: ${it.crop_name} from ${apiBase}/images/${it.image_url}`)}
-                              onError={() => console.error(`❌ Failed to load image for ${it.crop_name}: ${apiBase}/images/${it.image_url}`)}
+                              onLoad={() => console.log(`✅ Image loaded: ${it.crop_name} from ${it.image_url}`)}
+                              onError={() => console.error(`❌ Failed to load image for ${it.crop_name}: ${it.image_url}`)}
                             />
                           ) : (
                             <div style={{ color: '#999' }}>📷 {t('noImage', lang)}</div>
