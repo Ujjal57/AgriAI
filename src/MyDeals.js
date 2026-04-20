@@ -793,7 +793,10 @@ const MyDeals = () => {
         setSaved({ status: 'success', stored: j.stored || 'unknown' });
         setSellerName(''); setCropName(''); setCategory(''); setVariety(''); setQuantity(''); setDeliveryDate(''); setRegion(''); setState('');
         setImageFile(null);
-        fetchListings();
+        // Refresh page after short delay to show success message
+        setTimeout(() => {
+          window.location.reload();
+        }, 800);
       } else {
         setSaved({ status: 'error', message: (j.error || JSON.stringify(j)) });
       }
@@ -823,14 +826,13 @@ const MyDeals = () => {
       `}</style>
       <div className="mc-root">
         <Navbar />
-        <main style={{padding: '6rem 1rem 6rem', position: 'relative', zIndex: 1}}>
-          <div style={{maxWidth:1000,margin:'0 auto',background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px) saturate(1.6)',WebkitBackdropFilter:'blur(20px) saturate(1.6)',border:'1px solid rgba(255,255,255,0.6)',borderRadius:'24px',padding:'2.5rem',boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)'}}>
-            <h1 style={{backgroundImage:'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent',textAlign:'center',marginBottom:40,fontSize:'2rem',fontWeight:800,margin:0}}>{t('myDealsTitle', siteLang)}</h1>
-
-          <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12 }}>
+        <main style={{padding: '6rem 1rem 6rem', position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'center'}}>
+                  <div style={{display:'inline-block', width:'auto', margin:'0 auto',background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px) saturate(1.6)',WebkitBackdropFilter:'blur(20px) saturate(1.6)',border:'1px solid rgba(255,255,255,0.6)',borderRadius:'24px',padding:'2.5rem',boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)'}}>
+                    <h1 style={{backgroundImage:'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent',textAlign:'center',marginBottom:40,fontSize:'2rem',fontWeight:800,margin:0}}>{t('myCropsAddTitle', siteLang)}</h1>
+                  <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12 }}>
 
   {/* --- First Row: Deal Details --- */}
-  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 240px)', gap: 16, marginTop: 12 }}>
 
 
     {/* Category */}
@@ -1012,7 +1014,7 @@ const MyDeals = () => {
             {visibleListings.length === 0 && <div style={{textAlign:'center'}}>{t('noDealsYet', siteLang)}</div>}
 
               {visibleListings.length > 0 && (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(4, minmax(240px, 1fr))', gap:16}}>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, 240px)', gap:16, width:'fit-content', maxWidth:'1240px', margin:'0 auto', justifyContent:'center'}}>
                   {visibleListings.map((l, idx) => {
                     const today = new Date(); today.setHours(0,0,0,0);
                     const dd = l.delivery_date ? new Date(l.delivery_date) : null;
@@ -1024,7 +1026,7 @@ const MyDeals = () => {
                     ) : false;
 
                     return (
-                  <div key={l.id} className="card-container" style={{background:'#fff', borderRadius:8, padding:'12px 12px 1px', border:'1px solid #eaeaea', minHeight:180, display:'flex', flexDirection:'column', justifyContent:'space-between'}}>
+                  <div key={l.id} className="card-container" style={{background:'#fff', borderRadius:8, padding:'12px 12px 1px', border:'1px solid #eaeaea', minHeight:180, display:'flex', flexDirection:'column', justifyContent:'space-between', flex:'0 0 240px', width:240}}>
                     <div style={{width:'100%', height:160, borderRadius:8, overflow:'hidden', background:'#f6f6f6', display:'flex', alignItems:'center', justifyContent:'center', position:'relative'}}>
                       {(() => {
                         let imageSrc = null;

@@ -258,8 +258,8 @@ const MyCrops = () => {
       `}</style>
       <div className="mc-root">
         <Navbar />
-        <main style={{padding: '6rem 1rem 6rem', position: 'relative', zIndex: 1}}>
-          <div style={{maxWidth:1000,margin:'0 auto',background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px) saturate(1.6)',WebkitBackdropFilter:'blur(20px) saturate(1.6)',border:'1px solid rgba(255,255,255,0.6)',borderRadius:'24px',padding:'2.5rem',boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)'}}>
+        <main style={{padding: '6rem 1rem 6rem', position: 'relative', zIndex: 1, display:'flex', justifyContent:'center'}}>
+          <div style={{display:'inline-block', width:'auto', margin:'0 auto',background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px) saturate(1.6)',WebkitBackdropFilter:'blur(20px) saturate(1.6)',border:'1px solid rgba(255,255,255,0.6)',borderRadius:'24px',padding:'2.5rem',boxShadow:'0 8px 32px rgba(35,105,2,0.12), 0 32px 64px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)'}}>
             <h1 style={{backgroundImage:'linear-gradient(135deg, #1a5c10 0%, #236902 50%, #53b635 100%)',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent',textAlign:'center',marginBottom:40,fontSize:'2rem',fontWeight:800,margin:0}}>{t('myCropsAddTitle', siteLang)}</h1>
           <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12 }}>
 
@@ -465,7 +465,7 @@ const MyCrops = () => {
             {visibleListings.length === 0 && <div style={{textAlign:'center'}}>{t('noDealsYet', siteLang)}</div>}
 
             {visibleListings.length > 0 && (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(4, minmax(240px, 1fr))', gap:16}}>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, 240px)', gap:16, width:'fit-content', maxWidth:'1240px', margin:'0 auto', justifyContent:'center'}}>
                 {visibleListings.map(l => (
                   <div key={l.id} className="card-container" style={{background:'#fff', borderRadius:8, padding:'12px 12px 1px', border:'1px solid #eaeaea', minHeight:340, display:'flex', flexDirection:'column', justifyContent:'space-between'}}>
                     <div style={{width:'100%', height:160, borderRadius:8, overflow:'hidden', background:'#f6f6f6', display:'flex', alignItems:'center', justifyContent:'center', position:'relative'}}>

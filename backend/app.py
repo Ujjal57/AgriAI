@@ -5516,17 +5516,21 @@ def add_crop_listing():
                 try:
                     up = request.files['image']
                     if up and up.filename:
+                        image_data = up.read()
                         # sanitize filename via uuid
                         ext = os.path.splitext(up.filename)[1] or mimetypes.guess_extension(up.mimetype or '') or '.img'
                         fname = f"{int(datetime.datetime.utcnow().timestamp())}_{uuid.uuid4().hex}{ext}"
                         uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads')
                         os.makedirs(uploads_dir, exist_ok=True)
                         dest = os.path.join(uploads_dir, fname)
-                        up.save(dest)
+                        with open(dest, 'wb') as f:
+                            f.write(image_data)
                         image_path_val = fname
                         image_mime = up.mimetype
+                        img_blob = image_data
                 except Exception:
                     image_path_val = None
+                    img_blob = None
 
             # If not multipart, check for base64 image in JSON (legacy path)
             img_b64 = None
@@ -6799,8 +6803,37 @@ def list_crop_listings():
                 pass
             return jsonify({'ok': True, 'crops': result}), 200
         except Exception as e:
-            print('MySQL list crops error:', e)
-            return jsonify({'ok': False, 'error': 'mysql_list_failed', 'detail': str(e)}), 500
+            return jsonify({'ok': False, 'error': str(e)}), 500
+    else:
+        return jsonify({'ok': False, 'error': 'mysql_not_configured'}), 500
+
+
+@app.route('/crops/<int:crop_id>/image')
+def get_crop_image(crop_id):
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    if use_mysql:
+        cfg = {
+            'host': os.environ.get('DB_HOST', 'localhost'),
+            'port': int(os.environ.get('DB_PORT', '3306')),
+            'user': os.environ.get('DB_USER', 'root'),
+            'password': os.environ.get('DB_PASSWORD', ''),
+            'database': os.environ.get('DB_NAME', 'agri_ai'),
+        }
+        try:
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            cur.execute('SELECT image_blob FROM crops WHERE id = %s', (crop_id,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row and row[0]:
+                return Response(row[0], mimetype='image/jpeg')
+            else:
+                return Response('', status=404)
+        except Exception as e:
+            return Response('', status=500)
+    else:
+        return Response('', status=404)
 
     # SQLite fallback only when DB_USE != 'mysql'
     try:

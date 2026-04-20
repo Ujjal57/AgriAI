@@ -91,18 +91,18 @@ function BuyerSearchBox() {
     setLoading(true);
     try {
       const base = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
-      const res = await fetch(`${base}/farmers/search`);
+      const res = await fetch(`${base}/my-crops/list`);
       setLoading(false);
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
         throw new Error(`Server returned ${res.status}: ${txt || res.statusText}`);
       }
       const j = await res.json().catch(() => null);
-      if (j && j.ok && Array.isArray(j.farmers)) {
-        setResults(j.farmers);
-        setFarmersSource(j.farmers);
+      if (j && j.ok && Array.isArray(j.crops)) {
+        setResults(j.crops);
+        setFarmersSource([]); // not needed
       } else {
-        setError((j && j.error) || 'No results');
+        setError((j && j.error) || 'No crops');
       }
     } catch (err) {
       setLoading(false);
@@ -121,7 +121,7 @@ function BuyerSearchBox() {
     if (region) q.append('region', region);
     if (state) q.append('state', state);
     if (crop) q.append('crop', crop);
-    const listUrl = `${base}/farmers/search` + (q.toString() ? ('?' + q.toString()) : '');
+    const listUrl = `${base}/my-crops/list` + (q.toString() ? ('?' + q.toString()) : '');
     fetch(listUrl)
       .then(async res => {
         setLoading(false);
@@ -130,19 +130,19 @@ function BuyerSearchBox() {
           throw new Error(`Server returned ${res.status}: ${txt || res.statusText}`);
         }
         const j = await res.json().catch(() => null);
-        if (j && j.ok && Array.isArray(j.farmers)) {
-          let farmers = j.farmers;
+        if (j && j.ok && Array.isArray(j.crops)) {
+          let crops = j.crops;
           // client-side category/variety/address filter since API doesn’t support all
-          farmers = farmers.filter(f => {
+          crops = crops.filter(c => {
             try {
-              if (address && !( (f.address||'').toString().toLowerCase().includes(address.toString().trim().toLowerCase()) )) return false;
-              if (category && !(f.crop_samples || []).some(c => (c.category||'').toString().trim().toLowerCase() === category.toString().trim().toLowerCase())) return false;
-              if (variety && !(f.crop_samples || []).some(c => (c.variety||'').toString().trim().toLowerCase() === variety.toString().trim().toLowerCase())) return false;
+              if (address && !( (c.address||'').toString().toLowerCase().includes(address.toString().trim().toLowerCase()) )) return false;
+              if (category && !(c.category||'').toString().trim().toLowerCase() === category.toString().trim().toLowerCase()) return false;
+              if (variety && !(c.variety||'').toString().trim().toLowerCase() === variety.toString().trim().toLowerCase()) return false;
               return true;
             } catch (e) { return true; }
           });
-          setResults(farmers);
-          setFarmersSource(farmers);
+          setResults(crops);
+          setFarmersSource([]); // not needed
         } else {
           setError((j && j.error) || 'No results');
         }
@@ -158,13 +158,13 @@ function BuyerSearchBox() {
     (async () => {
       try {
         const base = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
-        const res = await fetch(`${base}/farmers/search`);
+        const res = await fetch(`${base}/my-crops/list`);
         if (!res || !res.ok) return;
         const j = await res.json().catch(() => null);
-        if (!j || !j.ok || !Array.isArray(j.farmers)) return;
-        const farmers = j.farmers || [];
-        // setResults(farmers); // Removed to not display cards initially
-        setFarmersSource(farmers);
+        if (!j || !j.ok || !Array.isArray(j.crops)) return;
+        const crops = j.crops || [];
+        // setResults(crops); // Removed to not display cards initially
+        setCropsSource(crops);
       } catch (e) {}
     })();
   }, []);
@@ -576,27 +576,10 @@ function BuyerSearchBox() {
             {error && <div style={{color:'crimson'}}>{error}</div>}
           </div>
 
-          <div style={{display:'grid', gridTemplateColumns:'repeat(4, minmax(240px, 1fr))', gap:16, marginTop:12}}>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(240px, 1fr))', gap:16, marginTop:12}}>
             {Array.isArray(results) && results.length ? (
               (() => {
-                const crops = [];
-                if (Array.isArray(results) && results.length) {
-                  results.forEach(f => {
-                    if (Array.isArray(f.crop_samples)) {
-                      f.crop_samples.forEach(c => {
-                        const farmerName = (c && (c._farmer_name || c.farmer_name || c.seller_name || c.seller || c.uploader_name)) || f.name || '';
-                        const farmerPhone = (c && (c._farmer_phone || c.seller_phone || c.phone)) || f.phone || '';
-                        crops.push({ ...c, _farmer_name: farmerName, _farmer_phone: farmerPhone, _farmer_id: c.farmer_id || c.seller_id || f.id, _farmer_region: c.region || f.region, _farmer_state: c.state || f.state });
-                      });
-                    }
-                  });
-                } else {
-                  (cropsSource || []).forEach(c => {
-                    const farmerName = (c && (c._farmer_name || c.farmer_name || c.seller_name || c.seller || c.uploader_name)) || '';
-                    const farmerPhone = (c && (c._farmer_phone || c.seller_phone || c.phone)) || '';
-                    crops.push({ ...c, _farmer_name: farmerName, _farmer_phone: farmerPhone, _farmer_id: c.farmer_id || c.seller_id || c.id, _farmer_region: c.region, _farmer_state: c.state });
-                  });
-                }
+                const crops = results;
 
                 if (!crops.length) return <div style={{gridColumn: '1/-1', color:'#000000ff'}}>{t('noRecentListings', lang)}</div>;
 
@@ -606,15 +589,15 @@ function BuyerSearchBox() {
                 const selectionFiltered = crops.filter(ci => {
                   try {
                     if (region) {
-                      const r = (ci._farmer_region || ci.region || '').toString().trim().toLowerCase();
+                      const r = (ci.region || '').toString().trim().toLowerCase();
                       if (r !== region.toString().trim().toLowerCase()) return false;
                     }
                     if (state) {
-                      const s = (ci._farmer_state || ci.state || '').toString().trim().toLowerCase();
+                      const s = (ci.state || '').toString().trim().toLowerCase();
                       if (s !== state.toString().trim().toLowerCase()) return false;
                     }
                     if (address) {
-                      const a = (ci._farmer_address || ci.address || ci.seller_address || '').toString().trim().toLowerCase();
+                      const a = (ci.address || ci.seller_address || '').toString().trim().toLowerCase();
                       if (!a.includes(address.toString().trim().toLowerCase())) return false;
                     }
                     if (category) {
@@ -678,20 +661,22 @@ function BuyerSearchBox() {
                         transition:'transform 0.3s ease',
                       }}
                     >
-                      {c.image_path ? (
-                        <img 
-                          src={`${process.env.REACT_APP_API_BASE || 'http://localhost:5000'}/images/${c.image_path}`} 
-                          alt={c.crop_name} 
-                          style={{
-                            width:'100%',
-                            height:'100%',
-                            objectFit:'cover',
-                            transition:'transform 0.4s ease',
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                        />
-                      ) : <div style={{color:'#999'}}>{t('noImage', lang)}</div>}
+                      <img 
+                        src={c.image_url} 
+                        alt={c.crop_name} 
+                        style={{
+                          width:'100%',
+                          height:'100%',
+                          objectFit:'cover',
+                          transition:'transform 0.4s ease',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentNode.innerHTML = '<div style="color:#999">' + t('noImage', lang) + '</div>';
+                        }}
+                      />
                     </div>
 
                     <div style={{marginTop:8, fontWeight:800, color:'#236902', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
@@ -704,12 +689,12 @@ function BuyerSearchBox() {
                       <div style={{fontSize:14, fontWeight:700, color:'#000'}}>₹{Number(c.price_per_kg || 0).toLocaleString(localeFor(lang))} / {t('kg', lang)}</div>
                     </div>
 
-                    <div style={{marginTop:8, fontSize:12, color:'#000000ff'}}>{c._farmer_name ? `${t('farmerPrefix', lang)}: ${c._farmer_name}` : ''}</div>
+                    <div style={{marginTop:8, fontSize:12, color:'#000000ff'}}>{c.farmer_name || c.seller_name ? `${t('farmerPrefix', lang)}: ${c.farmer_name || c.seller_name}` : ''}</div>
 
                     {(() => {
-                      const addr = (c && (c._farmer_address || c.address || c.seller_address)) || '';
-                      const state = (c && (c._farmer_state || c.state)) || '';
-                      const region = (c && (c._farmer_region || c.region)) || '';
+                      const addr = (c && (c.address || c.seller_address)) || '';
+                      const state = (c && (c.state)) || '';
+                      const region = (c && (c.region)) || '';
                       const parts = [];
                       if (addr) parts.push(`${t('addressPrefix', lang)}: ${addr}`);
                       if (state) parts.push(translateOption('state', state, lang));
@@ -728,11 +713,11 @@ function BuyerSearchBox() {
                             const cartKey = role === 'farmer' ? 'agriai_cart_farmer' : 'agriai_cart_buyer';
                             const raw = localStorage.getItem(cartKey);
                             let arr = raw ? JSON.parse(raw) : [];
-                            const seller_addr = (c && (c._farmer_address || c.address || c.seller_address)) || '';
-                            const seller_email = (c && (c.seller_email || c.email || c._farmer_email)) || '';
-                            const seller_region = (c && (c._farmer_region || c.region || c.seller_region)) || '';
-                            const seller_state = (c && (c._farmer_state || c.state || c.seller_state)) || '';
-                            const item = { id: c.id, crop_name: c.crop_name, price_per_kg: c.price_per_kg, quantity_kg: c.quantity_kg, image_url: c.image_path, seller_name: c._farmer_name, seller_phone: c._farmer_phone, seller_address: seller_addr, seller_email: seller_email, seller_region: seller_region, seller_state: seller_state, category: c.category || c.cat || '', variety: c.variety || '' };
+                            const seller_addr = (c && (c.address || c.seller_address)) || '';
+                            const seller_email = (c && (c.seller_email || c.email)) || '';
+                            const seller_region = (c && (c.region || c.seller_region)) || '';
+                            const seller_state = (c && (c.state || c.seller_state)) || '';
+                            const item = { id: c.id, crop_name: c.crop_name, price_per_kg: c.price_per_kg, quantity_kg: c.quantity_kg, image_url: c.image_path, seller_name: c.farmer_name || c.seller_name, seller_phone: c.farmer_phone || c.seller_phone, seller_address: seller_addr, seller_email: seller_email, seller_region: seller_region, seller_state: seller_state, category: c.category || c.cat || '', variety: c.variety || '' };
                             if (!arr.find(x => x && x.id === item.id)) arr.push(item);
                             localStorage.setItem(cartKey, JSON.stringify(arr));
 

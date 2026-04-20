@@ -359,7 +359,7 @@ function BuyerSearchBox() {
     {error && <div style={{ color: 'crimson' }}>{error}</div>}
   </div>
 
-  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))', gap: 16, marginTop: 12 }}>
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 240px)', gap: 16, marginTop: 12 }}>
     {Array.isArray(results) && results.length ? (
       (() => {
         const crops = [];
