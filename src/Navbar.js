@@ -59,6 +59,12 @@ const Navbar = () => {
   const [farmerNameVerified, setFarmerNameVerified] = React.useState('');
   const [farmerDateVerified, setFarmerDateVerified] = React.useState('');
 
+  // Negotiation modal state
+  const [showNegotiateModal, setShowNegotiateModal] = React.useState(false);
+  const [negotiatePrice, setNegotiatePrice] = React.useState('');
+  const [negotiateDate, setNegotiateDate] = React.useState('');
+  const [negotiationSubmitted, setNegotiationSubmitted] = React.useState(false);
+
   React.useEffect(() => {
     if (showContractModal && currentContractNotification) {
       (async () => {
@@ -75,6 +81,7 @@ const Navbar = () => {
       setContractSignatureDate('');
       setFarmerNameVerified('');
       setFarmerDateVerified('');
+      setNegotiationSubmitted(false);
     }
   }, [showContractModal]);
 
@@ -203,10 +210,10 @@ const Navbar = () => {
         const j = await res.json();
         if (j && j.ok && Array.isArray(j.notifications)) {
           // Count only unread contracts from backend (read column in contract_b)
-          // For farmers, exclude contracts with status 'accepted'
+          // For farmers, count both pending and negotiated statuses
           const unreadCount = j.notifications.filter(n => {
             if (!(n && Number(n.is_read))) {
-              if (userRole === 'farmer' && n.status && (n.status).toLowerCase() === 'accepted') {
+              if (userRole === 'farmer' && n.status && !['pending', 'negotiated'].includes((n.status).toLowerCase())) {
                 return false;
               }
               return true;
@@ -268,10 +275,13 @@ const Navbar = () => {
         try { 
           const filteredNotifs = Array.isArray(notifs) 
             ? notifs.filter(x => {
-                // For farmers and buyers, exclude notifications with status 'accepted'
-                if ((userRole === 'farmer' || userRole === 'buyer') && x.status && (x.status).toLowerCase() === 'accepted') {
-                  return false;
+                // For farmers, show both pending and negotiated statuses
+                if (userRole === 'farmer') {
+                  if (x.status && !['pending', 'negotiated'].includes((x.status).toLowerCase())) {
+                    return false;
+                  }
                 }
+                // For buyers, show all since backend already filtered
                 return !(x && Number(x.is_read));
               })
             : [];
@@ -573,6 +583,222 @@ const Navbar = () => {
       setOtpVerified(false);
     }
   };
+  // submit negotiation to backend
+  const submitNegotiation = async () => {
+    if (!currentContractNotification) {
+      console.error('No current contract notification');
+      alert('No contract selected. Please try again.');
+      return;
+    }
+    const contractNumber = currentContractNotification.contract_number;
+    if (!contractNumber) {
+      console.error('No contract number in currentContractNotification:', currentContractNotification);
+      alert('Contract number not found. Please try again.');
+      return;
+    }
+    
+    // Validate inputs - at least one of price or date must be provided
+    const hasValidPrice = negotiatePrice && !isNaN(parseFloat(negotiatePrice)) && parseFloat(negotiatePrice) > 0;
+    const hasValidDate = negotiateDate && negotiateDate.trim() !== '';
+    
+    if (!hasValidPrice && !hasValidDate) {
+      alert('Please enter a valid price or select a delivery date.');
+      return;
+    }
+    
+    if (hasValidPrice && (isNaN(parseFloat(negotiatePrice)) || parseFloat(negotiatePrice) <= 0)) {
+      alert('Please enter a valid price greater than 0.');
+      return;
+    }
+    
+    if (!userRole || (userRole !== 'farmer' && userRole !== 'buyer')) {
+      console.error('Invalid user role:', userRole);
+      alert('User role not found. Please log in again.');
+      return;
+    }
+    
+    if (!userId || isNaN(parseInt(userId))) {
+      console.error('Invalid user ID:', userId);
+      alert('User ID not found. Please log in again.');
+      return;
+    }
+    
+    console.log('Submitting negotiation for contract:', contractNumber);
+    console.log('Current user role:', userRole);
+    console.log('Current user ID:', userId);
+    console.log('Negotiate price:', negotiatePrice);
+    console.log('Negotiate date:', negotiateDate);
+    
+    try {
+      const payload = {
+        contract_number: contractNumber,
+        negotiated_price_per_kg: parseFloat(negotiatePrice),
+        negotiated_delivery_date: negotiateDate,
+        user_role: userRole,
+        user_id: parseInt(userId)
+      };
+      
+      console.log('Sending payload:', payload);
+      
+      const res = await fetch(`${apiBase}/contracts/negotiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      console.log('Response status:', res.status);
+      const responseText = await res.text();
+      console.log('Response text:', responseText);
+      
+      if (res.ok) {
+        // Calculate new financial values based on negotiated price using FIXED RATES
+        const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+        const newPrice = negotiatePrice ? parseFloat(negotiatePrice) : (currentContractNotification.price_per_kg || 0);
+        const qty = currentContractNotification.quantity_kg || 0;
+        const newSubtotal = round2(qty * newPrice);
+        
+        // Fixed rates: 4% farmer, 5% buyer
+        const newFarmerFee = round2(newSubtotal * 0.04);
+        const newFarmerGst = round2(newFarmerFee * 0.18);
+        const newFarmerTotal = round2(newSubtotal - newFarmerFee - newFarmerGst);
+        
+        const newBuyerFee = round2(newSubtotal * 0.05);
+        const newBuyerGst = round2(newBuyerFee * 0.18);
+        const newBuyerTotal = round2(newSubtotal + newBuyerFee + newBuyerGst);
+        
+        // Update the currentContractNotification with all recalculated values
+        const updatedContract = {
+          ...currentContractNotification,
+          price_per_kg: newPrice,
+          end_date: negotiateDate || currentContractNotification.end_date,
+          status: 'negotiated',
+          // Standard fields
+          amount: newSubtotal,
+          total_amount: newSubtotal,
+          // Buyer side calculations with fixed 5% rate
+          buyer_platform_fee: newBuyerFee,
+          buyer_gst: newBuyerGst,
+          buyer_total: newBuyerTotal,
+          // Farmer side calculations with fixed 4% rate
+          farmer_platform_fee: newFarmerFee,
+          farmer_gst: newFarmerGst,
+          farmer_total: newFarmerTotal
+        };
+        
+        setCurrentContractNotification(updatedContract);
+        
+        // Regenerate the contract HTML with updated values
+        await generateContractHtml(updatedContract);
+        
+        // Close the negotiation modal and show updated contract
+        setShowNegotiateModal(false);
+        setNegotiatePrice('');
+        setNegotiateDate('');
+        setNegotiationSubmitted(true);
+        
+        // Show success message
+        alert((t('negotiationSubmittedSuccess', siteLang) || 'Negotiation submitted successfully. Contract has been updated.'));
+        
+        // Dispatch event to refresh notifications
+        try {
+          window.dispatchEvent(new Event('agriai:notifications:update'));
+          window.dispatchEvent(new Event('agriai:contracts:saved'));
+        } catch (e) {}
+      } else {
+        console.error('Failed response:', responseText);
+        alert('Failed to submit negotiation. Please try again.');
+      }
+    } catch (e) {
+      console.error('Error submitting negotiation:', e);
+      alert('Error submitting negotiation. Please try again.');
+    }
+  };
+
+  // handle sending finalized negotiation to the other party
+  const handleSendNegotiation = async () => {
+    if (!currentContractNotification) return;
+    
+    console.log('Sending negotiation for contract:', currentContractNotification.contract_number);
+    console.log('Current contract notification:', currentContractNotification);
+    
+    try {
+      // Recalculate all financial values based on negotiated price
+      const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+      const negotiatedPrice = currentContractNotification.price_per_kg;
+      const quantity = currentContractNotification.quantity_kg || 0;
+      const newSubtotal = round2(quantity * negotiatedPrice);
+      
+      console.log('Negotiation values:', {
+        negotiatedPrice,
+        quantity,
+        newSubtotal
+      });
+      
+      // Farmer: 4% platform fee + 18% GST
+      const farmerFee = round2(newSubtotal * 0.04);
+      const farmerGst = round2(farmerFee * 0.18);
+      const farmerTotal = round2(newSubtotal - farmerFee - farmerGst);
+      
+      // Buyer: 5% platform fee + 18% GST
+      const buyerFee = round2(newSubtotal * 0.05);
+      const buyerGst = round2(buyerFee * 0.18);
+      const buyerTotal = round2(newSubtotal + buyerFee + buyerGst);
+      
+      const payload = {
+        contract_number: currentContractNotification.contract_number,
+        user_id: userId,
+        user_role: userRole,
+        negotiated_price_per_kg: negotiatedPrice,
+        negotiated_delivery_date: currentContractNotification.end_date,
+        negotiated_subtotal: newSubtotal,
+        farmer_platform_fee: farmerFee,
+        farmer_gst: farmerGst,
+        farmer_total: farmerTotal,
+        buyer_platform_fee: buyerFee,
+        buyer_gst: buyerGst,
+        buyer_total: buyerTotal
+      };
+      
+      console.log('Sending payload:', payload);
+      
+      // Send negotiation confirmation to backend
+      const res = await fetch(`${apiBase}/contracts/send-negotiation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      console.log('Response status:', res.status);
+      
+      const responseText = await res.text();
+      console.log('Response text:', responseText);
+      
+      let responseJson = null;
+      try {
+        responseJson = JSON.parse(responseText);
+      } catch (e) {}
+      
+      if (res.ok) {
+        alert((t('negotiationSentSuccess', siteLang) || 'Negotiation sent successfully. Contract updated in database.'));
+        setNegotiationSubmitted(false);
+        setShowContractModal(false);
+        
+        // Dispatch event to refresh notifications
+        try {
+          window.dispatchEvent(new Event('agriai:notifications:update'));
+          window.dispatchEvent(new Event('agriai:contracts:saved'));
+        } catch (e) {}
+      } else {
+        console.error('Backend error:', responseJson);
+        const errorMsg = responseJson?.error || responseText || 'Unknown error';
+        alert(`Failed to send negotiation: ${errorMsg}`);
+      }
+    } catch (e) {
+      console.error('Error sending negotiation:', e);
+      alert('Error sending negotiation. Please check console for details.');
+    }
+  };
+
   // handle buyer/farmer actions on viewed contract (accept, negotiate, reject) - UNIFIED LOGIC FOR BOTH ROLES
   const handleContractAction = async (action) => {
     if (!currentContractNotification) return;
@@ -581,7 +807,7 @@ const Navbar = () => {
     // Handle negotiate action - same for both buyer and farmer
     if (action === 'negotiate') {
       console.log('Contract negotiation:', currentContractNotification);
-      setShowContractModal(false);
+      setShowNegotiateModal(true);
       return;
     }
     
@@ -674,25 +900,44 @@ const Navbar = () => {
       let rawEndDate = meta.endDate || notification.end_date || dbContract.end_date || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
       const startDate = formatDateDDMMYYYY(rawStartDate);
       const endDate = formatDateDDMMYYYY(rawEndDate);
-      const days = meta.days || notification.duration || dbContract.duration || 30;
+      
+      // Calculate days based on start and end dates
+      let days = 30; // default
+      try {
+        const startDateObj = new Date(rawStartDate);
+        const endDateObj = new Date(rawEndDate);
+        if (!isNaN(startDateObj) && !isNaN(endDateObj)) {
+          const timeDiff = endDateObj.getTime() - startDateObj.getTime();
+          days = Math.max(1, Math.ceil(timeDiff / (1000 * 3600 * 24))); // Calculate days, minimum 1 day
+        }
+      } catch (e) {
+        days = meta.days || notification.duration || dbContract.duration || 30;
+      }
       const totalContractQty = meta.totalContractQty || notification.quantity_kg || dbContract.quantity_kg || dbContract.total_quantity || 0;
       const totalCropTradeValue = meta.totalCropTradeValue || notification.amount || dbContract.amount || 0;
       const avgPricePerKg = meta.avgPricePerKg || notification.price_per_kg || dbContract.price_per_kg || 0;
-      const displayFarmerCommission = notification.farmer_platform_fee || dbContract.farmer_platform_fee || meta.farmer_platform_fee || 0;
-      const displayFarmerGst = notification.farmer_gst || dbContract.farmer_gst || meta.farmer_gst_on_fee || 0;
-      const displayNetAmountToFarmer = notification.net_amount_payable_to_farmer || dbContract.net_amount_payable_to_farmer || dbContract.farmer_total || (totalCropTradeValue - displayFarmerCommission - displayFarmerGst) || 0;
-      const displayBuyerCommission = notification.buyer_platform_fee || dbContract.buyer_platform_fee || meta.buyer_platform_fee || 0;
-      const displayBuyerGst = notification.buyer_gst || dbContract.buyer_gst || meta.buyer_gst_on_fee || 0;
+      
+      // Recalculate platform fees based on fixed rates: 4% for farmer, 5% for buyer
+      const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+      const farmerPlatformFee = round2(totalCropTradeValue * 0.04);
+      const farmerGst = round2(farmerPlatformFee * 0.18);
+      const buyerPlatformFee = round2(totalCropTradeValue * 0.05);
+      const buyerGst = round2(buyerPlatformFee * 0.18);
+      
+      const displayFarmerCommission = farmerPlatformFee;
+      const displayFarmerGst = farmerGst;
+      const displayNetAmountToFarmer = round2(totalCropTradeValue - farmerPlatformFee - farmerGst);
+      const displayBuyerCommission = buyerPlatformFee;
+      const displayBuyerGst = buyerGst;
       
       // Define missing financial variables for English contract template
       const totalPlatformFee = Number(displayFarmerCommission || 0);
       const totalGst = Number(displayFarmerGst || 0);
       const totalAmountInvoice = Number(displayNetAmountToFarmer || 0);
-      const buyerPlatformFee = Number(displayBuyerCommission || 0);
-      const buyerGst = Number(displayBuyerGst || 0);
       
-      const buyerFeeTotal = (displayBuyerCommission || 0) + (displayBuyerGst || 0);
-      const buyerTotalAmount = (dbContract.buyer_total != null ? Number(dbContract.buyer_total) : (totalCropTradeValue + buyerFeeTotal));
+      // Buyer total: Subtotal + (5% platform fee) + (18% GST on fee)
+      const buyerFeeTotal = round2((displayBuyerCommission || 0) + (displayBuyerGst || 0));
+      const buyerTotalAmount = round2(Number(totalCropTradeValue || 0) + buyerFeeTotal);
       const deliveryRateDisplay = meta.deliveryRateDisplay || '₹-- / km';
       const labourCharge = meta.labourCharge || dbContract.labour_charge || 0;
       const qtyKg = meta.qtyKg || totalContractQty || 0;
@@ -729,8 +974,9 @@ const Navbar = () => {
 
       const rowsHtml = items.map((it, idx) => {
         const qty = Number(it.order_quantity || 0);
-        const price = Number(it.price_per_kg || 0);
-        const amount = Math.round((qty * price + Number.EPSILON) * 100) / 100;
+        // Use avgPricePerKg (negotiated price) instead of original item price
+        const price = Number(avgPricePerKg) || Number(it.price_per_kg || 0);
+        const amount = round2(qty * price);
         const varietyVal = it.variety || it.var || it.variety_name || it.varity || dbContract.variety || '';
         return `<tr>
           <td style="padding:8px;border:1px solid #ddd;text-align:center">${idx + 1}</td>
@@ -2435,13 +2681,13 @@ const Navbar = () => {
                   <div style={{display:'flex', gap:8}}>
                     <button onClick={async ()=>{
                       try {
-                        // Collect unread ids and prepare user info
-                        const unreadIds = (Array.isArray(notifList) ? notifList.filter(x => !(x && Number(x.is_read))) : []).map(x => x && x.id).filter(Boolean);
-                        // Send user role and ID along with ids to mark
+                        // Collect unread contract_numbers and prepare user info
+                        const unreadContractNumbers = (Array.isArray(notifList) ? notifList.filter(x => !(x && Number(x.is_read))) : []).map(x => x && x.contract_number).filter(Boolean);
+                        // Send user role and ID along with contract_numbers to mark
                         const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
-                        if (unreadIds.length) {
+                        if (unreadContractNumbers.length) {
                           try {
-                            const payload = { ids: unreadIds };
+                            const payload = { contract_numbers: unreadContractNumbers };
                             // Add user identifier based on role
                             if (userRole === 'buyer') {
                               payload.buyer_id = userId;
@@ -2471,10 +2717,15 @@ const Navbar = () => {
                     </div>
                   )}
                   {Array.isArray(notifList) && notifList.filter(n => {
-                    // Exclude notifications with status 'accepted' for both farmers and buyers
-                    if (n.status && (n.status).toLowerCase() === 'accepted') {
+                    // For farmers: show pending and negotiated status contracts
+                    if (userRole === 'farmer') {
+                      if (n.status && ['pending', 'negotiated'].includes((n.status).toLowerCase())) {
+                        return true;
+                      }
                       return false;
                     }
+                    // For buyers: show all from contracts table + negotiated from contract_b
+                    // Since backend already filters, just return true for both
                     return true;
                   }).map(n => {
                     // Extract items early so it's available everywhere in this closure
@@ -2575,6 +2826,7 @@ const Navbar = () => {
                                   const s = String(n.status || 'pending').toLowerCase();
                                   if (s === 'accepted') return '#2e7d32';
                                   if (s === 'pending') return '#fdd835';
+                                  if (s === 'negotiated') return '#fdd835';
                                   if (s === 'rejected') return '#c62828';
                                   return '#ccc';
                                 })(),
@@ -2586,7 +2838,7 @@ const Navbar = () => {
                                 fontSize: 12,
                                 lineHeight: 1
                               }}>
-                                {t(n.status || 'pending', siteLang) || (n.status || 'pending')}
+                                {t(String(n.status || 'pending').toLowerCase(), siteLang) || (n.status || 'pending')}
                               </button>
                             </div>
                           </div>
@@ -2727,6 +2979,15 @@ const Navbar = () => {
               style={{padding:'8px 20px', background:'#ffc107', color:'#000', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
               {t('contractNegotiate', siteLang) || 'Negotiate'}
             </button>
+            {negotiationSubmitted && (
+              <button 
+                onClick={handleSendNegotiation}
+                onMouseEnter={(e) => { e.target.style.background='#0056b3'; e.target.style.transform='scale(1.02)'; }}
+                onMouseLeave={(e) => { e.target.style.background='#007bff'; e.target.style.transform='scale(1)'; }}
+                style={{padding:'8px 20px', background:'#007bff', color:'#fff', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
+                {t('sendNegotiation', siteLang) || 'Send Negotiation'}
+              </button>
+            )}
             <button 
               onClick={() => {
                 if (window.confirm(t('confirmRejectContract', siteLang) || 'Are you sure you want to reject this contract?')) {
@@ -2923,6 +3184,86 @@ const Navbar = () => {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    )}
+    {/* Negotiation Modal */}
+    {showNegotiateModal && (
+      <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10001, padding:'20px'}}>
+        <div style={{width:'100%', maxWidth:'500px', background:'#fff', borderRadius:'12px', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden'}}>
+          <div style={{padding:'20px 24px', borderBottom:'1px solid #e5e5e5', background:'#f9f9f9'}}>
+            <h2 style={{margin:0, color:'#236902', fontSize:'18px', fontWeight:700, textAlign:'center'}}>{t('negotiateContract', siteLang) || 'Negotiate Contract'}</h2>
+          </div>
+          <div style={{padding:'24px'}}>
+            <div style={{marginBottom:'16px'}}>
+              <label style={{display:'block', marginBottom:'8px', fontWeight:600, color:'#236902'}}>
+                {t('pricePerKg', siteLang) || 'Price Per Kg (₹)'} <span style={{color:'#d32f2f'}}>*</span>
+              </label>
+              <input
+                type="number"
+                value={negotiatePrice}
+                onChange={(e) => setNegotiatePrice(e.target.value)}
+                placeholder={t('pricePlaceholder', siteLang) || 'e.g. 50'}
+                style={{width:'100%', padding:'10px', border: negotiatePrice ? '1px solid #236902' : '1px solid #ddd', borderRadius:'6px', fontSize:'14px'}}
+              />
+            </div>
+            <div style={{marginBottom:'16px'}}>
+              <label style={{display:'block', marginBottom:'8px', fontWeight:600, color:'#236902'}}>
+                {t('deliveryDate', siteLang) || 'Delivery Date'} <span style={{color:'#d32f2f'}}>*</span>
+              </label>
+              <input
+                type="date"
+                value={negotiateDate}
+                onChange={(e) => setNegotiateDate(e.target.value)}
+                placeholder={t('datePlaceholder', siteLang) || 'dd-mm-yyyy'}
+                style={{width:'100%', padding:'10px', border: negotiateDate ? '1px solid #236902' : '1px solid #ddd', borderRadius:'6px', fontSize:'14px'}}
+              />
+            </div>
+            <div style={{marginBottom:'12px', fontSize:'13px', color:'#666', textAlign:'center'}}>
+              {!negotiatePrice || !negotiateDate ? <span style={{color:'#d32f2f'}}>⚠ Both fields are required</span> : <span style={{color:'#236902'}}>✓ Ready to submit</span>}
+            </div>
+            <div style={{display:'flex', gap:'12px', justifyContent:'center'}}>
+              <button
+                onClick={submitNegotiation}
+                disabled={!negotiatePrice || !negotiateDate}
+                style={{
+                  padding:'10px 20px',
+                  background: (!negotiatePrice || !negotiateDate) ? '#ccc' : '#236902',
+                  color:'#fff',
+                  border:'none',
+                  borderRadius:'6px',
+                  fontWeight:600,
+                  cursor: (!negotiatePrice || !negotiateDate) ? 'not-allowed' : 'pointer',
+                  opacity: (!negotiatePrice || !negotiateDate) ? 0.6 : 1,
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (negotiatePrice && negotiateDate) {
+                    e.target.style.background = '#1a5c10';
+                    e.target.style.transform = 'scale(1.02)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (negotiatePrice && negotiateDate) {
+                    e.target.style.background = '#236902';
+                    e.target.style.transform = 'scale(1)';
+                  }
+                }}
+              >
+                {t('submit', siteLang) || 'Submit'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowNegotiateModal(false);
+                  setNegotiatePrice('');
+                  setNegotiateDate('');
+                }}
+                style={{padding:'10px 20px', background:'#ddd', color:'#000', border:'none', borderRadius:'6px', fontWeight:600, cursor:'pointer'}}
+              >
+                {t('cancel', siteLang) || 'Cancel'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     )}

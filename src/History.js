@@ -1795,8 +1795,8 @@ export default function History() {
                         >
                           🖨️
                         </button>
-                        {( ((o._db_contract && String(o._db_contract.status).toLowerCase() === 'pending')
-                             || String(o.status || '').toLowerCase() === 'pending') && (
+                        {( ((o._db_contract && (String(o._db_contract.status).toLowerCase() === 'pending' || String(o._db_contract.status).toLowerCase() === 'negotiated'))
+                             || (String(o.status || '').toLowerCase() === 'pending' || String(o.status || '').toLowerCase() === 'negotiated')) && (
                           <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'rgba(198,40,40,0.1)', color: '#c62828', border: '1px solid rgba(198,40,40,0.3)', padding: '8px 12px', borderRadius: 10, marginLeft: 6, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, transition: 'all 0.2s' }}>{'🗑️'}</button>
                         ))}
                       </div>

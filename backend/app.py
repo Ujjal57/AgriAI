@@ -2413,6 +2413,64 @@ def ensure_cart_table():
             pass
 
 
+def ensure_negotiate_table():
+    """Ensure the negotiate table exists in MySQL (primary) or SQLite (fallback)."""
+    use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
+    if use_mysql:
+        try:
+            cfg = {
+                'host': os.environ.get('DB_HOST', 'localhost'),
+                'port': int(os.environ.get('DB_PORT', '3306')),
+                'user': os.environ.get('DB_USER', 'root'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'agri_ai'),
+            }
+            conn = mysql.connect(**cfg)
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS negotiate (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    contract_number VARCHAR(100) NOT NULL UNIQUE,
+                    sign_in VARCHAR(50) NOT NULL,
+                    price DECIMAL(12,3) NULL,
+                    delivery_date DATE NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    INDEX idx_negotiate_sign_in (sign_in)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ''')
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception as e:
+            print('ensure_negotiate_table mysql error:', e)
+    else:
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'users.sqlite3')
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS negotiate (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    contract_number TEXT NOT NULL UNIQUE,
+                    sign_in TEXT NOT NULL,
+                    price REAL NULL,
+                    delivery_date DATE NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+            try: cur.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
+        except Exception as e:
+            print('ensure_negotiate_table sqlite error:', e)
+
+
 def notify_expired_crops_once():
     """Run one pass: find crops whose expiry_date < today and which have not been notified yet.
     Send the expiry email (if an email can be resolved) and record the notification to avoid duplicates.
@@ -3099,44 +3157,55 @@ def list_purchase_notifications():
                 # For buyers, fetch from contracts table
                 where = []
                 params = []
+            if buyer_id_q:
+                # For buyers, fetch from contracts table (all statuses) + contract_b where status is "Negotiated"
+                buyer_where = []
+                buyer_params = []
                 if buyer_id_q:
-                    where.append('buyer_id=%s'); params.append(int(buyer_id_q) if buyer_id_q.isdigit() else buyer_id_q)
-                # Fetch from contracts table
+                    buyer_where.append('buyer_id=%s'); buyer_params.append(int(buyer_id_q) if buyer_id_q.isdigit() else buyer_id_q)
+                
                 # Ensure is_read column exists in contracts table
                 try:
                     cur.execute("ALTER TABLE contracts ADD COLUMN is_read INT DEFAULT 0")
                     conn.commit()
                 except:
-                    pass  # Column probably already exists
+                    pass
                 
-                sql = 'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts'
-                where.append("status NOT IN ('rejected', 'declined', 'cancelled')")
-                if where:
-                    sql += ' WHERE ' + ' AND '.join(where)
-                sql += ' ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
+                # Fetch PENDING and NEGOTIATED contracts from contracts table
+                buyer_where_clause = " AND ".join(buyer_where) if buyer_where else "1=1"
+                sql_contracts = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts WHERE {buyer_where_clause} AND status IN ("pending", "Negotiated") ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
+                
+                # Fetch from contract_b where status is "Negotiated"
+                sql_contract_b = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, COALESCE(created_at, updated_at) as created_at, COALESCE(`read`, 0) as is_read FROM contract_b WHERE {buyer_where_clause} AND status = "Negotiated" ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
                 
                 # Debug logging
                 try:
                     with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                        f.write(f"  BUYER SQL: {sql} PARAMS: {params}\n")
+                        f.write(f"  BUYER SQL_CONTRACTS: {sql_contracts} PARAMS: {buyer_params}\n")
+                        f.write(f"  BUYER SQL_CONTRACT_B: {sql_contract_b}\n")
                 except:
                     pass
                 
-                cur.execute(sql, tuple(params))
-                rows = cur.fetchall()
+                # Fetch from contracts table (all)
+                cur.execute(sql_contracts, tuple(buyer_params))
+                rows_contracts = cur.fetchall()
+                
+                # Fetch from contract_b (negotiated only)
+                cur.execute(sql_contract_b, tuple(buyer_params))
+                rows_contract_b = cur.fetchall()
                 
                 # Debug logging
                 try:
                     with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                        f.write(f"  BUYER ROWS_COUNT: {len(rows)}\n")
+                        f.write(f"  BUYER ROWS_CONTRACTS: {len(rows_contracts)}, ROWS_CONTRACT_B (Negotiated): {len(rows_contract_b)}\n")
                 except:
                     pass
                 
-                # normalize
-                for r in rows:
+                # Process contracts table (all statuses)
+                for r in rows_contracts:
                     if isinstance(r, dict):
                         results.append({
-                            'id': r.get('contract_number'),  # Use contract_number as id for buyers
+                            'id': r.get('contract_number'),
                             'contract_number': r.get('contract_number'),
                             'farmer_id': r.get('farmer_id'),
                             'farmer_name': r.get('farmer_name'),
@@ -3164,12 +3233,54 @@ def list_purchase_notifications():
                             'buyer_total': r.get('buyer_total', 0)
                         })
                     else:
-                        # Handle tuple case
                         results.append({
-                            'id': r[0], 'contract_number': r[0], 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[4], 'variety': r[5], 'quantity_kg': r[6],
-                            'price_per_kg': r[7], 'amount': r[8], 'buyer_name': r[9], 'buyer_id': r[10], 'buyer_state': r[11], 'created_at': r[24], 'start_date': r[21], 'end_date': r[22],
-                            'contract_nature': r[19], 'contract_duration': r[20], 'farmer_platform_fee': r[9], 'farmer_gst': r[10], 'buyer_platform_fee': r[11], 'buyer_gst': r[12], 'status': r[18], 'is_read': r[25], 'farmer_total': r[17], 'buyer_total': r[16]
+                            'id': r[0], 'contract_number': r[0], 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9],
+                            'price_per_kg': r[10], 'amount': r[11], 'buyer_name': r[5], 'buyer_id': r[4], 'buyer_state': r[6], 'created_at': r[24], 'start_date': r[20], 'end_date': r[21],
+                            'contract_nature': r[22], 'contract_duration': r[23], 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15], 'status': r[19], 'is_read': r[25], 'farmer_total': r[17], 'buyer_total': r[16]
                         })
+                
+                # Process contract_b table (negotiated only) - avoid duplicates by contract_number
+                seen_contract_numbers = set(r.get('contract_number') if isinstance(r, dict) else r[0] for r in rows_contracts)
+                for r in rows_contract_b:
+                    if isinstance(r, dict):
+                        contract_num = r.get('contract_number')
+                        if contract_num not in seen_contract_numbers:
+                            results.append({
+                                'id': contract_num,
+                                'contract_number': contract_num,
+                                'farmer_id': r.get('farmer_id'),
+                                'farmer_name': r.get('farmer_name'),
+                                'farmer_state': r.get('farmer_state'),
+                                'crop_name': r.get('crop_name'),
+                                'variety': r.get('variety'),
+                                'quantity_kg': r.get('quantity_kg'),
+                                'price_per_kg': r.get('amount') / r.get('quantity_kg') if r.get('quantity_kg') else 0,
+                                'amount': r.get('amount'),
+                                'buyer_name': r.get('buyer_name'),
+                                'buyer_id': r.get('buyer_id'),
+                                'buyer_state': r.get('buyer_state'),
+                                'created_at': r.get('created_at'),
+                                'start_date': None,
+                                'end_date': None,
+                                'contract_nature': None,
+                                'contract_duration': None,
+                                'farmer_platform_fee': r.get('farmer_platform_fee'),
+                                'farmer_gst': r.get('farmer_gst'),
+                                'buyer_platform_fee': r.get('buyer_platform_fee'),
+                                'buyer_gst': r.get('buyer_gst'),
+                                'status': r.get('status'),
+                                'is_read': r.get('is_read', 0),
+                                'farmer_total': r.get('farmer_total', 0),
+                                'buyer_total': r.get('buyer_total', 0)
+                            })
+                    else:
+                        contract_num = r[0]
+                        if contract_num not in seen_contract_numbers:
+                            results.append({
+                                'id': contract_num, 'contract_number': contract_num, 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[8], 'variety': r[9], 'quantity_kg': r[10],
+                                'price_per_kg': r[11] / r[10] if r[10] else 0, 'amount': r[11], 'buyer_name': r[5], 'buyer_id': r[4], 'buyer_state': r[6], 'created_at': r[20], 'start_date': None, 'end_date': None,
+                                'contract_nature': None, 'contract_duration': None, 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15], 'status': r[18], 'is_read': r[21], 'farmer_total': r[17], 'buyer_total': r[16]
+                            })
             else:
                 # For farmers, existing logic for contract_b
                 # First check if table exists
@@ -3252,32 +3363,53 @@ def list_purchase_notifications():
                         where.append('farmer_id=%s'); params.append(int(farmer_id_q) if farmer_id_q.isdigit() else farmer_id_q)
                     if farmer_phone_q:
                         where.append('farmer_id IN (SELECT id FROM farmer WHERE phone=%s)'); params.append(farmer_phone_q)
-                    # Fetch ONLY from contract_b table with status filter
+                    
+                    # Fetch from contract_b table
                     sql = 'SELECT id, contract_number, farmer_id, farmer_name, farmer_address, farmer_state, crop_name, variety, quantity_kg, price_per_kg, amount, buyer_name, buyer_id, buyer_address, buyer_state, start_date, end_date, duration, contract_nature, contract_duration, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, status, COALESCE(`read`, 0) as is_read, sender, farmer_total FROM contract_b'
-                    where.append("status NOT IN ('rejected', 'declined', 'cancelled')")
-                    if where:
-                        sql += ' WHERE ' + ' AND '.join(where)
-                    sql += ' ORDER BY id DESC LIMIT 100'
+                    where_clause = " AND ".join(where) if where else "1=1"
+                    sql_contract_b = sql + f' WHERE {where_clause} AND status NOT IN ("rejected", "declined", "cancelled")'
+                    
+                    # Also fetch from contracts table where status is 'Negotiated'
+                    # Ensure is_read column exists in contracts table
+                    try:
+                        cur.execute("ALTER TABLE contracts ADD COLUMN is_read INT DEFAULT 0")
+                        conn.commit()
+                    except:
+                        pass
+                    
+                    sql_contracts = 'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts WHERE status = "Negotiated"'
+                    
+                    if farmer_id_q:
+                        sql_contracts += f' AND farmer_id={int(farmer_id_q) if farmer_id_q.isdigit() else farmer_id_q}'
+                    
+                    sql_contract_b += ' ORDER BY id DESC LIMIT 100'
+                    sql_contracts += ' ORDER BY created_at DESC LIMIT 100'
                     
                     # Debug logging
                     try:
                         with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                            f.write(f"  SQL: {sql} PARAMS: {params}\n")
+                            f.write(f"  SQL_CONTRACT_B: {sql_contract_b} PARAMS: {params}\n")
+                            f.write(f"  SQL_CONTRACTS: {sql_contracts}\n")
                     except:
                         pass
                     
-                    cur.execute(sql, tuple(params))
-                    rows = cur.fetchall()
+                    # Fetch from contract_b
+                    cur.execute(sql_contract_b, tuple(params))
+                    rows_contract_b = cur.fetchall()
+                    
+                    # Fetch from contracts where status is Negotiated
+                    cur.execute(sql_contracts)
+                    rows_contracts = cur.fetchall()
                     
                     # Debug logging
                     try:
                         with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                            f.write(f"  ROWS_COUNT: {len(rows)}\n")
+                            f.write(f"  ROWS_CONTRACT_B: {len(rows_contract_b)}, ROWS_CONTRACTS (Negotiated): {len(rows_contracts)}\n")
                     except:
                         pass
                     
-                    # normalize
-                    for r in rows:
+                    # Process contract_b rows
+                    for r in rows_contract_b:
                         if isinstance(r, dict):
                             results.append({
                                 'id': r.get('id'),
@@ -3316,6 +3448,54 @@ def list_purchase_notifications():
                                 'price_per_kg': r[9], 'amount': r[10], 'buyer_name': r[11], 'buyer_id': r[12], 'buyer_address': r[13], 'buyer_state': r[14], 'created_at': r[15], 'start_date': r[15], 'end_date': r[16], 'duration': r[17],
                                 'contract_nature': r[18], 'contract_duration': r[19], 'farmer_platform_fee': r[20], 'farmer_gst': r[21], 'buyer_platform_fee': r[22], 'buyer_gst': r[23], 'status': r[24], 'is_read': r[25], 'sender': r[26], 'farmer_total': r[27]
                             })
+                    
+                    # Process contracts rows (Negotiated status)
+                    seen_contract_numbers = set(r.get('contract_number') if isinstance(r, dict) else r[1] for r in rows_contract_b)
+                    for r in rows_contracts:
+                        if isinstance(r, dict):
+                            contract_num = r.get('contract_number')
+                            # Skip if already added from contract_b
+                            if contract_num not in seen_contract_numbers:
+                                results.append({
+                                    'id': contract_num,
+                                    'contract_number': contract_num,
+                                    'farmer_id': r.get('farmer_id'),
+                                    'farmer_name': r.get('farmer_name'),
+                                    'farmer_address': '',
+                                    'farmer_state': r.get('farmer_state'),
+                                    'crop_name': r.get('crop_name'),
+                                    'variety': r.get('variety'),
+                                    'quantity_kg': r.get('quantity_kg'),
+                                    'price_per_kg': r.get('price_per_kg'),
+                                    'amount': r.get('amount'),
+                                    'buyer_name': r.get('buyer_name'),
+                                    'buyer_id': r.get('buyer_id'),
+                                    'buyer_address': '',
+                                    'buyer_state': r.get('buyer_state'),
+                                    'created_at': r.get('created_at'),
+                                    'start_date': r.get('start_date'),
+                                    'end_date': r.get('end_date'),
+                                    'duration': 0,
+                                    'contract_nature': r.get('contract_nature'),
+                                    'contract_duration': r.get('contract_duration'),
+                                    'farmer_platform_fee': r.get('farmer_platform_fee'),
+                                    'farmer_gst': r.get('farmer_gst'),
+                                    'buyer_platform_fee': r.get('buyer_platform_fee'),
+                                    'buyer_gst': r.get('buyer_gst'),
+                                    'status': r.get('status'),
+                                    'sender': 'buyer',
+                                    'is_read': r.get('is_read', 0),
+                                    'farmer_total': r.get('farmer_total', 0)
+                                })
+                        else:
+                            contract_num = r[0]
+                            # Skip if already added from contract_b
+                            if contract_num not in seen_contract_numbers:
+                                results.append({
+                                    'id': contract_num, 'contract_number': contract_num, 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_address': '', 'farmer_state': r[3], 'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9],
+                                    'price_per_kg': r[10], 'amount': r[11], 'buyer_name': r[5], 'buyer_id': r[4], 'buyer_address': '', 'buyer_state': r[6], 'created_at': r[24], 'start_date': r[20], 'end_date': r[21], 'duration': 0,
+                                    'contract_nature': r[22], 'contract_duration': r[23], 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15], 'status': r[19], 'is_read': r[25], 'sender': 'buyer', 'farmer_total': r[17]
+                                })
             
             try: cur.close()
             except Exception: pass
@@ -3471,16 +3651,17 @@ def list_purchase_notifications():
 
 @app.route('/notifications/mark-read', methods=['POST'])
 def mark_notifications_read():
-    """Mark notifications/contracts as read based on user role. JSON: { ids: [...], user_role: 'buyer'|'farmer', buyer_id: ..., farmer_id: ... }"""
+    """Mark notifications/contracts as read based on user role and contract_numbers. JSON: { contract_numbers: [...], user_role: 'buyer'|'farmer', buyer_id: ..., farmer_id: ... }"""
     ensure_purchase_notifications_table()
     data = request.get_json(silent=True) or {}
-    ids = data.get('ids') or []
+    # Support both 'contract_numbers' (new) and 'ids' (legacy) for backwards compatibility
+    contract_numbers = data.get('contract_numbers') or data.get('ids') or []
     user_role = data.get('user_role', '').strip()
     buyer_id = data.get('buyer_id')
     farmer_id = data.get('farmer_id')
     
-    if not isinstance(ids, list) or not ids:
-        return jsonify({'ok': False, 'error': 'ids_required'}), 400
+    if not isinstance(contract_numbers, list) or not contract_numbers:
+        return jsonify({'ok': False, 'error': 'contract_numbers_required'}), 400
     
     use_mysql = (mysql is not None and os.environ.get('DB_USE', 'mysql').lower() == 'mysql')
     try:
@@ -3496,7 +3677,7 @@ def mark_notifications_read():
             cur = conn.cursor()
             
             if user_role == 'buyer' and buyer_id:
-                # For buyers, mark contracts as read in contracts table
+                # For buyers, mark contracts as read in BOTH contracts and contract_b tables based on contract_number
                 try:
                     # Ensure is_read column exists in contracts table
                     try:
@@ -3505,23 +3686,56 @@ def mark_notifications_read():
                     except:
                         pass  # Column probably already exists
                     
-                    in_clause = ','.join(['%s'] * len(ids))
-                    cur.execute(f'UPDATE contracts SET is_read=1 WHERE contract_number IN ({in_clause}) AND buyer_id=%s', tuple(ids) + (buyer_id,))
+                    in_clause = ','.join(['%s'] * len(contract_numbers))
+                    # Update contracts table (is_read column) for all pending contracts
+                    cur.execute(f'UPDATE contracts SET is_read=1 WHERE contract_number IN ({in_clause}) AND buyer_id=%s', tuple(contract_numbers) + (buyer_id,))
                     conn.commit()
                 except Exception as e:
-                    print(f"Error marking buyer contracts as read: {e}")
+                    print(f"Error marking buyer contracts as read in contracts: {e}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                
+                try:
+                    # Update contract_b table (read column) for negotiated contracts
+                    in_clause = ','.join(['%s'] * len(contract_numbers))
+                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE contract_number IN ({in_clause}) AND buyer_id=%s AND status="Negotiated"', tuple(contract_numbers) + (buyer_id,))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error marking buyer contracts as read in contract_b: {e}")
                     try:
                         conn.rollback()
                     except:
                         pass
             elif user_role == 'farmer' and farmer_id:
-                # For farmers, mark contracts as read in contract_b table
+                # For farmers, mark contracts as read in BOTH contract_b and contracts tables based on contract_number
                 try:
-                    in_clause = ','.join(['%s'] * len(ids))
-                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE id IN ({in_clause}) AND farmer_id=%s', tuple(ids) + (farmer_id,))
+                    in_clause = ','.join(['%s'] * len(contract_numbers))
+                    # Update contract_b table (read column)
+                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE contract_number IN ({in_clause}) AND farmer_id=%s', tuple(contract_numbers) + (farmer_id,))
                     conn.commit()
                 except Exception as e:
-                    print(f"Error marking farmer contracts as read: {e}")
+                    print(f"Error marking farmer contracts as read in contract_b: {e}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                
+                try:
+                    # Ensure is_read column exists in contracts table
+                    try:
+                        cur.execute("ALTER TABLE contracts ADD COLUMN is_read INT DEFAULT 0")
+                        conn.commit()
+                    except:
+                        pass
+                    
+                    in_clause = ','.join(['%s'] * len(contract_numbers))
+                    # Update contracts table (is_read column) where status is Negotiated
+                    cur.execute(f'UPDATE contracts SET is_read=1 WHERE contract_number IN ({in_clause}) AND farmer_id=%s AND status="Negotiated"', tuple(contract_numbers) + (farmer_id,))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error marking farmer contracts as read in contracts: {e}")
                     try:
                         conn.rollback()
                     except:
@@ -3537,7 +3751,7 @@ def mark_notifications_read():
             cur = conn.cursor()
             
             if user_role == 'buyer' and buyer_id:
-                # For buyers, mark contracts as read in contracts table
+                # For buyers, mark contracts as read in BOTH contracts and contract_b tables based on contract_number
                 try:
                     # Ensure is_read column exists in contracts table
                     try:
@@ -3546,23 +3760,56 @@ def mark_notifications_read():
                     except:
                         pass  # Column probably already exists
                     
-                    in_clause = ','.join(['?'] * len(ids))
-                    cur.execute(f'UPDATE contracts SET is_read=1 WHERE contract_number IN ({in_clause}) AND buyer_id=?', tuple(ids) + (buyer_id,))
+                    in_clause = ','.join(['?'] * len(contract_numbers))
+                    # Update contracts table (is_read column) for all pending contracts
+                    cur.execute(f'UPDATE contracts SET is_read=1 WHERE contract_number IN ({in_clause}) AND buyer_id=?', tuple(contract_numbers) + (buyer_id,))
                     conn.commit()
                 except Exception as e:
-                    print(f"Error marking buyer contracts as read (SQLite): {e}")
+                    print(f"Error marking buyer contracts as read in contracts (SQLite): {e}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                
+                try:
+                    # Update contract_b table (read column) for negotiated contracts
+                    in_clause = ','.join(['?'] * len(contract_numbers))
+                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE contract_number IN ({in_clause}) AND buyer_id=? AND status="Negotiated"', tuple(contract_numbers) + (buyer_id,))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error marking buyer contracts as read in contract_b (SQLite): {e}")
                     try:
                         conn.rollback()
                     except:
                         pass
             elif user_role == 'farmer' and farmer_id:
-                # For farmers, mark contracts as read in contract_b table
+                # For farmers, mark contracts as read in BOTH contract_b and contracts tables based on contract_number
                 try:
-                    in_clause = ','.join(['?'] * len(ids))
-                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE id IN ({in_clause}) AND farmer_id=?', tuple(ids) + (farmer_id,))
+                    in_clause = ','.join(['?'] * len(contract_numbers))
+                    # Update contract_b table (read column)
+                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE contract_number IN ({in_clause}) AND farmer_id=?', tuple(contract_numbers) + (farmer_id,))
                     conn.commit()
                 except Exception as e:
-                    print(f"Error marking farmer contracts as read (SQLite): {e}")
+                    print(f"Error marking farmer contracts as read in contract_b (SQLite): {e}")
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                
+                try:
+                    # Ensure is_read column exists in contracts table
+                    try:
+                        cur.execute("ALTER TABLE contracts ADD COLUMN is_read INTEGER DEFAULT 0")
+                        conn.commit()
+                    except:
+                        pass
+                    
+                    in_clause = ','.join(['?'] * len(contract_numbers))
+                    # Update contracts table (is_read column) where status is Negotiated
+                    cur.execute(f'UPDATE contracts SET is_read=1 WHERE contract_number IN ({in_clause}) AND farmer_id=? AND status="Negotiated"', tuple(contract_numbers) + (farmer_id,))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error marking farmer contracts as read in contracts (SQLite): {e}")
                     try:
                         conn.rollback()
                     except:
@@ -3943,7 +4190,7 @@ def buyer_contracts():
 
 @app.route('/buyer/contracts-b', methods=['GET'])
 def buyer_contracts_b():
-    """Return contract rows from `contract_b` table for the given buyer id with status IN ('pending', 'accepted', 'rejected').
+    """Return ALL contract rows from `contract_b` table for the given buyer id.
     Query params: buyer_id (int) or buyer_email (string). Returns JSON list.
     """
     try:
@@ -3965,7 +4212,7 @@ def buyer_contracts_b():
                                quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety,
                                farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, sender
                         FROM contract_b 
-                        WHERE buyer_id=%s AND status IN ('pending', 'accepted', 'rejected')
+                        WHERE buyer_id=%s
                         ORDER BY updated_at DESC
                     ''', (int(buyer_id),))
                 else:
@@ -3974,7 +4221,7 @@ def buyer_contracts_b():
                                cb.quantity_kg, cb.amount, cb.contract_number, cb.updated_at as created_at, cb.crop_name, cb.variety,
                                cb.farmer_platform_fee, cb.farmer_gst, cb.buyer_platform_fee, cb.buyer_gst, cb.buyer_total, cb.farmer_total, cb.delivery_cost, cb.status, cb.sender
                         FROM contract_b cb
-                        WHERE cb.buyer_id IN (SELECT id FROM buyer WHERE email=%s LIMIT 1) AND cb.status IN ('pending', 'accepted', 'rejected')
+                        WHERE cb.buyer_id IN (SELECT id FROM buyer WHERE email=%s LIMIT 1)
                         ORDER BY cb.updated_at DESC
                     ''', (buyer_email,))
                 cols = [d[0] for d in cur.description]
@@ -3989,7 +4236,7 @@ def buyer_contracts_b():
                                quantity_kg, amount, contract_number, updated_at as created_at, crop_name, variety,
                                farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, sender
                         FROM contract_b 
-                        WHERE buyer_id=? AND status IN ('pending', 'accepted', 'rejected')
+                        WHERE buyer_id=?
                         ORDER BY updated_at DESC
                     ''', (int(buyer_id),))
                 else:
@@ -3998,7 +4245,7 @@ def buyer_contracts_b():
                                cb.quantity_kg, cb.amount, cb.contract_number, cb.updated_at as created_at, cb.crop_name, cb.variety,
                                cb.farmer_platform_fee, cb.farmer_gst, cb.buyer_platform_fee, cb.buyer_gst, cb.buyer_total, cb.farmer_total, cb.delivery_cost, cb.status, cb.sender
                         FROM contract_b cb
-                        WHERE cb.buyer_id IN (SELECT id FROM buyer WHERE email=? LIMIT 1) AND cb.status IN ('pending', 'accepted', 'rejected')
+                        WHERE cb.buyer_id IN (SELECT id FROM buyer WHERE email=? LIMIT 1)
                         ORDER BY cb.updated_at DESC
                     ''', (buyer_email,))
                 cols = [d[0] for d in cur.description]
@@ -4007,7 +4254,7 @@ def buyer_contracts_b():
                 for r in fetched:
                     rows.append(dict(zip(cols, r)))
             
-            print(f"✅ buyer_contracts_b returning {len(rows)} contracts with status IN ('pending', 'accepted', 'rejected')")
+            print(f"✅ buyer_contracts_b returning {len(rows)} contracts")
             for r in rows:
                 print(f"   - {r.get('contract_number', 'UNKNOWN')} (status={r.get('status')}, buyer_id={r.get('buyer_id')})")
                 
@@ -4292,6 +4539,355 @@ def accept_contract():
         try: conn.close()
         except: pass
 
+
+
+@app.route('/contracts/negotiate', methods=['POST'])
+def negotiate_contract():
+    """Save negotiation data to the negotiate table and update contract status to 'Negotiated'.
+    Expects JSON body with:
+    - contract_number (string, required)
+    - negotiated_price_per_kg (number, optional if delivery_date provided)
+    - negotiated_delivery_date (string, YYYY-MM-DD, optional if price provided)
+    - user_role (string, 'farmer' or 'buyer', required)
+    - user_id (integer, required)
+    """
+    ensure_negotiate_table()
+    ensure_contracts_table()
+    data = request.get_json(silent=True) or {}
+    contract_number = (data.get('contract_number') or '').strip()
+    negotiated_price_per_kg = data.get('negotiated_price_per_kg')
+    negotiated_delivery_date = (data.get('negotiated_delivery_date') or '').strip()
+    user_role = (data.get('user_role') or '').strip().lower()
+    user_id = data.get('user_id')
+    
+    # Validation
+    if not contract_number:
+        return jsonify({'ok': False, 'error': 'contract_number_required'}), 400
+    
+    # At least one of price or delivery_date must be provided
+    has_price = negotiated_price_per_kg is not None and isinstance(negotiated_price_per_kg, (int, float)) and negotiated_price_per_kg > 0
+    has_date = bool(negotiated_delivery_date)
+    
+    if not has_price and not has_date:
+        return jsonify({'ok': False, 'error': 'at_least_price_or_date_required'}), 400
+    
+    if negotiated_price_per_kg is not None and (not isinstance(negotiated_price_per_kg, (int, float)) or negotiated_price_per_kg <= 0):
+        return jsonify({'ok': False, 'error': 'valid_negotiated_price_required'}), 400
+    if user_role not in ('farmer', 'buyer'):
+        return jsonify({'ok': False, 'error': 'valid_user_role_required'}), 400
+    if not user_id or not isinstance(user_id, int):
+        return jsonify({'ok': False, 'error': 'valid_user_id_required'}), 400
+    
+    kind, conn = get_db_connection()
+    try:
+        cur = get_cursor(kind, conn)
+        
+        # Check if contract already exists and preserve unmodified fields
+        existing_price = None
+        existing_date = None
+        existing_sign_in = None
+        
+        if kind == 'mysql':
+            cur.execute("SELECT price, delivery_date, sign_in FROM negotiate WHERE contract_number = %s", (contract_number,))
+        else:
+            cur.execute("SELECT price, delivery_date, sign_in FROM negotiate WHERE contract_number = ?", (contract_number,))
+        
+        existing_row = cur.fetchone()
+        if existing_row:
+            existing_price, existing_date, existing_sign_in = existing_row
+        
+        # Use new values if provided, otherwise keep old values
+        final_price = negotiated_price_per_kg if negotiated_price_per_kg is not None else existing_price
+        final_date = negotiated_delivery_date if negotiated_delivery_date else existing_date
+        final_sign_in = user_role if user_role else existing_sign_in
+        
+        # Insert or update negotiate table
+        if kind == 'mysql':
+            cur.execute("""
+                INSERT INTO negotiate (contract_number, sign_in, price, delivery_date) 
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                    sign_in = %s,
+                    price = %s,
+                    delivery_date = %s,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (contract_number, final_sign_in, final_price, final_date, final_sign_in, final_price, final_date))
+        else:
+            # For SQLite, use INSERT OR REPLACE but with merged values
+            cur.execute("""
+                INSERT OR REPLACE INTO negotiate (contract_number, sign_in, price, delivery_date, created_at) 
+                VALUES (?, ?, ?, ?, COALESCE((SELECT created_at FROM negotiate WHERE contract_number = ?), CURRENT_TIMESTAMP))
+            """, (contract_number, final_sign_in, final_price, final_date, contract_number))
+        
+        # Update status to "Negotiated" in the contract_b table
+        if kind == 'mysql':
+            cur.execute(
+                """
+                UPDATE contract_b
+                SET status = %s, `read` = 0
+                WHERE contract_number = %s
+                """,
+                ('Negotiated', contract_number)
+            )
+            contract_b_updated = cur.rowcount > 0
+        else:
+            cur.execute(
+                """
+                UPDATE contract_b
+                SET status = ?, [read] = 0
+                WHERE contract_number = ?
+                """,
+                ('Negotiated', contract_number)
+            )
+            contract_b_updated = cur.rowcount > 0
+        
+        # Update status to "Negotiated" in the contracts table
+        if kind == 'mysql':
+            cur.execute(
+                """
+                UPDATE contracts
+                SET status = %s, is_read = 0
+                WHERE contract_number = %s
+                """,
+                ('Negotiated', contract_number)
+            )
+            contracts_updated = cur.rowcount > 0
+        else:
+            cur.execute(
+                """
+                UPDATE contracts
+                SET status = ?, is_read = 0
+                WHERE contract_number = ?
+                """,
+                ('Negotiated', contract_number)
+            )
+            contracts_updated = cur.rowcount > 0
+        
+        conn.commit()
+        
+        print(f"✅ negotiate_contract: successfully saved negotiation for contract {contract_number} with price={final_price}, date={final_date}, user={final_sign_in}")
+        print(f"✅ negotiate_contract: updated contract_b status={contract_b_updated}, contracts status={contracts_updated}")
+        return jsonify({'ok': True}), 200
+    
+    except Exception as e:
+        print(f'❌ negotiate_contract error: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        try: cur.close()
+        except: pass
+        try: conn.close()
+        except: pass
+
+
+@app.route('/contracts/send-negotiation', methods=['POST'])
+def send_negotiation():
+    """Send negotiated contract details and update whichever table(s) contain the contract.
+    
+    Logic:
+    1. Search for contract_number in contracts table
+    2. Search for contract_number in contract_b table
+    3. In EACH table where contract is found, save ALL details (both farmer and buyer data)
+    4. This ensures complete negotiated information in whichever table(s) have the contract
+    """
+    ensure_contracts_table()
+    kind, conn = get_db_connection()
+    try:
+        data = request.get_json(silent=True) or {}
+        contract_number = (data.get('contract_number') or '').strip()
+        negotiated_price_per_kg = data.get('negotiated_price_per_kg')
+        negotiated_delivery_date = (data.get('negotiated_delivery_date') or '').strip()
+        negotiated_subtotal = data.get('negotiated_subtotal')
+        farmer_platform_fee = data.get('farmer_platform_fee')
+        farmer_gst = data.get('farmer_gst')
+        farmer_total = data.get('farmer_total')
+        buyer_platform_fee = data.get('buyer_platform_fee')
+        buyer_gst = data.get('buyer_gst')
+        buyer_total = data.get('buyer_total')
+        
+        print(f"📨 send_negotiation received: contract={contract_number}")
+        print(f"   Price: ₹{negotiated_price_per_kg}/kg | Date: {negotiated_delivery_date}")
+        print(f"   Farmer Total: ₹{farmer_total} | Buyer Total: ₹{buyer_total}")
+        
+        # Validation
+        if not contract_number:
+            print('❌ Validation failed: contract_number_required')
+            return jsonify({'ok': False, 'error': 'contract_number_required'}), 400
+        if negotiated_price_per_kg is None or not isinstance(negotiated_price_per_kg, (int, float)) or negotiated_price_per_kg <= 0:
+            print(f'❌ Validation failed: invalid price = {negotiated_price_per_kg}')
+            return jsonify({'ok': False, 'error': 'valid_negotiated_price_required'}), 400
+        if not negotiated_delivery_date:
+            print('❌ Validation failed: negotiated_delivery_date_required')
+            return jsonify({'ok': False, 'error': 'negotiated_delivery_date_required'}), 400
+        
+        cur = get_cursor(kind, conn)
+        
+        # STEP 1: Check which tables contain this contract
+        contracts_exists = False
+        contract_b_exists = False
+        
+        if kind == 'mysql':
+            cur.execute("SELECT 1 FROM contracts WHERE contract_number = %s LIMIT 1", (contract_number,))
+        else:
+            cur.execute("SELECT 1 FROM contracts WHERE contract_number = ? LIMIT 1", (contract_number,))
+        contracts_exists = cur.fetchone() is not None
+        
+        if kind == 'mysql':
+            cur.execute("SELECT 1 FROM contract_b WHERE contract_number = %s LIMIT 1", (contract_number,))
+        else:
+            cur.execute("SELECT 1 FROM contract_b WHERE contract_number = ? LIMIT 1", (contract_number,))
+        contract_b_exists = cur.fetchone() is not None
+        
+        print(f"✓ Contract location: contracts={contracts_exists}, contract_b={contract_b_exists}")
+        
+        contracts_updated = 0
+        contract_b_updated = 0
+        
+        # STEP 2: Update contracts table if contract exists there
+        # Save BOTH farmer AND buyer details in this table
+        if contracts_exists:
+            if kind == 'mysql':
+                cur.execute("""
+                    UPDATE contracts
+                    SET price_per_kg = %s,
+                        end_date = %s,
+                        amount = %s,
+                        farmer_platform_fee = %s,
+                        farmer_gst = %s,
+                        farmer_total = %s,
+                        buyer_platform_fee = %s,
+                        buyer_gst = %s,
+                        buyer_total = %s
+                    WHERE contract_number = %s
+                """, (
+                    negotiated_price_per_kg,
+                    negotiated_delivery_date,
+                    negotiated_subtotal,
+                    farmer_platform_fee,
+                    farmer_gst,
+                    farmer_total,
+                    buyer_platform_fee,
+                    buyer_gst,
+                    buyer_total,
+                    contract_number
+                ))
+            else:
+                cur.execute("""
+                    UPDATE contracts
+                    SET price_per_kg = ?,
+                        end_date = ?,
+                        amount = ?,
+                        farmer_platform_fee = ?,
+                        farmer_gst = ?,
+                        farmer_total = ?,
+                        buyer_platform_fee = ?,
+                        buyer_gst = ?,
+                        buyer_total = ?
+                    WHERE contract_number = ?
+                """, (
+                    negotiated_price_per_kg,
+                    negotiated_delivery_date,
+                    negotiated_subtotal,
+                    farmer_platform_fee,
+                    farmer_gst,
+                    farmer_total,
+                    buyer_platform_fee,
+                    buyer_gst,
+                    buyer_total,
+                    contract_number
+                ))
+            contracts_updated = cur.rowcount
+            print(f"✅ contracts table: {contracts_updated} row(s) updated with FARMER + BUYER details")
+        
+        # STEP 3: Update contract_b table if contract exists there
+        # Save BOTH farmer AND buyer details in this table
+        if contract_b_exists:
+            if kind == 'mysql':
+                cur.execute("""
+                    UPDATE contract_b
+                    SET price_per_kg = %s,
+                        end_date = %s,
+                        amount = %s,
+                        farmer_platform_fee = %s,
+                        farmer_gst = %s,
+                        farmer_total = %s,
+                        buyer_platform_fee = %s,
+                        buyer_gst = %s,
+                        buyer_total = %s
+                    WHERE contract_number = %s
+                """, (
+                    negotiated_price_per_kg,
+                    negotiated_delivery_date,
+                    negotiated_subtotal,
+                    farmer_platform_fee,
+                    farmer_gst,
+                    farmer_total,
+                    buyer_platform_fee,
+                    buyer_gst,
+                    buyer_total,
+                    contract_number
+                ))
+            else:
+                cur.execute("""
+                    UPDATE contract_b
+                    SET price_per_kg = ?,
+                        end_date = ?,
+                        amount = ?,
+                        farmer_platform_fee = ?,
+                        farmer_gst = ?,
+                        farmer_total = ?,
+                        buyer_platform_fee = ?,
+                        buyer_gst = ?,
+                        buyer_total = ?
+                    WHERE contract_number = ?
+                """, (
+                    negotiated_price_per_kg,
+                    negotiated_delivery_date,
+                    negotiated_subtotal,
+                    farmer_platform_fee,
+                    farmer_gst,
+                    farmer_total,
+                    buyer_platform_fee,
+                    buyer_gst,
+                    buyer_total,
+                    contract_number
+                ))
+            contract_b_updated = cur.rowcount
+            print(f"✅ contract_b table: {contract_b_updated} row(s) updated with FARMER + BUYER details")
+        
+        conn.commit()
+        
+        if contracts_updated == 0 and contract_b_updated == 0:
+            print(f"⚠️  Contract {contract_number} not found in any table")
+            return jsonify({'ok': False, 'error': 'contract_not_found'}), 404
+        
+        print(f"✅ send_negotiation COMPLETE:")
+        print(f"   Contract: {contract_number}")
+        print(f"   Price: ₹{negotiated_price_per_kg}/kg | Date: {negotiated_delivery_date}")
+        print(f"   Farmer Total: ₹{farmer_total} | Buyer Total: ₹{buyer_total}")
+        print(f"   Updated: contracts={contracts_updated}, contract_b={contract_b_updated}")
+        
+        return jsonify({'ok': True, 'contracts_updated': contracts_updated, 'contract_b_updated': contract_b_updated}), 200
+    
+    except Exception as e:
+        print(f'❌ send_negotiation error: {e}')
+        import traceback
+        traceback.print_exc()
+        try:
+            conn.rollback()
+        except:
+            pass
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        try:
+            cur.close()
+        except:
+            pass
+        try:
+            conn.close()
+        except:
+            pass
 
 
 @app.route('/contracts/delete/<contract_number>', methods=['DELETE'])
@@ -9010,6 +9606,11 @@ if __name__ == '__main__':
         ensure_contracts_table()
     except Exception as e:
         print('ensure_contracts_table error:', e)
+    # Ensure negotiate table exists
+    try:
+        ensure_negotiate_table()
+    except Exception as e:
+        print('ensure_negotiate_table error:', e)
     # Ensure purchase notifications table exists
     try:
         ensure_purchase_notifications_table()

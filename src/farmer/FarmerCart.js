@@ -17,6 +17,7 @@ const FarmerCart = () => {
   const [contractHtml, setContractHtml] = React.useState('');
   const [showContractPreview, setShowContractPreview] = React.useState(false);
   const [contractMetadata, setContractMetadata] = React.useState(null);
+  const [agreeToContract, setAgreeToContract] = React.useState(false);
   
   // Digital Signature & OTP State
   const [showOtpModal, setShowOtpModal] = React.useState(false);
@@ -321,6 +322,7 @@ const FarmerCart = () => {
       // close modal and show updated preview
       setShowOtpModal(false);
       setShowContractPreview(true);
+      setAgreeToContract(false);
       // leave pendingContractAction intact so user may proceed to send
     }
   };
@@ -487,7 +489,7 @@ const FarmerCart = () => {
       if (exact === 'fruits and vegetables' || exact === 'fruits & vegetables' || exact === 'fruits' || exact === 'fruits and veg') return 'fruitveg';
       if (exact === 'masalas' || exact === 'masala' || exact === 'spices' || exact === 'spice') return 'masala';
       // Fallback keyword matching (includes plurals and some local words)
-      const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ'];
+      const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ', 'haldi', 'turmeric', 'turmeirc'];
       const fruitKeywords = ['fruit', 'fruits', 'फल', 'ಹಣ್ಣು'];
       const vegKeywords = ['vegetable', 'vegetables', 'veg', 'veggie', 'veget', 'सब्जी', 'ತರಕಾರಿ'];
       const hasAny = (str, arr) => arr.some(k => str.includes(k));
@@ -512,24 +514,9 @@ const FarmerCart = () => {
     const group = getGroupFromItem(item);
     const categoryTotal = round2(categoryTotals[group] || 0);
 
-    // Tiered commission rates (percent) by group and category subtotal
-    let commissionRate = 0;
-    if (group === 'crop') {
-      if (categoryTotal < 200001) commissionRate = 1.0;
-      else if (categoryTotal < 600001) commissionRate = 1.8;
-      else if (categoryTotal < 1000001) commissionRate = 2.5;
-      else commissionRate = 3.0;
-    } else if (group === 'fruitveg') {
-      if (categoryTotal < 200001) commissionRate = 1.8;
-      else if (categoryTotal < 600001) commissionRate = 2.4;
-      else if (categoryTotal < 1000001) commissionRate = 3.0;
-      else commissionRate = 3.4;
-    } else if (group === 'masala') {
-      if (categoryTotal < 200001) commissionRate = 2.4;
-      else if (categoryTotal < 600001) commissionRate = 3.0;
-      else if (categoryTotal < 1000001) commissionRate = 3.5;
-      else commissionRate = 4.0;
-    }
+    // Fixed commission rate for farmer: 4% across all categories
+    let commissionRate = 4.0;
+    
     // Platform fee (amount) = total * commissionRate%; cap at 100000
       let commissionAmt = round2((total * (commissionRate / 100)) || 0);
     if (!Number.isFinite(commissionAmt) || commissionAmt < 0) commissionAmt = 0;
@@ -563,7 +550,7 @@ const FarmerCart = () => {
       if (exact === 'food crops' || exact === 'food crop' || exact === 'food' || exact === 'crops') return 'crop';
       if (exact === 'fruits and vegetables' || exact === 'fruits & vegetables' || exact === 'fruits' || exact === 'fruits and veg') return 'fruitveg';
       if (exact === 'masalas' || exact === 'masala' || exact === 'spices' || exact === 'spice') return 'masala';
-      const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ'];
+      const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ', 'haldi', 'turmeric', 'turmeirc'];
       const fruitKeywords = ['fruit', 'fruits', 'फल', 'ಹಣ್ಣು'];
       const vegKeywords = ['vegetable', 'vegetables', 'veg', 'veggie', 'veget', 'सब्जी', 'ತರಕಾರಿ'];
       const hasAny = (str, arr) => arr.some(k => str.includes(k));
@@ -595,23 +582,8 @@ const FarmerCart = () => {
       const group = getGroupFromItem(it);
       const categoryTotal = round2(categoryTotals[group] || 0);
       
-      let buyerCommissionRate = 0;
-      if (group === 'crop') {
-        if (categoryTotal < 200001) buyerCommissionRate = 1.0;
-        else if (categoryTotal < 600001) buyerCommissionRate = 1.8;
-        else if (categoryTotal < 1000001) buyerCommissionRate = 2.5;
-        else buyerCommissionRate = 3.0;
-      } else if (group === 'fruitveg') {
-        if (categoryTotal < 200001) buyerCommissionRate = 1.8;
-        else if (categoryTotal < 600001) buyerCommissionRate = 2.4;
-        else if (categoryTotal < 1000001) buyerCommissionRate = 3.0;
-        else buyerCommissionRate = 3.8;
-      } else if (group === 'masala') {
-        if (categoryTotal < 200001) buyerCommissionRate = 2.4;
-        else if (categoryTotal < 600001) buyerCommissionRate = 3.2;
-        else if (categoryTotal < 1000001) buyerCommissionRate = 3.8;
-        else buyerCommissionRate = 4.4;
-      }
+      // Fixed commission rate for buyer: 5% across all categories
+      let buyerCommissionRate = 5.0;
       
       let buyerCommissionAmt = round2((lineTotal * (buyerCommissionRate / 100)) || 0);
       if (!Number.isFinite(buyerCommissionAmt) || buyerCommissionAmt < 0) buyerCommissionAmt = 0;
@@ -1181,7 +1153,7 @@ const FarmerCart = () => {
         if (exact === 'food crops' || exact === 'food crop' || exact === 'food' || exact === 'crops') return 'crop';
         if (exact === 'fruits and vegetables' || exact === 'fruits & vegetables' || exact === 'fruits' || exact === 'fruits and veg') return 'fruitveg';
         if (exact === 'masalas' || exact === 'masala' || exact === 'spices' || exact === 'spice') return 'masala';
-        const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ'];
+        const masalaKeywords = ['masala', 'masalas', 'spice', 'spices', 'मसाला', 'ಮಸಾಲೆ', 'haldi', 'turmeric', 'turmeirc'];
         const fruitKeywords = ['fruit', 'fruits', 'फल', 'ಹಣ್ಣು'];
         const vegKeywords = ['vegetable', 'vegetables', 'veg', 'veggie', 'veget', 'सब्जी', 'ತರಕಾರಿ'];
         const hasAny = (str, arr) => arr.some(k => str.includes(k));
@@ -1213,24 +1185,8 @@ const FarmerCart = () => {
         const group = getGroupFromItem(it);
         const categoryTotal = round2(categoryTotals[group] || 0);
         
-        // Buyer-specific tiered commission rates
-        let buyerCommissionRate = 0;
-        if (group === 'crop') {
-          if (categoryTotal < 200001) buyerCommissionRate = 2.0;
-          else if (categoryTotal < 600001) buyerCommissionRate = 2.5;
-          else if (categoryTotal < 1000001) buyerCommissionRate = 3.0;
-          else buyerCommissionRate = 3.4;
-        } else if (group === 'fruitveg') {
-          if (categoryTotal < 200001) buyerCommissionRate = 2.5;
-          else if (categoryTotal < 600001) buyerCommissionRate = 3.0;
-          else if (categoryTotal < 1000001) buyerCommissionRate = 3.4;
-          else buyerCommissionRate = 4.0;
-        } else if (group === 'masala') {
-          if (categoryTotal < 200001) buyerCommissionRate = 3.0;
-          else if (categoryTotal < 600001) buyerCommissionRate = 3.4;
-          else if (categoryTotal < 1000001) buyerCommissionRate = 4.0;
-          else buyerCommissionRate = 4.4;
-        }
+        // Fixed commission rate for buyer: 5% across all categories
+        let buyerCommissionRate = 5.0;
         
         let buyerCommissionAmt = round2((lineTotal * (buyerCommissionRate / 100)) || 0);
         if (!Number.isFinite(buyerCommissionAmt) || buyerCommissionAmt < 0) buyerCommissionAmt = 0;
@@ -3227,27 +3183,83 @@ ${contractHtml}
             </div>
             
             {/* Footer Actions */}
-            <div style={{ borderTop: '2px solid #e5e5e5', padding: '16px 24px', background: '#f9f9f9', display: 'flex', justifyContent: 'center', gap: 12 }}>
-              <button 
-                onClick={() => {
-                  if (otpVerified && digitalSignature) {
-                    try { setShowContractPreview(false); } catch (e) {}
-                    handleBuyNow('contract');
-                  } else {
-                    initOtpVerification(() => {
-                      resetOtpModal();
-                      handleBuyNow('contract');
-                    });
-                  }
-                }}
-                onMouseEnter={(e) => { e.target.style.background = '#1a4d08'; e.target.style.transform = 'scale(1.02)'; }}
-                onMouseLeave={(e) => { e.target.style.background = '#236902'; e.target.style.transform = 'scale(1)'; }}
-                style={{ padding: '8px 20px', background: '#236902', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>
-                 {t('confirmAndSend', siteLang) || 'Confirm & Send'}
-              </button>
+            <div 
+  style={{ 
+    borderTop: '2px solid #e5e5e5', 
+    padding: '16px 24px', 
+    background: '#f9f9f9',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center'
+  }}
+>
+  <label 
+    style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: 8, 
+      marginBottom: 12, 
+      background: '#f0f7ff', 
+      border: '2px solid #236902', 
+      borderRadius: 6, 
+      cursor: 'pointer', 
+      padding: '8px 12px'
+    }}
+  >
+    <input 
+      type="checkbox" 
+      checked={agreeToContract} 
+      onChange={(e) => setAgreeToContract(e.target.checked)} 
+      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#236902' }} 
+    />
+    <span style={{ fontSize: 14, color: '#236902', fontWeight: 700 }}>
+      {t('agreeContract', siteLang)}
+    </span>
+  </label>
+
+  <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+    <button 
+      onClick={() => {
+        if (otpVerified && digitalSignature) {
+          try { setShowContractPreview(false); } catch (e) {}
+          handleBuyNow('contract');
+        } else {
+          initOtpVerification(() => {
+            resetOtpModal();
+            handleBuyNow('contract');
+          });
+        }
+      }}
+      disabled={!agreeToContract}
+      onMouseEnter={(e) => { 
+        if (!e.target.disabled) { 
+          e.target.style.background = '#1a4d08'; 
+          e.target.style.transform = 'scale(1.02)'; 
+        } 
+      }}
+      onMouseLeave={(e) => { 
+        e.target.style.background = agreeToContract ? '#236902' : '#ccc'; 
+        e.target.style.transform = 'scale(1)'; 
+      }}
+      style={{ 
+        padding: '8px 20px', 
+        background: agreeToContract ? '#236902' : '#ccc', 
+        color: '#fff', 
+        border: 'none', 
+        borderRadius: 6, 
+        fontWeight: 700, 
+        cursor: agreeToContract ? 'pointer' : 'not-allowed', 
+        fontSize: '13px', 
+        transition: 'all 0.2s ease' 
+      }}
+    >
+      {t('confirmAndSend', siteLang) || 'Confirm & Send'}
+    </button>
+  </div>
+</div>
             </div>
           </div>
-        </div>
+        
       )}
 
       {/* Digital Signature OTP Verification Modal */}

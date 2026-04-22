@@ -290,6 +290,10 @@ ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `signature_timestamp` DATETIME 
 ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `buyer_total` DECIMAL(12,2) DEFAULT NULL;
 ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `farmer_total` DECIMAL(12,2) DEFAULT NULL;
 
+-- Add negotiation columns to contracts table
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `negotiate_price` DECIMAL(12,3) DEFAULT NULL;
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `negotiate_date` DATE DEFAULT NULL;
+
 -- Populate existing cart rows with the crop category when possible (one-time idempotent update)
 UPDATE `cart` c
 LEFT JOIN `crops` cr ON cr.id = c.crop_id
@@ -437,3 +441,19 @@ ALTER TABLE `crops` ADD COLUMN IF NOT EXISTS `variety` VARCHAR(255) DEFAULT NULL
 -- ALTER TABLE `farmer` ADD COLUMN `address` VARCHAR(255) DEFAULT NULL;
 -- ALTER TABLE `buyer` ADD COLUMN `address` VARCHAR(255) DEFAULT NULL;
 -- ALTER TABLE `admin` ADD COLUMN `address` VARCHAR(255) DEFAULT NULL;
+
+-- ========== Negotiate table ==========
+-- Stores negotiation records for contracts
+DROP TABLE IF EXISTS `negotiate`;
+CREATE TABLE `negotiate` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `contract_number` VARCHAR(100) NOT NULL,
+  `sign_in` VARCHAR(50) NOT NULL, -- user role (farmer/buyer) who initiated negotiation
+  `price` DECIMAL(12,3) NOT NULL,
+  `delivery_date` DATE NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_negotiate_contract` (`contract_number`),
+  INDEX `idx_negotiate_sign_in` (`sign_in`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

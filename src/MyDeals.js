@@ -1014,7 +1014,7 @@ const MyDeals = () => {
             {visibleListings.length === 0 && <div style={{textAlign:'center'}}>{t('noDealsYet', siteLang)}</div>}
 
               {visibleListings.length > 0 && (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, 240px)', gap:16, width:'fit-content', maxWidth:'1240px', margin:'0 auto', justifyContent:'center'}}>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:16, width:'100%', maxWidth:'1240px', margin:'0 auto', justifyContent:'center'}}>
                   {visibleListings.map((l, idx) => {
                     const today = new Date(); today.setHours(0,0,0,0);
                     const dd = l.delivery_date ? new Date(l.delivery_date) : null;

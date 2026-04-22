@@ -163,6 +163,7 @@ const translations = {
     // Status translations
     accepted: 'Accepted',
     pending: 'Pending',
+    negotiated: 'Negotiated',
     rejected: 'Rejected',
     invoiceLabel: 'Invoice',
       contractLabel: 'Contract',
@@ -346,13 +347,19 @@ const translations = {
     // Delivery Date Modal
     selectDeliveryDate: 'Select Delivery Date',
     deliveryDateLabel: 'Date of Delivery',
-    confirmButton: 'Confirm'
-    ,
+    confirmButton: 'Confirm',
+    negotiateContract: 'Negotiate Contract',
+    pricePerKg: 'Price Per Kg (₹)',
+    pricePlaceholder: 'e.g. 50',
+    deliveryDate: 'Delivery Date',
+    datePlaceholder: 'dd-mm-yyyy',
+    submit: 'Submit',
     // confirmations & errors
     confirmDelete: 'Delete this deal? This action cannot be undone.',
     // contract actions
     contractAccept: 'Accept',
     contractNegotiate: 'Negotiate',
+    sendNegotiation: 'Send Negotiation',
     contractReject: 'Reject',
     confirmRejectContract: 'Are you sure you want to reject this contract?',
     selectExpiryError: 'Please select an expiry date.',
@@ -465,11 +472,13 @@ const translations = {
     testimonial4Name: "Lakshmi Narayanan",
     testimonial4Role: "Spice Farmer",
     testimonial4Location: "Karnataka",
+    agreeContract: "I acknowledge that I have read and agree to this contract",
     testimonial4Quote: "Finally a platform where I don't need a middleman. The government scheme alerts helped me discover a subsidy on drip irrigation I didn't know existed."
   },
   hi: {
     // Contact & Forms
     contactTitle: 'संपर्क करें',
+     agreeContract: "मैं स्वीकार करता हूँ कि मैंने इस अनुबंध को पढ़ लिया है और इससे सहमत हूँ",
     placeholderFirst: 'पहला नाम',
     placeholderLast: 'अंतिम नाम',
     placeholderPhone: 'फ़ोन नंबर',
@@ -631,6 +640,7 @@ const translations = {
     // Status translations
     accepted: 'स्वीकृत',
     pending: 'लंबित',
+    negotiated: 'बातचीत में',
     rejected: 'अस्वीकृत',
     invoiceLabel: 'इनवॉइस',
       contractLabel: 'अनुबंध',
@@ -814,13 +824,19 @@ const translations = {
     // Delivery Date Modal
     selectDeliveryDate: 'डिलीवरी तारीख चुनें',
     deliveryDateLabel: 'डिलीवरी की तारीख',
-    confirmButton: 'पुष्टि करें'
-    ,
+    confirmButton: 'पुष्टि करें',
+    negotiateContract: 'अनुबंध बातचीत',
+    pricePerKg: 'प्रति किलोग्राम मूल्य (₹)',
+    pricePlaceholder: 'उदा. 50',
+    deliveryDate: 'डिलीवरी तारीख',
+    datePlaceholder: 'dd-mm-yyyy',
+    submit: 'सबमिट',
     // confirmations & errors
     confirmDelete: 'क्या आप इस सौदे को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।',
     // contract actions
     contractAccept: 'स्वीकार करें',
     contractNegotiate: 'बातचीत करें',
+    sendNegotiation: 'बातचीत भेजें',
     contractReject: 'अस्वीकार करें',
     confirmRejectContract: 'क्या आप वाकई इस अनुबंध को अस्वीकार करना चाहते हैं?',
     selectExpiryError: 'कृपया एक समाप्ति तिथि चुनें।',
@@ -1095,6 +1111,7 @@ const translations = {
     // Status translations
     accepted: 'ಸ್ವೀಕರಿಸಲಾಗಿದೆ',
     pending: 'ಬಾಕಿ ಇದೆ',
+    negotiated: 'ಮಾತುಕತೆ',
     rejected: 'ತಿರಸ್ಕರಿಸಲಾಗಿದೆ',
     invoiceLabel: 'ರಸೀದಿ',
     contractLabel: 'ಒಪ್ಪಂದ',
@@ -1225,8 +1242,13 @@ const translations = {
     dateFormatHint: 'dd-mm-yyyy',
     deliveryDateRequired: 'ದಯವಿಟ್ಟು ರವಾನೆ ದಿನಾಂಕವನ್ನು ನಮೂದಿಸಿ',
     ok: 'ಸರಿ',
-    cancel: 'ರದ್ದು ಮಾಡಿ'
-    ,
+    cancel: 'ರದ್ದು ಮಾಡಿ',
+    negotiateContract: 'ಒಪ್ಪಂದವನ್ನು ಚರ್ಚಿಸಿ',
+    pricePerKg: 'ಪ್ರತಿ ಕಿಲೋಗ್ರಾಮ್ ಬೆಲೆ (₹)',
+    pricePlaceholder: 'ಉದಾ. 50',
+    deliveryDate: 'ವಿತರಣೆ ದಿನಾಂಕ',
+    datePlaceholder: 'dd-mm-yyyy',
+    submit: 'ಸಲ್ಲಿಸಿ',
     // Cart page
     cartTitle: 'ನನ್ನ ಕಾರ್ಟ್',
     cartEmptyMessage: 'ನಿಮ್ಮ ಕಾರ್ಟ್ ಖಾಲಿ ಇದೆ. ಮಾರ್ಕೆಟ್‌ನಿಂದ ಲಿಸ್ಟಿಂಗ್‌ಗಳನ್ನು ಸೇರಿಸಿ.',
@@ -1283,6 +1305,7 @@ const translations = {
     // contract actions
     contractAccept: 'ಸ್ವೀಕರಿಸಿ',
     contractNegotiate: 'ಚರ್ಚಿಸಿ',
+    sendNegotiation: 'ಚರ್ಚೆ ಕಳುಹಿಸಿ',
     contractReject: 'ತಿರಸ್ಕರಿಸಿ',
     confirmRejectContract: 'ನೀವು ಈ ಒಪ್ಪಂದವನ್ನು ನಿಜವಾಗಿಯೂ ತಿರಸ್ಕರಿಸಲು ಇಚ್ಛಿ?',
     rejectContract: 'ತಿರಸ್ಕರಿಸಿ',
@@ -1426,7 +1449,8 @@ homePageStat6Label: "ಕಾನೂನು ಚೌಕಟ್ಟು ಹೊಂದಿರ
 homePageBadge: "AI ಆಧಾರಿತ ಒಪ್ಪಂದ ಕೃಷಿ ವೇದಿಕೆ",
 homePageTitle: "ರೈತರನ್ನು ಕೃಷಿಯ ಭವಿಷ್ಯದೊಂದಿಗೆ ಸಂಪರ್ಕಿಸುವುದು",
 homePageDesc: "ಮಧ್ಯವರ್ತಿಗಳನ್ನು ತೆಗೆದುಹಾಕಿ ಮತ್ತು ನ್ಯಾಯಸಮ್ಮತ ಮಾರುಕಟ್ಟೆ ಪ್ರವೇಶವನ್ನು ಖಚಿತಪಡಿಸುವ ಪಾರದರ್ಶಕ, AI ಸಹಾಯಿತ ಒಪ್ಪಂದ ಕೃಷಿ ವೇದಿಕೆ",
-homePageFarmers: "146M+ ಭಾರತೀಯ ರೈತರು"
+homePageFarmers: "146M+ ಭಾರತೀಯ ರೈತರು",
+agreeContract: "ನಾನು ಈ ಒಪ್ಪಂದವನ್ನು ಓದಿ ಒಪ್ಪಿಕೊಂಡಿದ್ದೇನೆ ಎಂದು ದೃಢೀಕರಿಸುತ್ತೇನೆ"
   }
 }
 
