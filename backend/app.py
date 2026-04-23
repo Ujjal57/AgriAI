@@ -3154,15 +3154,10 @@ def list_purchase_notifications():
             cur = conn.cursor(dictionary=True) if hasattr(mysql, 'connect') else conn.cursor()
             
             if buyer_id_q:
-                # For buyers, fetch from contracts table
-                where = []
-                params = []
-            if buyer_id_q:
                 # For buyers, fetch from contracts table (all statuses) + contract_b where status is "Negotiated"
                 buyer_where = []
                 buyer_params = []
-                if buyer_id_q:
-                    buyer_where.append('buyer_id=%s'); buyer_params.append(int(buyer_id_q) if buyer_id_q.isdigit() else buyer_id_q)
+                buyer_where.append('buyer_id=%s'); buyer_params.append(int(buyer_id_q) if buyer_id_q.isdigit() else buyer_id_q)
                 
                 # Ensure is_read column exists in contracts table
                 try:
@@ -3171,12 +3166,12 @@ def list_purchase_notifications():
                 except:
                     pass
                 
-                # Fetch PENDING and NEGOTIATED contracts from contracts table
+                # Fetch PENDING, FARMER_NEGOTIATED, and BUYER_NEGOTIATED contracts from contracts table
                 buyer_where_clause = " AND ".join(buyer_where) if buyer_where else "1=1"
-                sql_contracts = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts WHERE {buyer_where_clause} AND status IN ("pending", "Negotiated") ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
+                sql_contracts = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts WHERE {buyer_where_clause} AND status IN ("pending", "Negotiated", "farmer_negotiated", "buyer_negotiated") ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
                 
-                # Fetch from contract_b where status is "Negotiated"
-                sql_contract_b = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, COALESCE(created_at, updated_at) as created_at, COALESCE(`read`, 0) as is_read FROM contract_b WHERE {buyer_where_clause} AND status = "Negotiated" ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
+                # Fetch from contract_b where status is "pending", "Negotiated", "farmer_negotiated", or "buyer_negotiated"
+                sql_contract_b = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, COALESCE(created_at, updated_at) as created_at, COALESCE(`read`, 0) as is_read FROM contract_b WHERE {buyer_where_clause} AND status IN ("pending", "Negotiated", "farmer_negotiated", "buyer_negotiated") ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
                 
                 # Debug logging
                 try:
@@ -3207,6 +3202,7 @@ def list_purchase_notifications():
                         results.append({
                             'id': r.get('contract_number'),
                             'contract_number': r.get('contract_number'),
+                            'source_table': 'contracts',
                             'farmer_id': r.get('farmer_id'),
                             'farmer_name': r.get('farmer_name'),
                             'farmer_state': r.get('farmer_state'),
@@ -3234,7 +3230,7 @@ def list_purchase_notifications():
                         })
                     else:
                         results.append({
-                            'id': r[0], 'contract_number': r[0], 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9],
+                            'id': r[0], 'contract_number': r[0], 'source_table': 'contracts', 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9],
                             'price_per_kg': r[10], 'amount': r[11], 'buyer_name': r[5], 'buyer_id': r[4], 'buyer_state': r[6], 'created_at': r[24], 'start_date': r[20], 'end_date': r[21],
                             'contract_nature': r[22], 'contract_duration': r[23], 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15], 'status': r[19], 'is_read': r[25], 'farmer_total': r[17], 'buyer_total': r[16]
                         })
@@ -3248,6 +3244,7 @@ def list_purchase_notifications():
                             results.append({
                                 'id': contract_num,
                                 'contract_number': contract_num,
+                                'source_table': 'contract_b',
                                 'farmer_id': r.get('farmer_id'),
                                 'farmer_name': r.get('farmer_name'),
                                 'farmer_state': r.get('farmer_state'),
@@ -3277,7 +3274,7 @@ def list_purchase_notifications():
                         contract_num = r[0]
                         if contract_num not in seen_contract_numbers:
                             results.append({
-                                'id': contract_num, 'contract_number': contract_num, 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[8], 'variety': r[9], 'quantity_kg': r[10],
+                                'id': contract_num, 'contract_number': contract_num, 'source_table': 'contract_b', 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[8], 'variety': r[9], 'quantity_kg': r[10],
                                 'price_per_kg': r[11] / r[10] if r[10] else 0, 'amount': r[11], 'buyer_name': r[5], 'buyer_id': r[4], 'buyer_state': r[6], 'created_at': r[20], 'start_date': None, 'end_date': None,
                                 'contract_nature': None, 'contract_duration': None, 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15], 'status': r[18], 'is_read': r[21], 'farmer_total': r[17], 'buyer_total': r[16]
                             })
@@ -3364,59 +3361,55 @@ def list_purchase_notifications():
                     if farmer_phone_q:
                         where.append('farmer_id IN (SELECT id FROM farmer WHERE phone=%s)'); params.append(farmer_phone_q)
                     
-                    # Fetch from contract_b table
-                    sql = 'SELECT id, contract_number, farmer_id, farmer_name, farmer_address, farmer_state, crop_name, variety, quantity_kg, price_per_kg, amount, buyer_name, buyer_id, buyer_address, buyer_state, start_date, end_date, duration, contract_nature, contract_duration, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, status, COALESCE(`read`, 0) as is_read, sender, farmer_total FROM contract_b'
-                    where_clause = " AND ".join(where) if where else "1=1"
-                    sql_contract_b = sql + f' WHERE {where_clause} AND status NOT IN ("rejected", "declined", "cancelled")'
-                    
-                    # Also fetch from contracts table where status is 'Negotiated'
-                    # Ensure is_read column exists in contracts table
+                    # Ensure is_read column exists in contracts table for farmer notifications too
                     try:
                         cur.execute("ALTER TABLE contracts ADD COLUMN is_read INT DEFAULT 0")
                         conn.commit()
                     except:
                         pass
                     
-                    sql_contracts = 'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts WHERE status = "Negotiated"'
+                    # Fetch from contracts table for farmer notification statuses
+                    farmer_where_clause = " AND ".join(where) if where else "1=1"
+                    sql_contracts = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts WHERE {farmer_where_clause} AND status IN ("farmer_negotiated", "buyer_negotiated") ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
                     
-                    if farmer_id_q:
-                        sql_contracts += f' AND farmer_id={int(farmer_id_q) if farmer_id_q.isdigit() else farmer_id_q}'
-                    
-                    sql_contract_b += ' ORDER BY id DESC LIMIT 100'
-                    sql_contracts += ' ORDER BY created_at DESC LIMIT 100'
+                    # Fetch from contract_b table with status filter (pending, farmer_negotiated, buyer_negotiated)
+                    sql = 'SELECT id, contract_number, farmer_id, farmer_name, farmer_address, farmer_state, crop_name, variety, quantity_kg, price_per_kg, amount, buyer_name, buyer_id, buyer_address, buyer_state, start_date, end_date, duration, contract_nature, contract_duration, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, status, COALESCE(`read`, 0) as is_read, sender, farmer_total FROM contract_b'
+                    where.append("status IN ('pending', 'farmer_negotiated', 'buyer_negotiated')")
+                    where_clause = " AND ".join(where) if where else "1=1"
+                    sql_contract_b = sql + f' WHERE {where_clause} ORDER BY id DESC LIMIT 100'
                     
                     # Debug logging
                     try:
                         with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                            f.write(f"  SQL_CONTRACT_B: {sql_contract_b} PARAMS: {params}\n")
-                            f.write(f"  SQL_CONTRACTS: {sql_contracts}\n")
+                            f.write(f"  SQL_CONTRACTS_FARMER: {sql_contracts} PARAMS: {params}\n")
+                            f.write(f"  SQL_CONTRACT_B: {sql_contract_b}\n")
                     except:
                         pass
                     
-                    # Fetch from contract_b
+                    # Fetch from contracts and contract_b
+                    cur.execute(sql_contracts, tuple(params))
+                    rows_contracts = cur.fetchall()
                     cur.execute(sql_contract_b, tuple(params))
                     rows_contract_b = cur.fetchall()
                     
-                    # Fetch from contracts where status is Negotiated
-                    cur.execute(sql_contracts)
-                    rows_contracts = cur.fetchall()
-                    
                     # Debug logging
                     try:
                         with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                            f.write(f"  ROWS_CONTRACT_B: {len(rows_contract_b)}, ROWS_CONTRACTS (Negotiated): {len(rows_contracts)}\n")
+                            f.write(f"  ROWS_CONTRACTS: {len(rows_contracts)}, ROWS_CONTRACT_B: {len(rows_contract_b)}\n")
                     except:
                         pass
                     
-                    # Process contract_b rows
-                    for r in rows_contract_b:
+                    # Process contracts table rows
+                    seen_contract_numbers = set()
+                    for r in rows_contracts:
+                        seen_contract_numbers.add(r.get('contract_number') if isinstance(r, dict) else r[0])
                         if isinstance(r, dict):
                             results.append({
-                                'id': r.get('id'),
+                                'id': r.get('contract_number'),
                                 'contract_number': r.get('contract_number'),
+                                'source_table': 'contracts',
                                 'farmer_id': r.get('farmer_id'),
                                 'farmer_name': r.get('farmer_name'),
-                                'farmer_address': r.get('farmer_address'),
                                 'farmer_state': r.get('farmer_state'),
                                 'crop_name': r.get('crop_name'),
                                 'variety': r.get('variety'),
@@ -3425,12 +3418,10 @@ def list_purchase_notifications():
                                 'amount': r.get('amount'),
                                 'buyer_name': r.get('buyer_name'),
                                 'buyer_id': r.get('buyer_id'),
-                                'buyer_address': r.get('buyer_address'),
                                 'buyer_state': r.get('buyer_state'),
-                                'created_at': r.get('start_date'),
+                                'created_at': r.get('created_at'),
                                 'start_date': r.get('start_date'),
                                 'end_date': r.get('end_date'),
-                                'duration': r.get('duration'),
                                 'contract_nature': r.get('contract_nature'),
                                 'contract_duration': r.get('contract_duration'),
                                 'farmer_platform_fee': r.get('farmer_platform_fee'),
@@ -3438,30 +3429,28 @@ def list_purchase_notifications():
                                 'buyer_platform_fee': r.get('buyer_platform_fee'),
                                 'buyer_gst': r.get('buyer_gst'),
                                 'status': r.get('status'),
-                                'sender': r.get('sender', 'buyer'),
                                 'is_read': r.get('is_read', 0),
-                                'farmer_total': r.get('farmer_total', 0)
+                                'farmer_total': r.get('farmer_total', 0),
+                                'buyer_total': r.get('buyer_total', 0)
                             })
                         else:
                             results.append({
-                                'id': r[0], 'contract_number': r[1], 'farmer_id': r[2], 'farmer_name': r[3], 'farmer_address': r[4], 'farmer_state': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8],
-                                'price_per_kg': r[9], 'amount': r[10], 'buyer_name': r[11], 'buyer_id': r[12], 'buyer_address': r[13], 'buyer_state': r[14], 'created_at': r[15], 'start_date': r[15], 'end_date': r[16], 'duration': r[17],
-                                'contract_nature': r[18], 'contract_duration': r[19], 'farmer_platform_fee': r[20], 'farmer_gst': r[21], 'buyer_platform_fee': r[22], 'buyer_gst': r[23], 'status': r[24], 'is_read': r[25], 'sender': r[26], 'farmer_total': r[27]
+                                'id': r[0], 'contract_number': r[0], 'source_table': 'contracts', 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9],
+                                'price_per_kg': r[10], 'amount': r[11], 'buyer_name': r[5], 'buyer_id': r[4], 'buyer_state': r[6], 'created_at': r[24], 'start_date': r[20], 'end_date': r[21],
+                                'contract_nature': r[22], 'contract_duration': r[23], 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15], 'status': r[19], 'is_read': r[25], 'farmer_total': r[17], 'buyer_total': r[16]
                             })
                     
-                    # Process contracts rows (Negotiated status)
-                    seen_contract_numbers = set(r.get('contract_number') if isinstance(r, dict) else r[1] for r in rows_contract_b)
-                    for r in rows_contracts:
+                    # Process contract_b rows - avoid duplicate contract_numbers from contracts
+                    for r in rows_contract_b:
                         if isinstance(r, dict):
                             contract_num = r.get('contract_number')
-                            # Skip if already added from contract_b
                             if contract_num not in seen_contract_numbers:
                                 results.append({
                                     'id': contract_num,
                                     'contract_number': contract_num,
+                                    'source_table': 'contract_b',
                                     'farmer_id': r.get('farmer_id'),
                                     'farmer_name': r.get('farmer_name'),
-                                    'farmer_address': '',
                                     'farmer_state': r.get('farmer_state'),
                                     'crop_name': r.get('crop_name'),
                                     'variety': r.get('variety'),
@@ -3470,12 +3459,11 @@ def list_purchase_notifications():
                                     'amount': r.get('amount'),
                                     'buyer_name': r.get('buyer_name'),
                                     'buyer_id': r.get('buyer_id'),
-                                    'buyer_address': '',
                                     'buyer_state': r.get('buyer_state'),
-                                    'created_at': r.get('created_at'),
+                                    'created_at': r.get('start_date'),
                                     'start_date': r.get('start_date'),
                                     'end_date': r.get('end_date'),
-                                    'duration': 0,
+                                    'duration': r.get('duration'),
                                     'contract_nature': r.get('contract_nature'),
                                     'contract_duration': r.get('contract_duration'),
                                     'farmer_platform_fee': r.get('farmer_platform_fee'),
@@ -3483,19 +3471,19 @@ def list_purchase_notifications():
                                     'buyer_platform_fee': r.get('buyer_platform_fee'),
                                     'buyer_gst': r.get('buyer_gst'),
                                     'status': r.get('status'),
-                                    'sender': 'buyer',
                                     'is_read': r.get('is_read', 0),
-                                    'farmer_total': r.get('farmer_total', 0)
+                                    'farmer_total': r.get('farmer_total', 0),
+                                    'buyer_total': r.get('buyer_total', 0)
                                 })
                         else:
                             contract_num = r[0]
-                            # Skip if already added from contract_b
                             if contract_num not in seen_contract_numbers:
                                 results.append({
-                                    'id': contract_num, 'contract_number': contract_num, 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_address': '', 'farmer_state': r[3], 'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9],
-                                    'price_per_kg': r[10], 'amount': r[11], 'buyer_name': r[5], 'buyer_id': r[4], 'buyer_address': '', 'buyer_state': r[6], 'created_at': r[24], 'start_date': r[20], 'end_date': r[21], 'duration': 0,
-                                    'contract_nature': r[22], 'contract_duration': r[23], 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15], 'status': r[19], 'is_read': r[25], 'sender': 'buyer', 'farmer_total': r[17]
+                                    'id': contract_num, 'contract_number': contract_num, 'source_table': 'contract_b', 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'crop_name': r[8], 'variety': r[9], 'quantity_kg': r[10],
+                                    'price_per_kg': r[11] / r[10] if r[10] else 0, 'amount': r[11], 'buyer_name': r[5], 'buyer_id': r[4], 'buyer_state': r[6], 'created_at': r[20], 'start_date': None, 'end_date': None,
+                                    'contract_nature': None, 'contract_duration': None, 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15], 'status': r[18], 'is_read': r[21], 'farmer_total': r[17], 'buyer_total': r[16]
                                 })
+                    
             
             try: cur.close()
             except Exception: pass
@@ -3600,39 +3588,114 @@ def list_purchase_notifications():
             
             where = []
             params = []
-            if farmer_id_q:
-                where.append('farmer_id=?'); params.append(int(farmer_id_q) if farmer_id_q.isdigit() else farmer_id_q)
-            if farmer_phone_q:
-                where.append('farmer_id IN (SELECT id FROM farmer WHERE phone=?)'); params.append(farmer_phone_q)
-            # Fetch ONLY from contract_b table with status filter
-            sql = 'SELECT id, contract_number, farmer_id, farmer_name, crop_name, variety, quantity_kg, buyer_name, buyer_id, start_date, status, COALESCE([read], 0) as is_read, sender, farmer_total FROM contract_b'
-            where.append("status NOT IN ('rejected', 'declined', 'cancelled')")
-            if where:
-                sql += ' WHERE ' + ' AND '.join(where)
-            sql += ' ORDER BY id DESC LIMIT 100'
             
-            # Debug logging
-            try:
-                with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                    f.write(f"  SQL: {sql} PARAMS: {params}\n")
-            except:
-                pass
+            # Handle buyers
+            if buyer_id_q:
+                buyer_where = []
+                buyer_params = []
+                buyer_where.append('buyer_id=?'); buyer_params.append(int(buyer_id_q) if buyer_id_q.isdigit() else buyer_id_q)
+                
+                # Fetch from contracts table (pending, Negotiated, farmer_negotiated, buyer_negotiated statuses)
+                buyer_where_clause = " AND ".join(buyer_where) if buyer_where else "1=1"
+                sql_contracts = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts WHERE {buyer_where_clause} AND status IN ("pending", "Negotiated", "farmer_negotiated", "buyer_negotiated") ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
+                
+                # Fetch from contract_b where status is "pending", "Negotiated", "farmer_negotiated", or "buyer_negotiated"
+                sql_contract_b = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, buyer_total, farmer_total, delivery_cost, status, COALESCE(created_at, updated_at) as created_at, COALESCE([read], 0) as is_read FROM contract_b WHERE {buyer_where_clause} AND status IN ("pending", "Negotiated", "farmer_negotiated", "buyer_negotiated") ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
+                
+                # Fetch from contracts
+                cur.execute(sql_contracts, tuple(buyer_params))
+                rows_contracts = cur.fetchall()
+                
+                # Fetch from contract_b
+                cur.execute(sql_contract_b, tuple(buyer_params))
+                rows_contract_b = cur.fetchall()
+                
+                # Process contracts table rows
+                for r in rows_contracts:
+                    results.append({
+                        'id': r[0], 'contract_number': r[0], 'source_table': 'contracts', 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'buyer_id': r[4], 'buyer_name': r[5], 'buyer_state': r[6],
+                        'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9], 'price_per_kg': r[10], 'amount': r[11],
+                        'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15],
+                        'buyer_total': r[16], 'farmer_total': r[17], 'delivery_cost': r[18], 'status': r[19],
+                        'start_date': r[20], 'end_date': r[21], 'contract_nature': r[22], 'contract_duration': r[23],
+                        'created_at': r[24], 'is_read': r[25]
+                    })
+                
+                # Process contract_b table rows (avoid duplicates)
+                seen_contract_numbers = set(r[0] for r in rows_contracts)
+                for r in rows_contract_b:
+                    contract_num = r[0]
+                    if contract_num not in seen_contract_numbers:
+                        results.append({
+                            'id': contract_num, 'contract_number': contract_num, 'source_table': 'contract_b', 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3],
+                            'buyer_id': r[4], 'buyer_name': r[5], 'buyer_state': r[6],
+                            'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9], 'amount': r[10],
+                            'farmer_platform_fee': r[11], 'farmer_gst': r[12], 'buyer_platform_fee': r[13], 'buyer_gst': r[14],
+                            'buyer_total': r[15], 'farmer_total': r[16], 'delivery_cost': r[17], 'status': r[18],
+                            'created_at': r[19], 'is_read': r[20]
+                        })
+            # Handle farmers
+            elif farmer_id_q or farmer_phone_q:
+                where = []
+                params = []
+                if farmer_id_q:
+                    where.append('farmer_id=?'); params.append(int(farmer_id_q) if farmer_id_q.isdigit() else farmer_id_q)
+                if farmer_phone_q:
+                    where.append('farmer_id IN (SELECT id FROM farmer WHERE phone=?)'); params.append(farmer_phone_q)
+                
+                # Ensure is_read column exists in contracts for farmer notifications too
+                try:
+                    cur.execute("ALTER TABLE contracts ADD COLUMN is_read INTEGER DEFAULT 0")
+                    conn.commit()
+                except:
+                    pass
+
+                farmer_where_clause = " AND ".join(where) if where else "1=1"
+                sql_contracts = f'SELECT contract_number, farmer_id, farmer_name, farmer_state, buyer_id, buyer_name, buyer_state, crop_name, variety, quantity_kg, price_per_kg, amount, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, farmer_total, buyer_total, status, start_date, end_date, contract_nature, contract_duration, COALESCE(created_at, updated_at) as created_at, COALESCE(is_read, 0) as is_read FROM contracts WHERE {farmer_where_clause} AND status IN ("farmer_negotiated", "buyer_negotiated") ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 100'
+
+                sql_contract_b = 'SELECT id, contract_number, farmer_id, farmer_name, farmer_address, farmer_state, crop_name, variety, quantity_kg, buyer_name, buyer_id, start_date, end_date, duration, contract_nature, contract_duration, farmer_platform_fee, farmer_gst, buyer_platform_fee, buyer_gst, status, COALESCE([read], 0) as is_read, sender, farmer_total FROM contract_b'
+                where.append("status IN ('pending', 'farmer_negotiated', 'buyer_negotiated')")
+                sql_contract_b += ' WHERE ' + ' AND '.join(where)
+                sql_contract_b += ' ORDER BY id DESC LIMIT 100'
+
+                # Debug logging
+                try:
+                    with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
+                        f.write(f"  SQL_CONTRACTS_FARMER: {sql_contracts} PARAMS: {params}\n")
+                        f.write(f"  SQL_CONTRACT_B: {sql_contract_b}\n")
+                except:
+                    pass
+
+                cur.execute(sql_contracts, tuple(params))
+                rows_contracts = cur.fetchall()
+                cur.execute(sql_contract_b, tuple(params))
+                rows_contract_b = cur.fetchall()
+
+                # Debug logging
+                try:
+                    with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
+                        f.write(f"  ROWS_CONTRACTS: {len(rows_contracts)}, ROWS_CONTRACT_B: {len(rows_contract_b)}\n")
+                except:
+                    pass
+
+                for r in rows_contracts:
+                    contract_num = r[0]
+                    results.append({
+                        'id': contract_num, 'contract_number': contract_num, 'source_table': 'contracts', 'farmer_id': r[1], 'farmer_name': r[2], 'farmer_state': r[3], 'buyer_id': r[4], 'buyer_name': r[5], 'buyer_state': r[6],
+                        'crop_name': r[7], 'variety': r[8], 'quantity_kg': r[9], 'price_per_kg': r[10], 'amount': r[11], 'farmer_platform_fee': r[12], 'farmer_gst': r[13], 'buyer_platform_fee': r[14], 'buyer_gst': r[15],
+                        'farmer_total': r[16], 'buyer_total': r[17], 'status': r[18], 'start_date': r[19], 'end_date': r[20], 'contract_nature': r[21], 'contract_duration': r[22], 'created_at': r[23], 'is_read': r[24]
+                    })
+
+                seen_contract_numbers = set(r[0] for r in rows_contracts)
+                for r in rows_contract_b:
+                    contract_num = r[1]
+                    if contract_num not in seen_contract_numbers:
+                        results.append({
+                            'id': contract_num, 'contract_number': contract_num, 'source_table': 'contract_b', 'farmer_id': r[2], 'farmer_name': r[3], 'farmer_address': r[4], 'farmer_state': r[5], 'crop_name': r[6], 'variety': r[7], 'quantity_kg': r[8], 'buyer_name': r[9],
+                            'buyer_id': r[10], 'start_date': r[11], 'end_date': r[12], 'duration': r[13], 'contract_nature': r[14], 'contract_duration': r[15], 'farmer_platform_fee': r[16], 'farmer_gst': r[17], 'buyer_platform_fee': r[18], 'buyer_gst': r[19],
+                            'status': r[20], 'is_read': r[21], 'sender': r[22], 'farmer_total': r[23]
+                        })
             
-            cur.execute(sql, tuple(params))
-            rows = cur.fetchall()
-            
-            # Debug logging
-            try:
-                with open(os.path.join(os.path.dirname(__file__), 'notifications_list.log'), 'a', encoding='utf-8') as f:
-                    f.write(f"  ROWS_COUNT: {len(rows)}\n")
-            except:
-                pass
-            
-            for r in rows:
-                results.append({
-                    'id': r[0], 'contract_number': r[1], 'farmer_id': r[2], 'farmer_name': r[3], 'crop_name': r[4], 'variety': r[5], 'quantity_kg': r[6],
-                    'buyer_name': r[7], 'buyer_id': r[8], 'created_at': r[9], 'status': r[10], 'is_read': r[11], 'sender': r[12], 'farmer_total': r[13]
-                })
             try: cur.close()
             except Exception: pass
             try: conn.close()
@@ -3698,9 +3761,9 @@ def mark_notifications_read():
                         pass
                 
                 try:
-                    # Update contract_b table (read column) for negotiated contracts
+                    # Update contract_b table (read column) for negotiated, farmer_negotiated, and buyer_negotiated statuses
                     in_clause = ','.join(['%s'] * len(contract_numbers))
-                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE contract_number IN ({in_clause}) AND buyer_id=%s AND status="Negotiated"', tuple(contract_numbers) + (buyer_id,))
+                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE contract_number IN ({in_clause}) AND buyer_id=%s AND status IN ("Negotiated", "farmer_negotiated", "buyer_negotiated")', tuple(contract_numbers) + (buyer_id,))
                     conn.commit()
                 except Exception as e:
                     print(f"Error marking buyer contracts as read in contract_b: {e}")
@@ -3772,9 +3835,9 @@ def mark_notifications_read():
                         pass
                 
                 try:
-                    # Update contract_b table (read column) for negotiated contracts
+                    # Update contract_b table (read column) for negotiated, farmer_negotiated, and buyer_negotiated statuses
                     in_clause = ','.join(['?'] * len(contract_numbers))
-                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE contract_number IN ({in_clause}) AND buyer_id=? AND status="Negotiated"', tuple(contract_numbers) + (buyer_id,))
+                    cur.execute(f'UPDATE contract_b SET `read`=1 WHERE contract_number IN ({in_clause}) AND buyer_id=? AND status IN ("Negotiated", "farmer_negotiated", "buyer_negotiated")', tuple(contract_numbers) + (buyer_id,))
                     conn.commit()
                 except Exception as e:
                     print(f"Error marking buyer contracts as read in contract_b (SQLite): {e}")
@@ -4696,6 +4759,7 @@ def send_negotiation():
     try:
         data = request.get_json(silent=True) or {}
         contract_number = (data.get('contract_number') or '').strip()
+        user_role = (data.get('user_role') or '').strip()
         negotiated_price_per_kg = data.get('negotiated_price_per_kg')
         negotiated_delivery_date = (data.get('negotiated_delivery_date') or '').strip()
         negotiated_subtotal = data.get('negotiated_subtotal')
@@ -4706,9 +4770,13 @@ def send_negotiation():
         buyer_gst = data.get('buyer_gst')
         buyer_total = data.get('buyer_total')
         
-        print(f"📨 send_negotiation received: contract={contract_number}")
+        # Determine status based on who sent the negotiation
+        negotiation_status = 'farmer_negotiated' if user_role == 'farmer' else 'buyer_negotiated'
+        
+        print(f"📨 send_negotiation received: contract={contract_number}, sender={user_role}")
         print(f"   Price: ₹{negotiated_price_per_kg}/kg | Date: {negotiated_delivery_date}")
         print(f"   Farmer Total: ₹{farmer_total} | Buyer Total: ₹{buyer_total}")
+        print(f"   Status: {negotiation_status}")
         
         # Validation
         if not contract_number:
@@ -4758,7 +4826,8 @@ def send_negotiation():
                         farmer_total = %s,
                         buyer_platform_fee = %s,
                         buyer_gst = %s,
-                        buyer_total = %s
+                        buyer_total = %s,
+                        status = %s
                     WHERE contract_number = %s
                 """, (
                     negotiated_price_per_kg,
@@ -4770,6 +4839,7 @@ def send_negotiation():
                     buyer_platform_fee,
                     buyer_gst,
                     buyer_total,
+                    negotiation_status,
                     contract_number
                 ))
             else:
@@ -4783,7 +4853,8 @@ def send_negotiation():
                         farmer_total = ?,
                         buyer_platform_fee = ?,
                         buyer_gst = ?,
-                        buyer_total = ?
+                        buyer_total = ?,
+                        status = ?
                     WHERE contract_number = ?
                 """, (
                     negotiated_price_per_kg,
@@ -4795,6 +4866,7 @@ def send_negotiation():
                     buyer_platform_fee,
                     buyer_gst,
                     buyer_total,
+                    negotiation_status,
                     contract_number
                 ))
             contracts_updated = cur.rowcount
@@ -4814,7 +4886,8 @@ def send_negotiation():
                         farmer_total = %s,
                         buyer_platform_fee = %s,
                         buyer_gst = %s,
-                        buyer_total = %s
+                        buyer_total = %s,
+                        status = %s
                     WHERE contract_number = %s
                 """, (
                     negotiated_price_per_kg,
@@ -4826,6 +4899,7 @@ def send_negotiation():
                     buyer_platform_fee,
                     buyer_gst,
                     buyer_total,
+                    negotiation_status,
                     contract_number
                 ))
             else:
@@ -4839,7 +4913,8 @@ def send_negotiation():
                         farmer_total = ?,
                         buyer_platform_fee = ?,
                         buyer_gst = ?,
-                        buyer_total = ?
+                        buyer_total = ?,
+                        status = ?
                     WHERE contract_number = ?
                 """, (
                     negotiated_price_per_kg,
@@ -4851,6 +4926,7 @@ def send_negotiation():
                     buyer_platform_fee,
                     buyer_gst,
                     buyer_total,
+                    negotiation_status,
                     contract_number
                 ))
             contract_b_updated = cur.rowcount

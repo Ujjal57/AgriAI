@@ -29,7 +29,7 @@ const FarmerCart = () => {
   const [otpVerified, setOtpVerified] = React.useState(false);
   const [digitalSignature, setDigitalSignature] = React.useState('');
   const [pendingContractAction, setPendingContractAction] = React.useState(null);
-
+  
   const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
 
   const [siteLang, setSiteLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
@@ -3217,7 +3217,7 @@ ${contractHtml}
     </span>
   </label>
 
-  <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', width: '100%' }}>
     <button 
       onClick={() => {
         if (otpVerified && digitalSignature) {
@@ -3418,7 +3418,7 @@ ${contractHtml}
           </div>
         </div>
       )}
-      
+
       {/* Footer */}
       <footer className="w-full border-t" style={{background:'oklch(0.12 0.03 160 / 0.5)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor:'oklch(0.65 0.22 145 / 0.12)', padding:'1em 0'}}>
         <div className="max-w-7xl mx-auto px-6">

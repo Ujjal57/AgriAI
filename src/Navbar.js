@@ -169,30 +169,41 @@ const Navbar = () => {
       let timer;
       const load = async () => {
         if (!userId) {
+          console.warn('⚠️ Buyer userId not found in polling');
           setNotifCount(0);
           return;
         }
         try {
           const qp = userId ? `buyer_id=${encodeURIComponent(userId)}` : '';
           const url = `${apiBase}/notifications/list?${qp}`;
+          console.log('🔄 Polling buyer notifications:', { url });
           const res = await fetch(url);
-          if (!res.ok) return;
+          if (!res.ok) {
+            console.error('❌ Polling failed:', res.status);
+            return;
+          }
           const j = await res.json();
           if (j && j.ok && Array.isArray(j.notifications)) {
             // Count only unread contracts from backend (read column in contracts)
-            // For buyers, exclude contracts with status 'accepted'
+            // For buyers, show pending, negotiated, farmer_negotiated, buyer_negotiated statuses from both contracts and contract_b tables
             const unreadCount = j.notifications.filter(n => {
               if (!(n && Number(n.is_read))) {
-                if (userRole === 'buyer' && n.status && (n.status).toLowerCase() === 'accepted') {
-                  return false;
+                if (userRole === 'buyer' && n.status) {
+                  const status = (n.status).toLowerCase();
+                  if (!['pending', 'negotiated', 'farmer_negotiated', 'buyer_negotiated'].includes(status)) {
+                    return false;
+                  }
                 }
                 return true;
               }
               return false;
             }).length;
+            console.log('📊 Buyer unread count:', { total: j.notifications.length, unread: unreadCount, statuses: j.notifications.map(n => ({ contract_number: n.contract_number, status: n.status, source: n.source_table, is_read: n.is_read })) });
             setNotifCount(unreadCount);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('❌ Error polling buyer notifications:', e);
+        }
       };
       load();
       const pollInterval = userRole === 'buyer' ? 5000 : 3000;
@@ -210,10 +221,17 @@ const Navbar = () => {
         const j = await res.json();
         if (j && j.ok && Array.isArray(j.notifications)) {
           // Count only unread contracts from backend (read column in contract_b)
-          // For farmers, count both pending and negotiated statuses
+          // For farmers, count statuses by source_table: contracts only show farmer_negotiated/buyer_negotiated, contract_b shows pending/farmer_negotiated/buyer_negotiated
           const unreadCount = j.notifications.filter(n => {
             if (!(n && Number(n.is_read))) {
-              if (userRole === 'farmer' && n.status && !['pending', 'negotiated'].includes((n.status).toLowerCase())) {
+              if (userRole === 'farmer') {
+                const status = (n.status || '').toLowerCase();
+                if (n.source_table === 'contracts') {
+                  return ['farmer_negotiated', 'buyer_negotiated'].includes(status);
+                }
+                if (n.source_table === 'contract_b') {
+                  return ['pending', 'farmer_negotiated', 'buyer_negotiated'].includes(status);
+                }
                 return false;
               }
               return true;
@@ -252,19 +270,29 @@ const Navbar = () => {
           if (j && j.ok && Array.isArray(j.notifications)) {
             // Show ONLY backend contract_b data - NO localStorage caching
             notifs = j.notifications;
+            console.log('🚜 Farmer notifications loaded:', { count: notifs.length, notifications: notifs });
           }
         } else if (userRole === 'buyer') {
           if (!userId) {
+            console.warn('⚠️ Buyer userId not found');
             notifs = [];
             return;
           }
           const qp = userId ? `buyer_id=${encodeURIComponent(userId)}` : '';
+          console.log('📥 Fetching buyer notifications with:', { userId, qp });
           const res = await fetch(`${apiBase}/notifications/list?${qp}`);
-          if (!res.ok) return;
+          if (!res.ok) {
+            console.error('❌ Fetch failed:', res.status, res.statusText);
+            return;
+          }
           const j = await res.json();
+          console.log('📦 Buyer notifications response:', j);
           if (j && j.ok && Array.isArray(j.notifications)) {
-            // Show ONLY backend contracts data - NO localStorage caching
+            // Show ONLY backend contracts + contract_b data - NO localStorage caching
             notifs = j.notifications;
+            console.log('✅ Buyer notifications loaded:', { count: notifs.length, notifications: notifs });
+          } else {
+            console.warn('⚠️ Invalid response format:', j);
           }
         } else {
           notifs = [];
@@ -275,19 +303,36 @@ const Navbar = () => {
         try { 
           const filteredNotifs = Array.isArray(notifs) 
             ? notifs.filter(x => {
-                // For farmers, show both pending and negotiated statuses
                 if (userRole === 'farmer') {
-                  if (x.status && !['pending', 'negotiated'].includes((x.status).toLowerCase())) {
+                  const status = (x.status || '').toLowerCase();
+                  if (x.source_table === 'contracts') {
+                    if (!['farmer_negotiated', 'buyer_negotiated'].includes(status)) {
+                      return false;
+                    }
+                  } else if (x.source_table === 'contract_b') {
+                    if (!['pending', 'farmer_negotiated', 'buyer_negotiated'].includes(status)) {
+                      return false;
+                    }
+                  } else {
                     return false;
                   }
                 }
-                // For buyers, show all since backend already filtered
+                if (userRole === 'buyer') {
+                  if (x.status && !['pending', 'negotiated', 'farmer_negotiated', 'buyer_negotiated'].includes((x.status).toLowerCase())) {
+                    return false;
+                  }
+                }
                 return !(x && Number(x.is_read));
               })
             : [];
+          console.log('🔔 Filtered unread notifications:', { userRole, total: notifs.length, unread: filteredNotifs.length, statuses: filteredNotifs.map(x => x.status) });
           setNotifCount(filteredNotifs.length);
-        } catch (e) {}
-      } catch (e) {}
+        } catch (e) {
+          console.error('❌ Error filtering notifications:', e);
+        }
+      } catch (e) {
+        console.error('❌ Error loading notifications:', e);
+      }
     };
 
     const onEvent = () => { try { if (notifOpen) loadFull(); else {/* no-op */} } catch (e) {} };
@@ -483,25 +528,35 @@ const Navbar = () => {
       return;
     }
 
-    console.log('finalizeContract initiated', { contractNumber, buyerId, status, userRole, otpVerified, digitalSignature });
+    // Determine the correct status based on source_table for buyers accepting contracts
+    let finalStatus = status;
+    if (userRole === 'buyer' && status === 'accepted') {
+      if (currentContractNotification.source_table === 'contract_b') {
+        finalStatus = 'accepted';
+      } else if (currentContractNotification.source_table === 'contracts') {
+        finalStatus = 'pending';
+      }
+    }
+
+    console.log('finalizeContract initiated', { contractNumber, buyerId, status: finalStatus, userRole, otpVerified, digitalSignature, sourceTable: currentContractNotification.source_table });
 
     const doRequest = async () => {
       const payload = { 
         contract_number: contractNumber, 
-        status: status
+        status: finalStatus
       };
       
       // Add buyer or farmer info based on user role
       if (userRole === 'buyer') {
         payload.buyer_id = buyerId;
         // include signature only for buyer acceptance
-        if (status === 'accepted' && digitalSignature) {
+        if (finalStatus === 'accepted' && digitalSignature) {
           payload.signature_data = digitalSignature;
         }
       } else if (userRole === 'farmer') {
         payload.farmer_id = farmerId;
         // include farmer signature info for farmer acceptance
-        if (status === 'accepted') {
+        if (finalStatus === 'accepted') {
           payload.farmer_signature_data = {
             farmer_name: userName,
             farmer_signed_date: farmerDateVerified,
@@ -539,14 +594,14 @@ const Navbar = () => {
       console.log('Response from /contracts/accept:', res.status, responseText, responseJson);
 
       if (res && res.ok) {
-        console.log('✅ Contract status API succeeded for', contractNumber, 'status=', status);
+        console.log('✅ Contract status API succeeded for', contractNumber, 'status=', finalStatus);
         // update local notification to reflect new status
-        setCurrentContractNotification(prev => prev ? { ...prev, status: status } : prev);
+        setCurrentContractNotification(prev => prev ? { ...prev, status: finalStatus } : prev);
         // update the notifications list to show new status
         setNotifList(prev => {
           const updated = prev.map(notif => 
             notif.contract_number === contractNumber 
-              ? { ...notif, status: status }
+              ? { ...notif, status: finalStatus }
               : notif
           );
           console.log('✅ Updated local notifList after contract status change:', updated);
@@ -562,15 +617,15 @@ const Navbar = () => {
         setContractSignatureDate('');
         
         // Show success message to user
-        alert(`Contract ${status === 'accepted' ? 'accepted' : 'rejected'} successfully!`);
+        alert(`Contract ${finalStatus === 'accepted' ? 'accepted' : 'rejected'} successfully!`);
     
     
       } else {
-        const status = res ? res.status : 'no response';
-        console.warn('Contract acceptance API returned non-ok status:', status);
+        const httpStatus = res ? res.status : 'no response';
+        console.warn('Contract acceptance API returned non-ok status:', httpStatus);
         console.warn('Response body:', responseText);
         // show error message but keep modal open so user can retry
-        let msg = `Unable to update contract status (server: ${status}). Please check network or try again.`;
+        let msg = `Unable to update contract status (server: ${httpStatus}). Please check network or try again.`;
         if (responseJson && responseJson.error) {
           msg += `\nServer message: ${responseJson.error}`;
         }
@@ -623,94 +678,61 @@ const Navbar = () => {
       return;
     }
     
-    console.log('Submitting negotiation for contract:', contractNumber);
-    console.log('Current user role:', userRole);
-    console.log('Current user ID:', userId);
+    console.log('Updating negotiation in UI (not saving to database yet)');
     console.log('Negotiate price:', negotiatePrice);
     console.log('Negotiate date:', negotiateDate);
     
     try {
-      const payload = {
-        contract_number: contractNumber,
-        negotiated_price_per_kg: parseFloat(negotiatePrice),
-        negotiated_delivery_date: negotiateDate,
-        user_role: userRole,
-        user_id: parseInt(userId)
+      // Calculate new financial values based on negotiated price using FIXED RATES
+      const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+      const newPrice = negotiatePrice ? parseFloat(negotiatePrice) : (currentContractNotification.price_per_kg || 0);
+      const qty = currentContractNotification.quantity_kg || 0;
+      const newSubtotal = round2(qty * newPrice);
+      
+      // Fixed rates: 4% farmer, 5% buyer
+      const newFarmerFee = round2(newSubtotal * 0.04);
+      const newFarmerGst = round2(newFarmerFee * 0.18);
+      const newFarmerTotal = round2(newSubtotal - newFarmerFee - newFarmerGst);
+      
+      const newBuyerFee = round2(newSubtotal * 0.05);
+      const newBuyerGst = round2(newBuyerFee * 0.18);
+      const newBuyerTotal = round2(newSubtotal + newBuyerFee + newBuyerGst);
+      
+      // Update the currentContractNotification with all recalculated values (UI ONLY - NOT saved to DB yet)
+      const updatedContract = {
+        ...currentContractNotification,
+        price_per_kg: newPrice,
+        end_date: negotiateDate || currentContractNotification.end_date,
+        // Standard fields
+        amount: newSubtotal,
+        total_amount: newSubtotal,
+        // Buyer side calculations with fixed 5% rate
+        buyer_platform_fee: newBuyerFee,
+        buyer_gst: newBuyerGst,
+        buyer_total: newBuyerTotal,
+        // Farmer side calculations with fixed 4% rate
+        farmer_platform_fee: newFarmerFee,
+        farmer_gst: newFarmerGst,
+        farmer_total: newFarmerTotal
       };
       
-      console.log('Sending payload:', payload);
+      setCurrentContractNotification(updatedContract);
       
-      const res = await fetch(`${apiBase}/contracts/negotiate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      // Regenerate the contract HTML with updated values
+      await generateContractHtml(updatedContract);
       
-      console.log('Response status:', res.status);
-      const responseText = await res.text();
-      console.log('Response text:', responseText);
+      // Close the negotiation modal and show updated contract
+      setShowNegotiateModal(false);
+      setNegotiatePrice('');
+      setNegotiateDate('');
+      setNegotiationSubmitted(true);
       
-      if (res.ok) {
-        // Calculate new financial values based on negotiated price using FIXED RATES
-        const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
-        const newPrice = negotiatePrice ? parseFloat(negotiatePrice) : (currentContractNotification.price_per_kg || 0);
-        const qty = currentContractNotification.quantity_kg || 0;
-        const newSubtotal = round2(qty * newPrice);
-        
-        // Fixed rates: 4% farmer, 5% buyer
-        const newFarmerFee = round2(newSubtotal * 0.04);
-        const newFarmerGst = round2(newFarmerFee * 0.18);
-        const newFarmerTotal = round2(newSubtotal - newFarmerFee - newFarmerGst);
-        
-        const newBuyerFee = round2(newSubtotal * 0.05);
-        const newBuyerGst = round2(newBuyerFee * 0.18);
-        const newBuyerTotal = round2(newSubtotal + newBuyerFee + newBuyerGst);
-        
-        // Update the currentContractNotification with all recalculated values
-        const updatedContract = {
-          ...currentContractNotification,
-          price_per_kg: newPrice,
-          end_date: negotiateDate || currentContractNotification.end_date,
-          status: 'negotiated',
-          // Standard fields
-          amount: newSubtotal,
-          total_amount: newSubtotal,
-          // Buyer side calculations with fixed 5% rate
-          buyer_platform_fee: newBuyerFee,
-          buyer_gst: newBuyerGst,
-          buyer_total: newBuyerTotal,
-          // Farmer side calculations with fixed 4% rate
-          farmer_platform_fee: newFarmerFee,
-          farmer_gst: newFarmerGst,
-          farmer_total: newFarmerTotal
-        };
-        
-        setCurrentContractNotification(updatedContract);
-        
-        // Regenerate the contract HTML with updated values
-        await generateContractHtml(updatedContract);
-        
-        // Close the negotiation modal and show updated contract
-        setShowNegotiateModal(false);
-        setNegotiatePrice('');
-        setNegotiateDate('');
-        setNegotiationSubmitted(true);
-        
-        // Show success message
-        alert((t('negotiationSubmittedSuccess', siteLang) || 'Negotiation submitted successfully. Contract has been updated.'));
-        
-        // Dispatch event to refresh notifications
-        try {
-          window.dispatchEvent(new Event('agriai:notifications:update'));
-          window.dispatchEvent(new Event('agriai:contracts:saved'));
-        } catch (e) {}
-      } else {
-        console.error('Failed response:', responseText);
-        alert('Failed to submit negotiation. Please try again.');
-      }
+      // Show success message
+      alert((t('negotiationDetailsUpdated', siteLang) || 'Negotiation details updated. Click "Send Negotiation" to save to database.'));
+      
     } catch (e) {
-      console.error('Error submitting negotiation:', e);
-      alert('Error submitting negotiation. Please try again.');
+      console.error('Error updating negotiation:', e);
+      alert('Error updating negotiation. Please try again.');
     }
   };
 
@@ -2717,15 +2739,24 @@ const Navbar = () => {
                     </div>
                   )}
                   {Array.isArray(notifList) && notifList.filter(n => {
-                    // For farmers: show pending and negotiated status contracts
+                    // For farmers: contracts should only show farmer_negotiated/buyer_negotiated; contract_b should show pending, farmer_negotiated, buyer_negotiated
                     if (userRole === 'farmer') {
-                      if (n.status && ['pending', 'negotiated'].includes((n.status).toLowerCase())) {
+                      const status = (n.status || '').toLowerCase();
+                      if (n.source_table === 'contracts') {
+                        return ['farmer_negotiated', 'buyer_negotiated'].includes(status);
+                      }
+                      if (n.source_table === 'contract_b') {
+                        return ['pending', 'farmer_negotiated', 'buyer_negotiated'].includes(status);
+                      }
+                      return false;
+                    }
+                    // For buyers: show pending, negotiated, farmer_negotiated, buyer_negotiated from contracts and contract_b
+                    if (userRole === 'buyer') {
+                      if (n.status && ['pending', 'negotiated', 'farmer_negotiated', 'buyer_negotiated'].includes((n.status).toLowerCase())) {
                         return true;
                       }
                       return false;
                     }
-                    // For buyers: show all from contracts table + negotiated from contract_b
-                    // Since backend already filters, just return true for both
                     return true;
                   }).map(n => {
                     // Extract items early so it's available everywhere in this closure
@@ -2827,10 +2858,16 @@ const Navbar = () => {
                                   if (s === 'accepted') return '#2e7d32';
                                   if (s === 'pending') return '#fdd835';
                                   if (s === 'negotiated') return '#fdd835';
+                                  if (s === 'farmer_negotiated') return '#fdd835';
+                                  if (s === 'buyer_negotiated') return '#fdd835';
                                   if (s === 'rejected') return '#c62828';
                                   return '#ccc';
                                 })(),
-                                color: '#fff',
+                                color: (function() {
+                                  const s = String(n.status || 'pending').toLowerCase();
+                                  if (s === 'pending' || s === 'negotiated' || s === 'farmer_negotiated' || s === 'buyer_negotiated') return '#000';
+                                  return '#fff';
+                                })(),
                                 border: 'none',
                                 padding: '4px 8px',
                                 borderRadius: 4,
@@ -2965,40 +3002,46 @@ const Navbar = () => {
           
           {/* Footer Actions */}
           <div style={{borderTop:'2px solid #e5e5e5', padding:'16px 24px', background:'#f9f9f9', display:'flex', justifyContent:'center', gap:12}}>
-            <button 
-              onClick={() => handleContractAction('accept')}
-              onMouseEnter={(e) => { e.target.style.background='#1a5c10'; e.target.style.transform='scale(1.02)'; }}
-              onMouseLeave={(e) => { e.target.style.background='#28a745'; e.target.style.transform='scale(1)'; }}
-              style={{padding:'8px 20px', background:'#28a745', color:'#fff', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
-              {t('contractAccept', siteLang) || 'Accept'}
-            </button>
-            <button 
-              onClick={() => handleContractAction('negotiate')}
-              onMouseEnter={(e) => { e.target.style.background='#e0a500'; e.target.style.transform='scale(1.02)'; }}
-              onMouseLeave={(e) => { e.target.style.background='#ffc107'; e.target.style.transform='scale(1)'; }}
-              style={{padding:'8px 20px', background:'#ffc107', color:'#000', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
-              {t('contractNegotiate', siteLang) || 'Negotiate'}
-            </button>
-            {negotiationSubmitted && (
+            <>
+              {!negotiationSubmitted && !(userRole === 'farmer' && currentContractNotification?.status === 'farmer_negotiated') && !(userRole === 'buyer' && currentContractNotification?.status === 'buyer_negotiated') && !(currentContractNotification?.source_table === 'contract_b' && String(currentContractNotification?.status || '').toLowerCase() === 'pending') && (
+                <button 
+                  onClick={() => handleContractAction('accept')}
+                  onMouseEnter={(e) => { e.target.style.background='#1a5c10'; e.target.style.transform='scale(1.02)'; }}
+                  onMouseLeave={(e) => { e.target.style.background='#28a745'; e.target.style.transform='scale(1)'; }}
+                  style={{padding:'8px 20px', background:'#28a745', color:'#fff', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
+                  {t('contractAccept', siteLang) || 'Accept'}
+                </button>
+              )}
               <button 
-                onClick={handleSendNegotiation}
-                onMouseEnter={(e) => { e.target.style.background='#0056b3'; e.target.style.transform='scale(1.02)'; }}
-                onMouseLeave={(e) => { e.target.style.background='#007bff'; e.target.style.transform='scale(1)'; }}
-                style={{padding:'8px 20px', background:'#007bff', color:'#fff', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
-                {t('sendNegotiation', siteLang) || 'Send Negotiation'}
+                onClick={() => handleContractAction('negotiate')}
+                onMouseEnter={(e) => { e.target.style.background='#e0a500'; e.target.style.transform='scale(1.02)'; }}
+                onMouseLeave={(e) => { e.target.style.background='#ffc107'; e.target.style.transform='scale(1)'; }}
+                style={{padding:'8px 20px', background:'#ffc107', color:'#000', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
+                {t('contractNegotiate', siteLang) || 'Negotiate'}
               </button>
-            )}
-            <button 
-              onClick={() => {
-                if (window.confirm(t('confirmRejectContract', siteLang) || 'Are you sure you want to reject this contract?')) {
-                  handleContractAction('reject');
-                }
-              }}
-              onMouseEnter={(e) => { e.target.style.background='#dc3545'; e.target.style.transform='scale(1.02)'; }}
-              onMouseLeave={(e) => { e.target.style.background='#dc3545'; e.target.style.transform='scale(1)'; }}
-              style={{padding:'8px 20px', background:'#dc3545', color:'#fff', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
-              {t('contractReject', siteLang) || 'Reject'}
-            </button>
+              {negotiationSubmitted && (
+                <button 
+                  onClick={handleSendNegotiation}
+                  onMouseEnter={(e) => { e.target.style.background='#0056b3'; e.target.style.transform='scale(1.02)'; }}
+                  onMouseLeave={(e) => { e.target.style.background='#007bff'; e.target.style.transform='scale(1)'; }}
+                  style={{padding:'8px 20px', background:'#007bff', color:'#fff', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
+                  {t('sendNegotiation', siteLang) || 'Send Negotiation'}
+                </button>
+              )}
+              {!negotiationSubmitted && !(userRole === 'farmer' && currentContractNotification?.status === 'farmer_negotiated') && !(userRole === 'buyer' && currentContractNotification?.status === 'buyer_negotiated') && !(currentContractNotification?.source_table === 'contract_b' && String(currentContractNotification?.status || '').toLowerCase() === 'pending') && (
+                <button 
+                  onClick={() => {
+                    if (window.confirm(t('confirmRejectContract', siteLang) || 'Are you sure you want to reject this contract?')) {
+                      handleContractAction('reject');
+                    }
+                  }}
+                  onMouseEnter={(e) => { e.target.style.background='#dc3545'; e.target.style.transform='scale(1.02)'; }}
+                  onMouseLeave={(e) => { e.target.style.background='#dc3545'; e.target.style.transform='scale(1)'; }}
+                  style={{padding:'8px 20px', background:'#dc3545', color:'#fff', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:'13px', transition:'all 0.2s ease'}}>
+                  {t('contractReject', siteLang) || 'Reject'}
+                </button>
+              )}
+            </>
           </div>
           {/* Digital Signature OTP Verification Modal - FarmerCart Design */}
           {otpModalOpen && (
@@ -3204,7 +3247,7 @@ const Navbar = () => {
                 value={negotiatePrice}
                 onChange={(e) => setNegotiatePrice(e.target.value)}
                 placeholder={t('pricePlaceholder', siteLang) || 'e.g. 50'}
-                style={{width:'100%', padding:'10px', border: negotiatePrice ? '1px solid #236902' : '1px solid #ddd', borderRadius:'6px', fontSize:'14px'}}
+                style={{width:'100%', padding:'10px', border: negotiatePrice ? '1px solid #236902' : '1px solid #ddd', borderRadius:'6px', fontSize:'14px', color:'#000'}}
               />
             </div>
             <div style={{marginBottom:'16px'}}>
@@ -3216,11 +3259,11 @@ const Navbar = () => {
                 value={negotiateDate}
                 onChange={(e) => setNegotiateDate(e.target.value)}
                 placeholder={t('datePlaceholder', siteLang) || 'dd-mm-yyyy'}
-                style={{width:'100%', padding:'10px', border: negotiateDate ? '1px solid #236902' : '1px solid #ddd', borderRadius:'6px', fontSize:'14px'}}
+                style={{width:'100%', padding:'10px', border: negotiateDate ? '1px solid #236902' : '1px solid #ddd', borderRadius:'6px', fontSize:'14px', color:'#000'}}
               />
             </div>
             <div style={{marginBottom:'12px', fontSize:'13px', color:'#666', textAlign:'center'}}>
-              {!negotiatePrice || !negotiateDate ? <span style={{color:'#d32f2f'}}>⚠ Both fields are required</span> : <span style={{color:'#236902'}}>✓ Ready to submit</span>}
+              {(negotiatePrice && !negotiateDate) || (!negotiatePrice && negotiateDate) ? <span style={{color:'#d32f2f'}}>{t('bothFieldsRequired', siteLang) || '⚠ Both fields are required'}</span> : (negotiatePrice && negotiateDate) ? <span style={{color:'#236902'}}>{t('readyToSubmit', siteLang) || '✓ Ready to submit'}</span> : null}
             </div>
             <div style={{display:'flex', gap:'12px', justifyContent:'center'}}>
               <button

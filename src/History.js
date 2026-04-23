@@ -1784,6 +1784,7 @@ export default function History() {
                           let border = '1px solid #ddd';
                           if (s === 'accepted' || s === 'accept' || s === 'approved') { bg = '#4caf50'; color = '#fff'; border = '1px solid #45a049'; }
                           else if (s === 'pending' || s === 'awaiting' || s === 'pending_confirmation') { bg = '#ffeb3b'; color = '#000'; border = '1px solid #fdd835'; }
+                          else if (s === 'farmer_negotiated' || s === 'buyer_negotiated') { bg = '#ffeb3b'; color = '#000'; border = '1px solid #fdd835'; }
                           else if (s === 'rejected' || s === 'declined' || s === 'cancelled') { bg = '#f44336'; color = '#fff'; border = '1px solid #e53935'; }
                           return (
                             <button disabled style={{ background: bg, color, border, padding: '8px 14px', borderRadius: 10, cursor: 'default', fontWeight: 600, fontSize: '0.85rem' }}>{(t(s, siteLang) || (st && String(st).toUpperCase()) || 'STATUS')}</button>
@@ -1795,8 +1796,8 @@ export default function History() {
                         >
                           🖨️
                         </button>
-                        {( ((o._db_contract && (String(o._db_contract.status).toLowerCase() === 'pending' || String(o._db_contract.status).toLowerCase() === 'negotiated'))
-                             || (String(o.status || '').toLowerCase() === 'pending' || String(o.status || '').toLowerCase() === 'negotiated')) && (
+                        {( ((o._db_contract && (String(o._db_contract.status).toLowerCase() === 'pending' || String(o._db_contract.status).toLowerCase() === 'negotiated' || String(o._db_contract.status).toLowerCase() === 'farmer_negotiated' || String(o._db_contract.status).toLowerCase() === 'buyer_negotiated'))
+                             || (String(o.status || '').toLowerCase() === 'pending' || String(o.status || '').toLowerCase() === 'negotiated' || String(o.status || '').toLowerCase() === 'farmer_negotiated' || String(o.status || '').toLowerCase() === 'buyer_negotiated')) && (
                           <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'rgba(198,40,40,0.1)', color: '#c62828', border: '1px solid rgba(198,40,40,0.3)', padding: '8px 12px', borderRadius: 10, marginLeft: 6, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, transition: 'all 0.2s' }}>{'🗑️'}</button>
                         ))}
                       </div>
