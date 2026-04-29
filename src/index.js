@@ -23,6 +23,7 @@ import FarmerCart from './farmer/FarmerCart';
 import MyDeals from './MyDeals';
 import reportWebVitals from './reportWebVitals';
 import Chatbot from './Chatbot';
+import Tutorials from './farmer/Tutorials';
 
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -47,6 +48,8 @@ root.render(
   <Route path="/farmer/cart" element={<FarmerCart />} />
   <Route path="/farmer/notification" element={<Notification />} />
   <Route path="/admin/contacts" element={<ContactAdmin />} />
+  <Route path="/tutorials" element={<Tutorials />} />
+  <Route path="/help" element={<Tutorials />} />
       </Routes>
       <Chatbot />
     </BrowserRouter>

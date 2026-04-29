@@ -30,6 +30,11 @@ const FarmerCart = () => {
   const [digitalSignature, setDigitalSignature] = React.useState('');
   const [pendingContractAction, setPendingContractAction] = React.useState(null);
   
+  // Speech Synthesis State
+  const [isSpeaking, setIsSpeaking] = React.useState(false);
+  const [isPaused, setIsPaused] = React.useState(false);
+  const [speechUtterance, setSpeechUtterance] = React.useState(null);
+  
   const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
 
   const [siteLang, setSiteLang] = React.useState(() => localStorage.getItem('agri_lang') || 'en');
@@ -155,6 +160,107 @@ const FarmerCart = () => {
   }, []);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+  // ============ Text-to-Speech Functions ============
+  const extractTextFromHtml = (html) => {
+    if (!html) return '';
+    
+    // Create a temporary element to parse HTML
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    
+    // Remove style and script elements to avoid reading CSS
+    const styles = temp.querySelectorAll('style, script');
+    styles.forEach(el => el.remove());
+    
+    // Get text content from body
+    const body = temp.querySelector('body');
+    let text = body ? body.textContent : temp.textContent;
+    
+    // Clean up extra whitespace
+    text = text.replace(/\s+/g, ' ').trim();
+    
+    // Remove common HTML artifacts
+    text = text.replace(/AgriAI Contract/g, '');
+    text = text.replace(/Contract/g, '');
+    
+    return text;
+  };
+
+  const speakContract = () => {
+    if (!contractHtml) return;
+    
+    // Stop any existing speech
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+    }
+
+    const text = extractTextFromHtml(contractHtml);
+    if (!text) return;
+
+    // Create utterance
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Set language based on siteLang
+    const langMap = { 'en': 'en-US', 'hi': 'hi-IN', 'kn': 'kn-IN' };
+    utterance.lang = langMap[siteLang] || 'en-US';
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    // Get available voices and set a good voice
+    const setVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const targetLang = langMap[siteLang] || 'en-US';
+      const voice = voices.find(v => v.lang.startsWith(targetLang.split('-')[0])) || voices[0];
+      if (voice) utterance.voice = voice;
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      setVoice();
+    } else {
+      window.speechSynthesis.onvoiceschanged = setVoice;
+    }
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setIsPaused(false);
+    };
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setIsPaused(false);
+    };
+
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      setIsSpeaking(false);
+      setIsPaused(false);
+    };
+
+    setSpeechUtterance(utterance);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const pauseContract = () => {
+    if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+      window.speechSynthesis.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const resumeContract = () => {
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+      setIsPaused(false);
+    }
+  };
+
+  const stopContract = () => {
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    setIsPaused(false);
+  };
 
   // ============ Digital Signature & OTP Functions ============
   const sendOtpToEmail = async (email) => {
@@ -3159,6 +3265,37 @@ ${contractHtml}
             {/* Header */}
             <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px 24px', borderBottom: '2px solid #e5e5e5', background: '#f9f9f9' }}>
               <h2 style={{ margin: 0, color: '#236902', fontSize: '18px', fontWeight: 700 }}>{t('contractPreview', siteLang) || 'Contract Preview'}</h2>
+              <div style={{ position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                {isSpeaking ? (
+                  <>
+                    {isPaused ? (
+                      <button 
+                        onClick={resumeContract} 
+                        onMouseEnter={(e) => { e.target.style.background = '#28a745'; e.target.style.color = '#fff'; }}
+                        onMouseLeave={(e) => { e.target.style.background = '#fff'; e.target.style.color = '#28a745'; }}
+                        style={{ padding: '5px 12px', background: '#fff', color: '#28a745', border: '2px solid #28a745', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s ease' }}>
+                        ▶ {t('resume', siteLang) || 'Resume'}
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={pauseContract} 
+                        onMouseEnter={(e) => { e.target.style.background = '#ffc107'; e.target.style.color = '#000'; }}
+                        onMouseLeave={(e) => { e.target.style.background = '#fff'; e.target.style.color = '#ffc107'; }}
+                        style={{ padding: '5px 12px', background: '#fff', color: '#ffc107', border: '2px solid #ffc107', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s ease' }}>
+                        ⏸ {t('pause', siteLang) || 'Pause'}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button 
+                    onClick={speakContract} 
+                    onMouseEnter={(e) => { e.target.style.background = '#236902'; e.target.style.color = '#fff'; }}
+                    onMouseLeave={(e) => { e.target.style.background = '#fff'; e.target.style.color = '#236902'; }}
+                    style={{ padding: '5px 12px', background: '#fff', color: '#236902', border: '2px solid #236902', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s ease' }}>
+                    🔊 {t('speak', siteLang) || 'Speak'}
+                  </button>
+                )}
+              </div>
               <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 10, alignItems: 'center' }}>
                 <button 
                   onClick={printContract} 
@@ -3168,7 +3305,7 @@ ${contractHtml}
                   {t('print', siteLang) || 'Print'}
                 </button>
                 <button 
-                  onClick={() => setShowContractPreview(false)} 
+                  onClick={() => { window.speechSynthesis.cancel(); setIsSpeaking(false); setIsPaused(false); setShowContractPreview(false); }} 
                   onMouseEnter={(e) => { e.target.style.background = '#dc3545'; e.target.style.color = '#fff'; }}
                   onMouseLeave={(e) => { e.target.style.background = '#fff'; e.target.style.color = '#dc3545'; }}
                   style={{ padding: '5px 12px', background: '#fff', color: '#dc3545', border: '2px solid #dc3545', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s ease' }}>

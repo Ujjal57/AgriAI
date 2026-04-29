@@ -518,6 +518,9 @@ const Cart = () => {
   const [showDeliveryDateModal, setShowDeliveryDateModal] = React.useState(false);
   const [selectedDeliveryDate, setSelectedDeliveryDate] = React.useState('');
   const [agreeToContract, setAgreeToContract] = React.useState(false);
+  const [isSpeaking, setIsSpeaking] = React.useState(false);
+  const [isPaused, setIsPaused] = React.useState(false);
+  const [speechUtterance, setSpeechUtterance] = React.useState(null);
 
   const openOtpForContract = () => {
     setOtpEmail(localStorage.getItem('agriai_email') || '');
@@ -895,6 +898,102 @@ const Cart = () => {
       iframe.srcdoc = contractHtml;
     } catch (e) { console.warn(e); } };
 
+  const extractTextFromHtml = (html) => {
+    if (!html) return '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const body = doc.querySelector('body');
+    if (body) {
+      return body.textContent || body.innerText || '';
+    }
+    return doc.body ? (doc.body.textContent || '') : '';
+  };
+
+  const speakContract = () => {
+    console.log('Cart.js speakContract called, isSpeaking:', isSpeaking);
+    
+    // If already speaking, toggle pause/resume
+    if (isSpeaking) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        console.log('Speech resumed');
+      } else {
+        window.speechSynthesis.pause();
+        console.log('Speech paused');
+      }
+      return;
+    }
+    
+    if (!contractHtml) {
+      console.log('No contractHtml');
+      return;
+    }
+    
+    // Cancel any existing speech
+    window.speechSynthesis.cancel();
+
+    const text = extractTextFromHtml(contractHtml);
+    console.log('Text length:', text.length);
+    
+    if (!text) {
+      console.log('No text extracted');
+      return;
+    }
+
+    // Create utterance with simple settings
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    // Try to get a voice
+    const voices = window.speechSynthesis.getVoices();
+    console.log('Available voices:', voices.length);
+    
+    // Find English voice
+    const enVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+    if (enVoice) {
+      utterance.voice = enVoice;
+      console.log('Using voice:', enVoice.name);
+    }
+
+    utterance.onend = () => {
+      console.log('Speech ended');
+      setIsSpeaking(false);
+    };
+
+    utterance.onerror = (e) => {
+      console.log('Speech error:', e);
+      setIsSpeaking(false);
+    };
+
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+    console.log('Speech speak called');
+  };
+
+  const pauseContract = () => {
+    if (isSpeaking && !isPaused) {
+      window.speechSynthesis.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const resumeContract = () => {
+    if (isSpeaking && isPaused) {
+      window.speechSynthesis.resume();
+      setIsPaused(false);
+    }
+  };
+
+  const stopContract = () => {
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    setIsPaused(false);
+    setSpeechUtterance(null);
+  };
+
   const handleSendContract = () => {
     setPaymentError('');
     const invalid = items.some(it => !it.order_quantity || Number(it.order_quantity) <= 0);
@@ -1160,8 +1259,9 @@ const Cart = () => {
             <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px 24px', borderBottom: '2px solid #e5e5e5', background: '#f9f9f9' }}>
               <h2 style={{ margin: 0, color: '#236902', fontSize: '18px', fontWeight: 700 }}>{t('contractPreview', lang) || 'Contract Preview'}</h2>
               <div style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button onClick={speakContract} style={{ padding: '5px 12px', background: '#fff', color: '#007bff', border: '2px solid #007bff', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px' }}>{isSpeaking ? (window.speechSynthesis.paused ? t('resume', lang) || 'Resume' : t('pause', lang) || 'Pause') : t('speak', lang) || 'Speak'}</button>
                 <button onClick={printContract} style={{ padding: '5px 12px', background: '#fff', color: '#28a745', border: '2px solid #28a745', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px' }}>{t('print', lang) || 'Print'}</button>
-                <button onClick={() => { setShowContractPreview(false); setContractMetadata(null); setAgreeToContract(false); }} style={{ padding: '5px 12px', background: '#fff', color: '#dc3545', border: '2px solid #dc3545', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px' }}>{t('close', lang) || 'Close'}</button>
+                <button onClick={() => { stopContract(); setShowContractPreview(false); setContractMetadata(null); setAgreeToContract(false); }} style={{ padding: '5px 12px', background: '#fff', color: '#dc3545', border: '2px solid #dc3545', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '12px' }}>{t('close', lang) || 'Close'}</button>
               </div>
             </div>
             <div style={{ flex: 1, overflow: 'auto', padding: '0', background: '#fff' }}>

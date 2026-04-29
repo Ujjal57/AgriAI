@@ -584,6 +584,69 @@ const Chatbot = () => {
         }
       }
 
+      // ✅ Check for platform usage questions and suggest tutorial page
+      const usageKeywordsEn = /\b(how to use|how do i use|tutorial|guide|help|usage|learn|agriai platform|platform usage|how does agriai work|how to use agriai)\b/i;
+      const usageKeywordsHi = /(?:कैसे उपयोग करें|ट्यूटोरियल|गाइड|मदद|उपयोग|सीखें|एग्रीएआई प्लेटफॉर्म|प्लेटफॉर्म उपयोग|एग्रीएआई कैसे काम करता है)/i;
+      const usageKeywordsKn = /(?:ಹೇಗೆ ಬಳಸುವುದು|ಟ್ಯೂಟೋರಿಯಲ್|ಮಾರ್ಗದರ್ಶಿ|ಸಹಾಯ|ಬಳಕೆ|ಕಲಿಯಿರಿ|ಅಗ್ರಿಎಐ ಪ್ಲೇಟ್‌ಫಾರ್ಮ್|ಪ್ಲೇಟ್‌ಫಾರ್ಮ್ ಬಳಕೆ|ಅಗ್ರಿಎಐ ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ)/i;
+      
+      const isUsageQuery = usageKeywordsEn.test(userInput) || usageKeywordsHi.test(userInput) || usageKeywordsKn.test(userInput);
+      
+      if (isUsageQuery) {
+        const usageResponseEn = "📚 For detailed help on how to use the AgriAI platform, please visit our **Help** page. It covers sign in, registration, adding crops, managing contracts, and more!\n\n👉 [Go to Help](/help)";
+        const usageResponseHi = "📚 एग्रीएआई प्लेटफॉर्म का उपयोग कैसे करें, इसकी विस्तृत जानकारी के लिए कृपया हमारे **सहायता** पेज पर जाएं। इसमें साइन इन, रजिस्ट्रेशन, फसल जोड़ना, कॉन्ट्रैक्ट प्रबंधन और अधिक शामिल हैं!\n\n👉 [सहायता देखें](/help)";
+        const usageResponseKn = "📚 ಅಗ್ರಿಎAI ಪ್ಲೇಟ್‌ಫಾರ್ಮ್ ಅನ್ನು ಹೇಗೆ ಬಳಸುವುದು ಎಂಬುದರ ವಿವರಿಸಿದ ಸಹಾಯಕ್ಕಾಗಿ ದಯವಿಟ್ಟು ನಮ್ಮ **Help** ಪುಟಕ್ಕೆ ಭೇಟಿ ನೀಡಿ. ಸೈನ್ ಇನ್, ನೋಂದಣಿ, ಬೆಳೆಗಳನ್ನು ಸೇರಿಸುವುದು, ಒಪ್ಪಂದಗಳನ್ನು ನಿರ್ವಹಿಸುವುದು ಮತ್ತು ಇನ್ನೂ ಹೆಚ್ಚಿನ ಮಾಹಿತಿ ಇಲ್ಲಿದೆ!\n\n👉 [Help ಗೆ ಹೋಗಿ](/help)";
+        
+        let usageResponse = usageResponseEn;
+        if (language === 'hi') usageResponse = usageResponseHi;
+        else if (language === 'kn') usageResponse = usageResponseKn;
+        
+        setMessages(prev => [...prev, { sender: 'bot', text: usageResponse }]);
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Check for contact-related questions and suggest contact page
+      const contactKeywordsEn = /\b(contact|contact us|reach|reach us|connect|get in touch|phone|email|support|help|support contact|support phone|support email|customer care|customer service)\b/i;
+      const contactKeywordsHi = /(?:संपर्क|संपर्क करें|हमसे संपर्क|फोन|ईमेल|सहायता|सहायता टेलीफोन|ग्राहक सेवा|ग्राहक सहायता)/i;
+      const contactKeywordsKn = /(?:ಸಂಪರ್ಕ|ಸಂಪರ್ಕಿಸಿ|ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ|ಫೋನ್|ಇಮೇಲ್|ಬೆಂಬಲ|ಗ್ರಾಹಕ ಸೇವೆ|ಗ್ರಾಹಕ ಬೆಂಬಲ)/i;
+      
+      const isContactQuery = contactKeywordsEn.test(userInput) || contactKeywordsHi.test(userInput) || contactKeywordsKn.test(userInput);
+      
+      if (isContactQuery) {
+        const contactResponseEn = "For any contact or support inquiries, please visit our Contact page. ";
+        const contactResponseHi = "किसी भी संपर्क या सहायता के लिए, कृपया हमारे संपर्क पेज पर जाएं। ";
+        const contactResponseKn = "ಯಾವುದೇ ಸಂಪರ್ಕ ಅಥವಾ ಬೆಂಬಲಕ್ಕಾಗಿ, ದಯವಿಟ್ಟು ನಮ್ಮ ಸಂಪರ್ಕಿಸಿ ಪುಟಕ್ಕೆ ಭೇಟಿ ನೀಡಿ. ";
+        
+        let contactResponse = contactResponseEn;
+        if (language === 'hi') contactResponse = contactResponseHi;
+        else if (language === 'kn') contactResponse = contactResponseKn;
+        
+        setMessages(prev => [...prev, { sender: 'bot', text: contactResponse }]);
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Check for buyers, my crops, tutorials, cart, profile, history, sign in, sign up, farmer, my deals
+      const helpKeywordsEn = /\b(buyers|buyer|my crops|my crops list|tutorials|tutorial|cart|shopping cart|profile|user profile|history|order history|sign in|login|sign up|register|registration|farmer|farmers|my deals|deals|contracts)\b/i;
+      const helpKeywordsHi = /(?:खरीदार|खरीदारों|मेरी फसलें|मेरी फसल सूची|ट्यूटोरियल|कार्ट|शॉपिंग कार्ट|प्रोफ़ाइल|उपयोगकर्ता प्रोफ़ाइल|इतिहास|आदेश इतिहास|साइन इन|लॉगिन|साइन अप|पंजीकरण|किसान|किसानों|मेरे सौदे|सौदे|अनुबंध)/i;
+      const helpKeywordsKn = /(?:ಖರೀದಾರರು|ಖರೀದಾರ|ನನ್ನ ಬೆಳೆಗಳು|ನನ್ನ ಬೆಳೆ ಪಟ್ಟಿ|ಟ್ಯೂಟೋರಿಯಲ್|ಕಾರ್ಟ್|ಶಾಪಿಂಗ್ ಕಾರ್ಟ್|ಪ್ರೊಫೈಲ್|ಬಳಕೆದಾರ ಪ್ರೊಫೈಲ್|ಇತಿಹಾಸ|ಆದೇಶ ಇತಿಹಾಸ|ಸೈನ್ ಇನ್|ಲಾಗಿನ್|ಸೈನ್ ಅಪ್|ನೋಂದಣಿ|ರೈತ|ರೈತರು|ನನ್ನ ಒಪ್ಪಂದಗಳು|ಒಪ್ಪಂದಗಳು|ಕರಾರುಗಳು)/i;
+      
+      const isHelpQuery = helpKeywordsEn.test(userInput) || helpKeywordsHi.test(userInput) || helpKeywordsKn.test(userInput);
+      
+      if (isHelpQuery) {
+        const helpResponseEn = "For detailed help please visit our Help page. It covers all the features and how to use them!";
+        const helpResponseHi = "विस्तृत सहायता के लिए कृपया हमारे सहायता पृष्ठ पर जाएँ। इसमें सभी सुविधाएँ और उनका उपयोग कैसे करें, यह शामिल है!";
+        const helpResponseKn = "ವಿವರವಾದ ಸಹಾಯಕ್ಕಾಗಿ ದಯವಿಟ್ಟು ನಮ್ಮ ಸಹಾಯ ಪುಟವನ್ನು ಭೇಟಿ ಮಾಡಿ. ಇದರಲ್ಲಿ ಎಲ್ಲಾ ವೈಶಿಷ್ಟ್ಯಗಳು ಮತ್ತು ಅವುಗಳನ್ನು ಹೇಗೆ ಬಳಸುವುದು ಎಂಬುದು ಒಳಗೊಂಡಿದೆ!";
+        
+        let helpResponse = helpResponseEn;
+        if (language === 'hi') helpResponse = helpResponseHi;
+        else if (language === 'kn') helpResponse = helpResponseKn;
+        
+        setMessages(prev => [...prev, { sender: 'bot', text: helpResponse }]);
+        setLoading(false);
+        return;
+      }
+
       const wantsDetailEn = /\b(detail|explain|expand|more|detailed|step|step-by-step)\b/i.test(userInput);
       const wantsStepEn = /\b(step|stepwise|steps|how to|how do i)\b/i.test(userInput);
       const wantsDetailHi = /(?:विस्तार|विस्तृत|बताइए|समझाइए|विस्तार से)/i.test(userInput);
