@@ -2595,6 +2595,7 @@ const Navbar = () => {
             <>
               <li><Link to="/dashboard/farmer" className="navbar-link-anim navbar-link-bold">{t('navFarmers', siteLang)}</Link></li>
               <li><Link to="/my-deals" className="navbar-link-anim navbar-link-bold">{t('navMyDeals', siteLang)}</Link></li>
+              <li><Link to="/insights" className="navbar-link-anim navbar-link-bold">{t('navInsights', siteLang)}</Link></li>
               {userRole === 'buyer' && cartCount > 0 && (
                 <li style={{position:'relative'}}>
                   <Link to="/cart" className="navbar-link-anim navbar-link-bold">{t('navCart', siteLang)}</Link>
@@ -2607,6 +2608,7 @@ const Navbar = () => {
             <>
               <li><Link to="/dashboard/buyer" className="navbar-link-anim navbar-link-bold">{t('navBuyers', siteLang)}</Link></li>
               <li><Link to="/my-crops" className="navbar-link-anim navbar-link-bold">{t('navMyCrops', siteLang)}</Link></li>
+              <li><Link to="/insights" className="navbar-link-anim navbar-link-bold">{t('navInsights', siteLang)}</Link></li>
               {userRole === 'farmer' && cartCount > 0 && (
                 <li style={{position:'relative'}}>
                   <Link to="/farmer/cart" className="navbar-link-anim navbar-link-bold">{t('navCart', siteLang)}</Link>

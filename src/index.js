@@ -24,6 +24,7 @@ import MyDeals from './MyDeals';
 import reportWebVitals from './reportWebVitals';
 import Chatbot from './Chatbot';
 import Tutorials from './farmer/Tutorials';
+import Insights from './Insights';
 
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -50,6 +51,8 @@ root.render(
   <Route path="/admin/contacts" element={<ContactAdmin />} />
   <Route path="/tutorials" element={<Tutorials />} />
   <Route path="/help" element={<Tutorials />} />
+  <Route path="/insights" element={<Insights />} />
+  <Route path="/insights" element={<Insights />} />
       </Routes>
       <Chatbot />
     </BrowserRouter>
