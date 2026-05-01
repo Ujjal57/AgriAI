@@ -168,8 +168,8 @@ def get_weather():
         if not lat or not lon:
             return jsonify({'ok': False, 'error': 'lat and lon are required'}), 400
         
-        # Use OpenWeather API key from environment or default
-        api_key = os.environ.get('OPENWEATHER_API_KEY', '8f96af8e0f2466de3a56b467fd29ea79')
+        # Use OpenWeather API key from environment
+        api_key = os.environ.get('OPENWEATHER_API_KEY')
         
         # Get temperature and humidity from OpenWeather
         weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
@@ -278,7 +278,7 @@ def get_market_prices():
             return jsonify({'ok': False, 'error': 'lat and lon are required'}), 400
         
         # Use Agmarknet API key from environment
-        api_key = os.environ.get('AGMARKNET_API_KEY', '579b464db66ec23bdd000001ed808628f81a4b3f4ff5aaa33792c582')
+        api_key = os.environ.get('AGMARKNET_API_KEY')
         
         # First, get the state/region from coordinates using Nominatim
         state_name = ''
@@ -402,7 +402,7 @@ def get_all_crops():
     Fetches all available crops from Agmarknet API.
     """
     try:
-        api_key = os.environ.get('AGMARKNET_API_KEY', '579b464db66ec23bdd000001ed808628f81a4b3f4ff5aaa33792c582')
+        api_key = os.environ.get('AGMARKNET_API_KEY')
         
         crops_list = []
         
@@ -457,7 +457,7 @@ def get_monthly_prices():
         if not crop:
             return jsonify({'ok': False, 'error': 'crop parameter is required'}), 400
         
-        api_key = os.environ.get('AGMARKNET_API_KEY', '579b464db66ec23bdd000001ed808628f81a4b3f4ff5aaa33792c582')
+        api_key = os.environ.get('AGMARKNET_API_KEY')
         
         monthly_data = []
         
@@ -605,7 +605,7 @@ def get_state_wise_prices():
         if not crop:
             return jsonify({'ok': False, 'error': 'crop parameter is required'}), 400
         
-        api_key = '579b464db66ec23bdd000001ed808628f81a4b3f4ff5aaa33792c582'
+        api_key = os.environ.get('AGMARKNET_API_KEY')
         
         # State-based multipliers
         state_multipliers = {
@@ -697,7 +697,7 @@ def get_district_wise_prices():
         if not crop or not state:
             return jsonify({'ok': False, 'error': 'crop and state parameters are required'}), 400
         
-        api_key = '579b464db66ec23bdd000001ed808628f81a4b3f4ff5aaa33792c582'
+        api_key = os.environ.get('AGMARKNET_API_KEY')
         
         # State-based multipliers (same as market-prices and state-wise-prices)
         state_multipliers = {
@@ -9268,7 +9268,7 @@ def update_crop(crop_id):
 
 
 # ---- Load Groq API key ----
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "your_groq_api_key_here")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 # ---- Groq AI Chat Route ----
 @app.route('/ai/groq', methods=['POST'])
 def agri_ai_chat():
