@@ -32,17 +32,23 @@ export default function Notification() {
         // Call backend to mark as read (single notification)
         if (!Number(n.is_read)) {
           const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
+          const payload = {
+            contract_numbers: [n.id],
+            user_role: userRole,
+            farmer_id: farmerId,
+            mark_farmer_all: true
+          };
           try {
-            await fetch(`${apiBase}/notifications/mark-read`, { 
+            await fetch(`${apiBase}/notifications/mark-read`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ids: [n.id] })
+              body: JSON.stringify(payload)
             });
           } catch (e) {
             console.warn('Failed to call backend mark-read', e);
           }
         }
-        
+
         // Update local state
         setNotifList(prev => prev.map(x => x.id === n.id ? { ...x, is_read: 1 } : x));
         setNotifCount(prev => Math.max(0, prev - 1));
@@ -62,10 +68,16 @@ export default function Notification() {
       const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
       if (unreadIds.length) {
         try {
+          const payload = {
+            contract_numbers: unreadIds,
+            user_role: userRole,
+            farmer_id: farmerId,
+            mark_farmer_all: true
+          };
           const res = await fetch(`${apiBase}/notifications/mark-read`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: unreadIds })
+            body: JSON.stringify(payload)
           });
           console.log('Mark-read response:', res.status);
         } catch (e) {

@@ -222,6 +222,8 @@ CREATE TABLE IF NOT EXISTS contracts (
   status VARCHAR(50) DEFAULT 'pending',
   signature_method VARCHAR(100) DEFAULT NULL,
   signature_timestamp DATETIME DEFAULT NULL,
+  is_read INT DEFAULT 0,
+  c_read INT DEFAULT 0,
   sender VARCHAR(50) DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -234,7 +236,61 @@ CREATE TABLE IF NOT EXISTS contracts (
 
 -- Migration: add sender column to contracts table (farmer or buyer)
 ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `sender` VARCHAR(50) DEFAULT NULL;
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `is_read` INT DEFAULT 0;
+ALTER TABLE `contracts` ADD COLUMN IF NOT EXISTS `c_read` INT DEFAULT 0;
 ALTER TABLE `contracts` ADD INDEX IF NOT EXISTS `idx_sender` (`sender`);
+
+-- ========== Buyer-side contract_b table ==========
+-- Stores buyer-side contract notifications and negotiated contract records.
+DROP TABLE IF EXISTS `contract_b`;
+CREATE TABLE IF NOT EXISTS `contract_b` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `contract_number` VARCHAR(100) UNIQUE,
+  `farmer_id` BIGINT UNSIGNED DEFAULT NULL,
+  `farmer_name` VARCHAR(255) DEFAULT NULL,
+  `farmer_address` VARCHAR(500) DEFAULT NULL,
+  `farmer_state` VARCHAR(100) DEFAULT NULL,
+  `buyer_id` BIGINT UNSIGNED DEFAULT NULL,
+  `buyer_name` VARCHAR(255) DEFAULT NULL,
+  `buyer_address` VARCHAR(500) DEFAULT NULL,
+  `buyer_state` VARCHAR(100) DEFAULT NULL,
+  `crop_name` VARCHAR(255) DEFAULT NULL,
+  `variety` VARCHAR(255) DEFAULT NULL,
+  `quantity_kg` DECIMAL(12,3) DEFAULT NULL,
+  `price_per_kg` DECIMAL(12,3) DEFAULT NULL,
+  `amount` DECIMAL(12,2) DEFAULT NULL,
+  `contract_nature` VARCHAR(100) DEFAULT NULL,
+  `contract_duration` VARCHAR(100) DEFAULT NULL,
+  `start_date` DATE DEFAULT NULL,
+  `end_date` DATE DEFAULT NULL,
+  `duration` INT DEFAULT 0,
+  `farmer_platform_fee` DECIMAL(12,2) DEFAULT 0,
+  `farmer_gst` DECIMAL(12,2) DEFAULT 0,
+  `buyer_platform_fee` DECIMAL(12,2) DEFAULT 0,
+  `buyer_gst` DECIMAL(12,2) DEFAULT 0,
+  `buyer_total` DECIMAL(12,2) DEFAULT NULL,
+  `farmer_total` DECIMAL(12,2) DEFAULT NULL,
+  `delivery_cost` VARCHAR(255) DEFAULT NULL,
+  `status` VARCHAR(50) DEFAULT 'pending',
+  `sender` VARCHAR(50) DEFAULT NULL,
+  `signature_method` VARCHAR(255) DEFAULT NULL,
+  `signature_timestamp` DATETIME DEFAULT NULL,
+  `farmer_signed_date` VARCHAR(100) DEFAULT NULL,
+  `farmer_signature_method` VARCHAR(255) DEFAULT NULL,
+  `farmer_signature_timestamp` DATETIME DEFAULT NULL,
+  `read` INT DEFAULT 0,
+  `c_read` INT DEFAULT 0,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_contract_b_farmer_id` (`farmer_id`),
+  INDEX `idx_contract_b_buyer_id` (`buyer_id`),
+  INDEX `idx_contract_b_created_at` (`created_at`),
+  INDEX `idx_contract_b_sender` (`sender`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Ensure c_read exists on existing contract_b tables
+ALTER TABLE `contract_b` ADD COLUMN IF NOT EXISTS `c_read` INT DEFAULT 0;
 
 -- ========== Cart table ==========
 -- Stores cart items added by signed-in users. Each row represents a single item

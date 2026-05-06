@@ -184,21 +184,26 @@ const Navbar = () => {
           }
           const j = await res.json();
           if (j && j.ok && Array.isArray(j.notifications)) {
-            // Count only unread contracts from backend (read column in contracts)
-            // For buyers, show pending, negotiated, farmer_negotiated, buyer_negotiated statuses from both contracts and contract_b tables
+            // Count only unread notifications from backend.
+            // For buyers, use contracts.c_read for contracts rows and contract_b.read for contract_b rows.
             const unreadCount = j.notifications.filter(n => {
-              if (!(n && Number(n.is_read))) {
-                if (userRole === 'buyer' && n.status) {
-                  const status = (n.status).toLowerCase();
-                  if (!['pending', 'negotiated', 'farmer_negotiated', 'buyer_negotiated'].includes(status)) {
-                    return false;
-                  }
-                }
-                return true;
+              if (!n) return false;
+              let isRead = false;
+              if (userRole === 'buyer') {
+                isRead = n.source_table === 'contracts' ? Number(n.is_c_read) : Number(n.is_read);
+              } else if (userRole === 'farmer') {
+                isRead = Number(n.is_read);
               }
-              return false;
+              if (isRead) return false;
+              if (userRole === 'buyer' && n.status) {
+                const status = (n.status).toLowerCase();
+                if (!['pending', 'negotiated', 'farmer_negotiated', 'buyer_negotiated'].includes(status)) {
+                  return false;
+                }
+              }
+              return true;
             }).length;
-            console.log('📊 Buyer unread count:', { total: j.notifications.length, unread: unreadCount, statuses: j.notifications.map(n => ({ contract_number: n.contract_number, status: n.status, source: n.source_table, is_read: n.is_read })) });
+            console.log('📊 Buyer unread count:', { total: j.notifications.length, unread: unreadCount, statuses: j.notifications.map(n => ({ contract_number: n.contract_number, status: n.status, source: n.source_table, is_read: n.is_read, is_c_read: n.is_c_read })) });
             setNotifCount(unreadCount);
           }
         } catch (e) {
@@ -299,7 +304,7 @@ const Navbar = () => {
         }
         
         // Display ONLY API data - no merging with localStorage
-        setNotifList(notifs);
+        setNotifList(notifs.sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)));
         try { 
           const filteredNotifs = Array.isArray(notifs) 
             ? notifs.filter(x => {
@@ -321,8 +326,12 @@ const Navbar = () => {
                   if (x.status && !['pending', 'negotiated', 'farmer_negotiated', 'buyer_negotiated'].includes((x.status).toLowerCase())) {
                     return false;
                   }
+                  const isRead = x.source_table === 'contracts' ? Number(x.is_c_read) : Number(x.is_read);
+                  return !isRead;
+                } else if (userRole === 'farmer') {
+                  return !(x && Number(x.is_read));
                 }
-                return !(x && Number(x.is_read));
+                return false; // fallback
               })
             : [];
           console.log('🔔 Filtered unread notifications:', { userRole, total: notifs.length, unread: filteredNotifs.length, statuses: filteredNotifs.map(x => x.status) });
@@ -2670,8 +2679,17 @@ const Navbar = () => {
                   const j = await res.json();
                   if (j && j.ok && Array.isArray(j.notifications)) {
                     // Show ONLY API data - NO localStorage merging for both buyer and farmer
-                    setNotifList(j.notifications);
-                    const unread = Array.isArray(j.notifications) ? j.notifications.filter(x => !(x && Number(x.is_read))).length : 0;
+                    setNotifList(j.notifications.sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)));
+                    const unread = Array.isArray(j.notifications)
+                      ? j.notifications.filter(x => {
+                          if (!x) return false;
+                          if (userRole === 'buyer') {
+                            const isRead = x.source_table === 'contracts' ? Number(x.is_c_read) : Number(x.is_read);
+                            return !isRead;
+                          }
+                          return !(x && Number(x.is_read));
+                        }).length
+                      : 0;
                     setNotifCount(unread);
                   } else {
                     setNotifList([]);
@@ -2705,20 +2723,52 @@ const Navbar = () => {
                   <div style={{display:'flex', gap:8}}>
                     <button onClick={async ()=>{
                       try {
-                        // Collect unread contract_numbers and prepare user info
-                        const unreadContractNumbers = (Array.isArray(notifList) ? notifList.filter(x => !(x && Number(x.is_read))) : []).map(x => x && x.contract_number).filter(Boolean);
-                        // Send user role and ID along with contract_numbers to mark
+                        // Filter notifications based on user role
+                        const roleFilteredNotifs = (Array.isArray(notifList) ? notifList.filter(n => {
+                          if (userRole === 'farmer') {
+                            const status = (n.status || '').toLowerCase();
+                            if (n.source_table === 'contracts') {
+                              return ['farmer_negotiated', 'buyer_negotiated'].includes(status);
+                            }
+                            if (n.source_table === 'contract_b') {
+                              return ['pending', 'farmer_negotiated', 'buyer_negotiated'].includes(status);
+                            }
+                            return false;
+                          }
+                          if (userRole === 'buyer') {
+                            if (n.status && ['pending', 'negotiated', 'farmer_negotiated', 'buyer_negotiated'].includes((n.status).toLowerCase())) {
+                              return true;
+                            }
+                            return false;
+                          }
+                          return true;
+                        }) : []);
+                        
+                        // Collect unread contract_numbers from filtered list
+                        let unreadContractNumbers = roleFilteredNotifs.filter(x => {
+                          if (!x) return false;
+                          if (userRole === 'buyer') {
+                            const isRead = x.source_table === 'contracts' ? Number(x.is_c_read) : Number(x.is_read);
+                            return !isRead;
+                          }
+                          return !(x && Number(x.is_read));
+                        }).map(x => x && x.contract_number).filter(Boolean);
+                        
                         const apiBase = process.env.REACT_APP_API_BASE || (window.location.protocol + '//' + (process.env.REACT_APP_API_HOST || '127.0.0.1') + ':5000');
                         if (unreadContractNumbers.length) {
                           try {
-                            const payload = { contract_numbers: unreadContractNumbers };
-                            // Add user identifier based on role
+                            const payload = { 
+                              contract_numbers: unreadContractNumbers,
+                              user_role: userRole
+                            };
+                            // Add user identifier based on role and mark flag
                             if (userRole === 'buyer') {
                               payload.buyer_id = userId;
+                              payload.mark_buyer_all = true;
                             } else if (userRole === 'farmer') {
                               payload.farmer_id = farmerId;
+                              payload.mark_farmer_all = true;
                             }
-                            payload.user_role = userRole;
                             await fetch(`${apiBase}/notifications/mark-read`, {
                               method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
                             });
@@ -2726,9 +2776,32 @@ const Navbar = () => {
                             // ignore network errors; will still update UI locally
                           }
                         }
-                        // Update local state - already marked server-side via API
-                        setNotifList(list => (Array.isArray(list) ? list.map(n=>({ ...n, is_read: 1 })) : list));
-                        setNotifCount(0);
+                        // Update local state - only mark selected notifications as read
+                        const markedNumbers = new Set(unreadContractNumbers);
+                        let updatedUnreadCount = 0;
+                        setNotifList(list => {
+                          if (!Array.isArray(list)) return list;
+                          const updated = list.map(n => {
+                            if (!markedNumbers.has(n.contract_number)) return n;
+                            if (userRole === 'buyer') {
+                              if (n.source_table === 'contracts') {
+                                return { ...n, is_c_read: 1 };
+                              }
+                              return { ...n, is_read: 1 };
+                            }
+                            return { ...n, is_read: 1 };
+                          });
+                          updatedUnreadCount = updated.filter(n => {
+                            if (!n) return false;
+                            if (userRole === 'buyer') {
+                              const isRead = n.source_table === 'contracts' ? Number(n.is_c_read) : Number(n.is_read);
+                              return !isRead;
+                            }
+                            return !Number(n.is_read);
+                          }).length;
+                          return updated;
+                        });
+                        setNotifCount(updatedUnreadCount);
                       } catch (e) {}
                     }} style={{background:'#ecf8f2', color:'#236902', border:'2px solid #236902', borderRadius:8, padding:'2px 8px', fontWeight:600, transition:'all 0.3s ease', cursor:'pointer'}} onMouseEnter={(e) => { e.target.style.background='#236902'; e.target.style.color='#fff'; e.target.style.transform='translateY(-2px)'; e.target.style.boxShadow='0 4px 12px rgba(35, 105, 2, 0.3)'; }} onMouseLeave={(e) => { e.target.style.background='#ecf8f2'; e.target.style.color='#236902'; e.target.style.transform='translateY(0)'; e.target.style.boxShadow='none'; }}>{t('markAll', siteLang) || 'Mark all'}</button>
                   </div>
@@ -2760,6 +2833,11 @@ const Navbar = () => {
                       return false;
                     }
                     return true;
+                  }).sort((a, b) => {
+                    // Sort by created_at in descending order (most recent first)
+                    const dateA = new Date(a.created_at || 0).getTime();
+                    const dateB = new Date(b.created_at || 0).getTime();
+                    return dateB - dateA;
                   }).map(n => {
                     // Extract items early so it's available everywhere in this closure
                     const items = Array.isArray(n.items) ? n.items : (n.items ? [n.items] : []);
@@ -2814,9 +2892,10 @@ const Navbar = () => {
                     const createdAtRaw = n.created_at || n.createdAt || Date.now();
                     const createdDateObj = new Date(createdAtRaw);
                     const createdDate = isNaN(createdDateObj) ? String(createdAtRaw) : `${String(createdDateObj.getDate()).padStart(2, '0')}/${String(createdDateObj.getMonth() + 1).padStart(2, '0')}/${createdDateObj.getFullYear()}`;
+                    const isRead = userRole === 'buyer' && n.source_table === 'contracts' ? Number(n.is_c_read) : Number(n.is_read);
                     return (
-                      <div key={n.id || invoiceId} style={{border: n.is_read ? '1px solid #ddd' : '2px solid #236902', borderRadius:8, overflow:'hidden', margin:'8px 6px', background: n.is_read ? '#fff' : '#d4f1ca', boxShadow: n.is_read ? 'none' : '0 4px 12px rgba(35, 105, 2, 0.25)'}}>
-                        <div style={{padding:'12px 14px', background: n.is_read ? '#f7faf7' : '#c8e8bb', display:'flex', flexDirection:'column', gap:8}}>
+                      <div key={n.id || invoiceId} style={{border: isRead ? '1px solid #ddd' : '2px solid #236902', borderRadius:8, overflow:'hidden', margin:'8px 6px', background: isRead ? '#fff' : '#d4f1ca', boxShadow: isRead ? 'none' : '0 4px 12px rgba(35, 105, 2, 0.25)'}}>
+                        <div style={{padding:'12px 14px', background: isRead ? '#f7faf7' : '#c8e8bb', display:'flex', flexDirection:'column', gap:8}}>
                           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                             <div style={{fontWeight:800, color:'#236902', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginRight:10}}>{label + ': '}{invoiceId}</div>
                             <div style={{fontWeight:800, color:'#236902'}}>{formatCurrency(displayAmount)}</div>

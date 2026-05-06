@@ -2423,10 +2423,14 @@ export default function FarmerHistory() {
                         >
                           🖨️
                         </button>
-                        {( ((o._db_contract && (String(o._db_contract.status).toLowerCase() === 'farmer_negotiated' || String(o._db_contract.status).toLowerCase() === 'buyer_negotiated'))
-                             || (String(o.status || '').toLowerCase() === 'farmer_negotiated' || String(o.status || '').toLowerCase() === 'buyer_negotiated')) && (
-                          <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'rgba(198,40,40,0.1)', color: '#c62828', border: '1px solid rgba(198,40,40,0.3)', padding: '8px 12px', borderRadius: 10, marginLeft: 6, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, transition: 'all 0.2s' }}>{'🗑️'}</button>
-                        ))}
+                        {(() => {
+                          const st = (o._db_contract && o._db_contract.status) || o.status || '';
+                          const s = String(st).toLowerCase();
+                          const isDeletable = ['pending', 'farmer_negotiated', 'buyer_negotiated'].includes(s);
+                          return isDeletable && (
+                            <button onClick={() => handleDelete(idKey)} title={t('delete', siteLang) || 'Delete'} style={{ background: 'rgba(198,40,40,0.1)', color: '#c62828', border: '1px solid rgba(198,40,40,0.3)', padding: '8px 12px', borderRadius: 10, marginLeft: 6, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, transition: 'all 0.2s' }}>{'🗑️'}</button>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

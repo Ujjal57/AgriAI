@@ -55,6 +55,10 @@ export default function Insights() {
   const [buyerAcceptedContracts, setBuyerAcceptedContracts] = useState([]);
   const [buyerAcceptedContractsLoading, setBuyerAcceptedContractsLoading] = useState(false);
 
+  // Buyer Rejected Contracts
+  const [buyerRejectedContracts, setBuyerRejectedContracts] = useState([]);
+  const [buyerRejectedContractsLoading, setBuyerRejectedContractsLoading] = useState(false);
+
   // Indian states list
   const indianStates = [
     'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -332,6 +336,48 @@ export default function Insights() {
     fetchBuyerAcceptedContracts();
   }, [apiBase, userRole]);
 
+  // Fetch buyer rejected contracts for signed-in buyer
+  useEffect(() => {
+    if (userRole !== 'buyer') {
+      return;
+    }
+
+    const fetchBuyerRejectedContracts = async () => {
+      setBuyerRejectedContractsLoading(true);
+      try {
+        const buyerId = localStorage.getItem('agriai_id');
+        if (!buyerId) {
+          setBuyerRejectedContractsLoading(false);
+          return;
+        }
+
+        const response = await fetch(`${apiBase}/buyer-rejected-contracts`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ buyer_id: parseInt(buyerId) }),
+        });
+        const data = await response.json();
+
+        if (data.ok) {
+          console.log('Buyer rejected contracts received:', data);
+          setBuyerRejectedContracts(data.contracts || []);
+        } else {
+          console.log('Buyer rejected contracts API error:', data.error);
+          setBuyerRejectedContracts([]);
+        }
+      } catch (error) {
+        console.error('Error fetching buyer rejected contracts:', error);
+        setBuyerRejectedContracts([]);
+      } finally {
+        setBuyerRejectedContractsLoading(false);
+      }
+    };
+
+    fetchBuyerRejectedContracts();
+  }, [apiBase, userRole]);
+
   // Fetch monthly prices for selected crop and state
   useEffect(() => {
     if (!selectedCrop) {
@@ -549,9 +595,9 @@ export default function Insights() {
 
   const buyerData = {
     stats: [
-      { key: 'activeDeals', label: t('insightsActiveDeals', siteLang) || 'Active Deals', value: buyerDeals.length, icon: 'ShoppingCart', color: '#1a5c10', border: '#e8f5e9' },
+      { key: 'completedOrders', label: t('insightsAcceptedContracts', siteLang) || 'Accepted Contracts', value: buyerAcceptedContracts.length, icon: 'ShoppingCart', color: '#1a5c10', border: '#dcfce7' },
       { key: 'pendingOrders', label: t('insightsPendingOrders', siteLang) || 'Pending Contracts', value: buyerContracts.length, icon: 'Package', color: '#f57c00', border: '#fff3e0' },
-      { key: 'completedOrders', label: t('insightsAcceptedContracts', siteLang) || 'Accepted Contracts', value: buyerAcceptedContracts.length, icon: 'Package', color: '#16a34a', border: '#dcfce7' },
+      { key: 'rejectedContracts', label: t('insightsRejectedContracts', siteLang) || 'Rejected Contracts', value: buyerRejectedContracts.length, icon: 'TrendingUp', color: '#dc2626', border: '#fee2e2' },
       { key: 'totalSpent', label: t('insightsTotalSpent', siteLang) || 'Total Spent (This Month)', value: totalSpentFormatted, color: '#1a5c10', border: '#e8f5e9' },
     ],
     weatherInsights: {
